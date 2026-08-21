@@ -8,19 +8,41 @@ the normal path.
 Setting up at home with good internet instead? Use the
 [regular Windows guide](STUDENT-GUIDE-WINDOWS.md).
 
-> **Prerequisite — WSL2 + Ubuntu must already be installed.** That is Steps
-> 1–2 of the [regular Windows guide](STUDENT-GUIDE-WINDOWS.md): a 4-minute
-> video, one restart, Ubuntu from the Microsoft Store. The stick cannot
-> replace that part — if you haven't done it yet, do it first (ideally at
-> home; it needs a reboot).
+> **The stick cannot replace Steps 1–2 (WSL2 + Ubuntu).** They need one
+> restart and the Microsoft Store — ideally do them **at home, before class**.
+> Already done? Jump straight to [Step 3](#step-3--plug-in-the-stick-first).
 
-## Step 1 — Plug in the stick FIRST
+## Step 1 — Turn on WSL2 + Ubuntu
 
-Plug the USB stick in **before opening Ubuntu** — Ubuntu only sees drives
-that were present when it started. Check the stick's drive letter in Windows
-Explorer (say `E:`); inside Ubuntu the stick is `/mnt/e` (lowercase).
+**Watch this 4-minute video and do exactly what it shows:**
+<https://www.youtube.com/watch?v=zZf4YH4WiZo>
 
-## Step 2 — Run setup with the stick
+It walks you through the three things Windows needs, in order:
+
+1. In the Start menu, search **"Turn Windows features on or off"**, tick
+   **Virtual Machine Platform** and **Windows Subsystem for Linux**, click OK.
+2. **Restart** your laptop.
+3. Open the **Microsoft Store**, search **Ubuntu**, and click **Get/Install**.
+
+The video ends with the first launch of Ubuntu — that's Step 2, below.
+
+## Step 2 — First launch of Ubuntu
+
+Open the **Ubuntu** app from the Start menu. The first time, it asks you to
+pick a **Linux username and password**. The password stays **invisible while
+you type — that's normal**, just type it and press Enter. Remember it: some
+commands ask for it later.
+
+✔ You know this step worked when you see a colored prompt ending in `$`.
+
+## Step 3 — Plug in the stick FIRST
+
+Close Ubuntu if it is open, and plug the USB stick in **before opening
+Ubuntu** — Ubuntu only sees drives that were present when it started. Check
+the stick's drive letter in Windows Explorer (say `E:`); inside Ubuntu the
+stick is `/mnt/e` (lowercase).
+
+## Step 4 — Run setup with the stick
 
 Open the **Ubuntu** app from the Start menu and paste this block (right-click
 pastes), replacing `e` with your stick's drive letter:
@@ -57,10 +79,10 @@ Mount it by hand (use your drive letter):
 sudo mkdir -p /mnt/e && sudo mount -t drvfs E: /mnt/e
 ```
 
-then run the Step 2 command again. Next time: plug the stick in before
+then run the Step 4 command again. Next time: plug the stick in before
 opening Ubuntu.
 
-## Step 3 — Did it work?
+## Step 5 — Did it work?
 
 You're done when the script prints **`SMOKE OK`** followed by your personal
 table of addresses and logins. Reprint it any time with `./kingo credentials`.
@@ -69,4 +91,5 @@ Open the services in your normal **Windows** browser — WSL2 forwards
 
 Everything else — the service addresses and logins, everyday commands
 (`./kingo up` / `./kingo down`), troubleshooting, and the FAQ — is in the
-[regular Windows guide](STUDENT-GUIDE-WINDOWS.md) from **Step 4** on.
+[regular Windows guide](STUDENT-GUIDE-WINDOWS.md) from **Step 5 ("Open your
+services")** on.
