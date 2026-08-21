@@ -496,6 +496,55 @@ cmd_pull() {
   echo "All images pulled."
 }
 
+# ── bundle/load: offline image transfer (classroom Wi-Fi fallback) ───────────
+# The instructor runs `kingo bundle` at home and copies kingo-images.tar to
+# USB sticks; a student runs `kingo load <path-to-tar>` and `kingo up` then
+# starts without downloading anything. The bundle includes the locally-BUILT
+# jupyterhub image (not just its base), so the build needs no network either.
+bundle_images() { # every image the stack needs, one per line
+  { compose config --images 2>/dev/null; \
+    awk '/^FROM/{print $2; exit}' jupyterhub/Dockerfile; } || true
+}
+
+cmd_bundle() {
+  select_engine; ensure_ready
+  local out="${1:-kingo-images.tar}" imgs free_kb
+  free_kb=$(df -Pk "$(dirname "$out")" 2>/dev/null | awk 'NR==2{print $4}' || true)
+  case "$free_kb" in
+    ''|*[!0-9]*) : ;;
+    *) [ "$free_kb" -lt 16000000 ] && warn "less than ~16 GB free where $out will be written — the bundle may not fit" ;;
+  esac
+  echo "Making sure every image is present and the local jupyterhub build exists ..."
+  cmd_pull
+  compose build
+  imgs="$(bundle_images)"
+  echo "Writing $out (~15 GB — this takes a few minutes) ..."
+  case "$ENGINE" in
+    # podman needs -m for a multi-image (docker-compatible) archive.
+    # shellcheck disable=SC2086
+    podman) podman save -m -o "$out" $imgs ;;
+    # shellcheck disable=SC2086
+    *)      docker save -o "$out" $imgs ;;
+  esac
+  echo
+  echo "Bundle written: $out"
+  echo "Copy it onto USB sticks. A student loads it with:"
+  echo "  ./kingo load /path/to/kingo-images.tar     (then: ./kingo up)"
+}
+
+cmd_load() {
+  select_engine; ensure_ready
+  local in="${1:-kingo-images.tar}"
+  [ -f "$in" ] || die "bundle file not found: $in   (usage: ./kingo load /path/to/kingo-images.tar — on Windows/WSL a USB stick is under /mnt/<letter>/, on Mac under /Volumes/)"
+  echo "Loading images from $in (takes a few minutes) ..."
+  $ENGINE load -i "$in"
+  # A bundle written by podman stores the local build as
+  # localhost/kingo-jupyterhub:local — docker would not match compose's
+  # kingo-jupyterhub:local and would try to rebuild (needs network). Retag.
+  $ENGINE tag localhost/kingo-jupyterhub:local kingo-jupyterhub:local 2>/dev/null || true
+  echo "Images loaded. Now run:  ./kingo up   (no download needed)"
+}
+
 # ── doctor: preflight before setup ───────────────────────────────────────────
 cmd_doctor() {
   select_engine
@@ -583,6 +632,8 @@ case "${1:-help}" in
   logs)              select_engine; shift; compose logs --tail=100 -f "$@" ;;
   restart)           select_engine; ensure_ready; shift; compose restart "$@" ;;
   pull)              cmd_pull ;;
+  bundle)            shift; cmd_bundle "${1:-}" ;;
+  load)              shift; cmd_load "${1:-}" ;;
   update)            select_engine; ensure_ready
                      # ZIP installs (the documented Mac path) have no .git —
                      # say so instead of silently skipping the class files.
@@ -619,6 +670,9 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo logs [svc]    follow logs (e.g. kingo logs langflow)
   kingo restart [svc] restart everything or one service
   kingo pull          download all images, one at a time with retries
+  kingo bundle [file] save all images into one tar for USB sticks (instructor)
+  kingo load [file]   load images from a USB bundle — 'kingo up' then
+                      needs no download (classroom Wi-Fi fallback)
   kingo update        pull newer images, rebuild, restart
   kingo reset         wipe all data and start fresh (asks first)
 

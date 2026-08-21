@@ -18,9 +18,16 @@ their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
   gets a ~5 GB budget and idles at ~3 GB (measured 2026-08-21; biggest single
   consumer: Metabase at ~1.2 GB). If 8-GB laptops still struggle, the planned
   `--lite` profile (drop Metabase + CloudBeaver, saves ~1.5 GB) is the next lever.
-- **Classroom Wi-Fi fallback**: if someone shows up without having pulled the
-  images, an offline USB bundle (`kingo bundle` / `kingo load`, planned) lets you
-  copy the ~10 GB locally instead of hammering the room's Wi-Fi.
+- **Classroom Wi-Fi fallback (USB bundle)**: if someone shows up without having
+  pulled the images, hand them a USB stick instead of hammering the room's Wi-Fi.
+  Prepare at home: `./kingo bundle` writes `kingo-images.tar` (~15 GB — use a
+  32 GB stick, exFAT-formatted so both Mac and Windows can read it) including
+  the locally-built jupyterhub image, so nothing at all is downloaded in class.
+  The student (setup Steps done up to the download): plug in the stick, then
+  `./kingo load /Volumes/<stick>/kingo-images.tar` (Mac) or
+  `./kingo load /mnt/<letter>/kingo-images.tar` (Windows/WSL — the stick's
+  drive letter appears under `/mnt/`), then `./kingo up`. Bundles are
+  cross-engine: saved with podman, loads into docker and vice versa.
 
 ## Setup paths
 
