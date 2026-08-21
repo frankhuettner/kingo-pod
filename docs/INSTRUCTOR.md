@@ -18,20 +18,44 @@ their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
   gets a ~5 GB budget and idles at ~3 GB (measured 2026-08-21; biggest single
   consumer: Metabase at ~1.2 GB). If 8-GB laptops still struggle, the planned
   `--lite` profile (drop Metabase + CloudBeaver, saves ~1.5 GB) is the next lever.
-- **Classroom Wi-Fi fallback (USB bundle)**: if someone shows up without having
-  pulled the images, hand them a USB stick instead of hammering the room's Wi-Fi.
-  Prepare at home: `./kingo bundle` writes `kingo-images.tar` (13 GB, measured
-  2026-08-21 — a 16 GB stick is borderline, use 32 GB, exFAT-formatted so both
-  Mac and Windows can read it) including the locally-built jupyterhub image, so
-  nothing at all is downloaded in class. `./kingo load` takes ~3 minutes
-  (measured from local disk; a slow USB-2 stick adds a few minutes of read
-  time). The whole path — bundle, delete all images, go offline, load, up,
-  smoke — is verified end-to-end (2026-08-21).
-  The student (setup Steps done up to the download): plug in the stick, then
-  `./kingo load /Volumes/<stick>/kingo-images.tar` (Mac) or
-  `./kingo load /mnt/<letter>/kingo-images.tar` (Windows/WSL — the stick's
-  drive letter appears under `/mnt/`), then `./kingo up`. Bundles are
-  cross-engine: saved with podman, loads into docker and vice versa.
+- **Classroom Wi-Fi fallback (USB bundle)**: if students show up without having
+  pulled the images, hand them a USB stick instead of hammering the room's
+  Wi-Fi — see the next section.
+
+## USB bundle (day-1 Wi-Fi saver)
+
+**Prepare at home**: `./kingo bundle` writes `kingo-images.tar` (13 GB,
+measured 2026-08-21) with every image the stack needs, including the
+locally-built jupyterhub one. Copy that single file onto USB sticks —
+**32 GB, exFAT-formatted** so both Mac and Windows can read it (a 16 GB stick
+is borderline). Bring **several sticks**: each student reads 13 GB, so one
+stick serializes the room. Students can also copy the tar into their
+`kingo-pod` folder and pass the stick straight on — the setup script picks a
+`kingo-images.tar` in its folder up automatically (tell them to delete it
+afterwards; it costs 13 GB of disk).
+
+**What the student runs** (both guides have this as the "USB box"):
+
+- **Windows** (Steps 1–2, WSL2 + Ubuntu, must already be done at home — they
+  need a reboot and the Store): plug the stick in *before* opening Ubuntu, then
+  `bash setup/setup-linux.sh /mnt/<letter>/kingo-images.tar`.
+- **Mac**: `bash setup/setup-mac.sh ` + drag the tar file into Terminal.
+- **Already set up, only images missing**:
+  `./kingo load /path/to/kingo-images.tar && ./kingo up` does it directly.
+
+**What still touches the internet** — the stick replaces only the 13 GB image
+download, which is the part classroom Wi-Fi can't take. A student starting
+from zero still needs Wi-Fi for the small stuff: `git clone` (a few MB) and,
+if no engine is present yet, the Podman/compose install (a few hundred MB on
+Ubuntu; on a fresh Mac, Homebrew + the Podman machine image, up to ~1 GB).
+Once the images are on disk, `kingo pull` skips them one by one, and
+`kingo up`/`smoke` make no network requests at all — the whole offline path
+(bundle → delete all images → Wi-Fi off → load → up → smoke) is verified
+end-to-end (2026-08-21, ~3 min load from local disk; a stick adds its own
+read time, plan ~5–10 min).
+
+Bundles are cross-engine by design (saved with podman in docker-compatible
+format, loads into docker and vice versa); verified live for podman→podman.
 
 ## Setup paths
 

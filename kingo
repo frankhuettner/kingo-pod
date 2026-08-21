@@ -508,10 +508,20 @@ cmd_pull() {
       *.*/*) ref="$img" ;;            # registry is explicit (quay.io/…)
       *)     ref="docker.io/$img" ;;  # short name — qualify it for podman
     esac
+    # Already present (e.g. loaded from a USB bundle) → skip. This keeps
+    # `pull` fully offline after `kingo load`. Safe because compose.yml pins
+    # exact tags: a version bump changes the tag, which is then missing here
+    # and gets pulled. (Checked under both names — engines store loaded
+    # images short or fully-qualified depending on who wrote the bundle.)
+    if $ENGINE image inspect "$ref" >/dev/null 2>&1 \
+       || $ENGINE image inspect "$img" >/dev/null 2>&1; then
+      echo "== $ref already present — skipping"
+      continue
+    fi
     echo "== pulling $ref"
     pull_retry "$ref" || die "could not pull $ref after 3 attempts — check your internet connection (or, if the error above mentions credentials: ./kingo doctor explains), then re-run: ./kingo pull"
   done
-  echo "All images pulled."
+  echo "All images present."
 }
 
 # ── bundle/load: offline image transfer (classroom Wi-Fi fallback) ───────────

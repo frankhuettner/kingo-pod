@@ -85,11 +85,25 @@ else
   pin_engine podman
 fi
 
-# ── 2. Ports, then bring the stack up and verify ─────────────────────────────
+# ── 2. Ports, then images (USB bundle or download), then up and verify ───────
 say "Checking that no other software sits on Kingo's ports ..."
 ./kingo fixports
 
-say "Downloading the container images (~10 GB on the first run — the long part; do this on home Wi-Fi) ..."
+# USB bundle: `setup-mac.sh /Volumes/<stick>/kingo-images.tar` loads the
+# images from the instructor's stick instead of downloading; a
+# kingo-images.tar sitting in this folder (copied from the stick) is picked up
+# automatically. Either way the pull below then skips everything present.
+BUNDLE="${1:-}"
+[ -z "$BUNDLE" ] && [ -f kingo-images.tar ] && BUNDLE="kingo-images.tar"
+if [ -n "$BUNDLE" ]; then
+  say "Loading the container images from the USB bundle ($BUNDLE) — no big download needed ..."
+  ./kingo load "$BUNDLE"
+  if [ "$BUNDLE" = "kingo-images.tar" ]; then
+    echo "    (you can now delete kingo-images.tar in this folder to free ~13 GB)"
+  fi
+fi
+
+say "Making sure all container images are present (~10 GB download on a first run without the USB bundle) ..."
 ./kingo pull
 
 say "Starting the Kingo stack ..."

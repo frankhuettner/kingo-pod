@@ -19,8 +19,9 @@ fixing.
   install plus the 10 GB download — **15–45 minutes** depending on your
   internet. Total: plan **about an hour**, mostly unattended.
 - **Slow or no internet at home?** Your instructor can bring the images on a
-  **USB stick** to class — you then run one `./kingo load` command instead of
-  downloading. Still do Steps 1–2 (WSL2 + Ubuntu) at home.
+  **USB stick** to class — the 10 GB then come from the stick instead of the
+  Wi-Fi (see the USB box in Step 3). **Steps 1–2 (WSL2 + Ubuntu) must still
+  happen at home** — they need a restart and the Microsoft Store.
 
 > **Already have Docker Desktop?** (e.g. from another course) — perfect, keep
 > it. Do Steps 1–2 anyway (WSL2 + Ubuntu are needed either way), then before
@@ -80,6 +81,27 @@ run it again — it is safe to re-run and skips what's done:
 ```bash
 cd ~/kingo-pod && bash setup/setup-linux.sh
 ```
+
+> **Using the instructor's USB stick?** Plug the stick in **before** opening
+> Ubuntu. Then run Step 3 exactly as above, but give the setup script the file
+> on the stick:
+>
+> ```bash
+> cd ~/kingo-pod && bash setup/setup-linux.sh /mnt/e/kingo-images.tar
+> ```
+>
+> Replace `e` with the stick's drive letter from Windows Explorer (`E:` →
+> `/mnt/e`, lowercase). The script installs the small tools over Wi-Fi (a few
+> hundred MB) and takes the 10 GB of images from the stick (~5–10 minutes)
+> instead of downloading them. If Ubuntu says the file is not found, the stick
+> wasn't mounted yet — run
+> `sudo mkdir -p /mnt/e && sudo mount -t drvfs E: /mnt/e` and try again.
+> To pass the stick on quickly, you can instead copy the file and hand the
+> stick to the next person — the setup script finds it automatically:
+>
+> ```bash
+> cp /mnt/e/kingo-images.tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
+> ```
 
 (Only if the *download* itself broke off and even the re-run fails: delete the
 half-finished folder with `rm -rf ~/kingo-pod` and start Step 3 from the top.)
@@ -162,6 +184,7 @@ the usual suspects and tells you what to do:
 | I have Docker Desktop, but setup installed Podman | Docker wasn't running or its WSL integration was off during setup. Both engines work — no need to change anything. To switch anyway: turn on WSL integration for Ubuntu, then `./kingo down` (stops the Podman stack **first**), then `echo KINGO_ENGINE=docker >> .env.local`, then `./kingo up`. |
 | Laptop feels slow (8 GB machines) | The stack needs ~5 GB RAM. Close other apps. If it stays bad, create the file `C:\Users\<you>\.wslconfig` **in Windows** containing `[wsl2]` on one line and `memory=5GB` on the next, run `wsl --shutdown` in PowerShell, then start the stack again. |
 | Ubuntu terminal says `./kingo: No such file or directory` | You're in the wrong folder. Run `cd ~/kingo-pod` first. |
+| USB stick: `bundle file not found` | The stick isn't visible inside Ubuntu yet. Check its drive letter in Windows Explorer (say `E:`), then run `sudo mkdir -p /mnt/e && sudo mount -t drvfs E: /mnt/e` and try again. Next time: plug the stick in before opening Ubuntu. |
 | Anything else | `./kingo down`, then `./kingo up`. If it persists: screenshot the error and ask the instructor / TA. |
 
 ## FAQ
