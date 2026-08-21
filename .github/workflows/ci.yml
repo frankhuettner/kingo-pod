@@ -54,6 +54,20 @@ jobs:
         # provider — NOT podman-compose, and NOT the apt 'docker-compose' package
         # (that is the old Python v1). We install the v2 binary explicitly.
         run: |
+          # The runner image ships its own podman in /usr/local, which wins on
+          # PATH over the apt one — and that build NEVER runs healthchecks
+          # (health stays 'starting' forever, no transient timers), so every
+          # `depends_on: condition: service_healthy` blocks `compose up -d`
+          # until the step times out. Students never have that build. Remove
+          # it and use the apt podman, i.e. exactly what Ubuntu/WSL students
+          # get (verified on the debug-healthcheck branch: apt podman runs
+          # healthchecks and the compose health gate passes).
+          sudo rm -f /usr/local/bin/podman
+          sudo rm -rf /usr/local/lib/podman \
+                      /usr/local/lib/systemd/user/podman.socket /usr/local/lib/systemd/user/podman.service \
+                      /usr/local/lib/systemd/system/podman.socket /usr/local/lib/systemd/system/podman.service \
+                      /usr/local/lib/systemd/system/podman-restart.service /usr/local/lib/systemd/system/podman-auto-update.*
+          sudo systemctl daemon-reload
           sudo apt-get update
           sudo apt-get install -y podman uidmap
           tag=$(curl -fsSL https://api.github.com/repos/docker/compose/releases/latest \
@@ -74,6 +88,9 @@ jobs:
           export XDG_RUNTIME_DIR="/run/user/$(id -u)"
           echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
           for i in $(seq 1 10); do [ -S "$XDG_RUNTIME_DIR/bus" ] && break; sleep 1; done
+          # daemon-reload so the user manager forgets the deleted /usr/local
+          # socket unit and picks up the apt one in /usr/lib.
+          systemctl --user daemon-reload
           systemctl --user enable --now podman.socket
           systemctl --user --no-pager status podman.socket
 
