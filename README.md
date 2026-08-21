@@ -7,34 +7,29 @@ Nine services in one `compose.yml`: Langflow, n8n, PostgreSQL, Qdrant,
 JupyterHub, JupyterLab, a Jupyter MCP server, Metabase, and CloudBeaver.
 KNIME and OpenCode install natively alongside it.
 
-## Quick start
+## 🚀 Students: pick your guide
 
-**Mac** (Apple Silicon):
+Two questions decide it — **which laptop**, and **where do the ~10 GB of
+images come from**?
 
-```bash
-bash setup/setup-mac.sh
-```
+| | 🌐 Internet (at home, before class) | 🔌 USB stick (from your instructor) |
+|---|---|---|
+| 🍎 **Mac** (Apple Silicon) | ➡️ [Mac guide](docs/STUDENT-GUIDE-MAC.md) | ➡️ [Mac USB guide](docs/STUDENT-GUIDE-MAC-USB.md) |
+| 🪟 **Windows** (10/11) | ➡️ [Windows guide](docs/STUDENT-GUIDE-WINDOWS.md) | ➡️ [Windows USB guide](docs/STUDENT-GUIDE-WINDOWS-USB.md) |
 
-**Windows** (10/11): the stack runs inside WSL2 (Windows' built-in Linux).
-Turn on WSL2 and install Ubuntu once by following the 4-minute video in the
-[Windows guide](docs/STUDENT-GUIDE-WINDOWS.md), then inside the Ubuntu terminal:
+- 🌐 is the normal path: **do it at home on your own Wi-Fi** — the first run
+  downloads ~10 GB, and on Windows enabling WSL2 needs a restart.
+- 🔌 is the classroom path: the images come from the stick, only a few small
+  tools come from the Wi-Fi. (🪟 Windows: WSL2 + Ubuntu must still be set up
+  at home first — the USB guide explains.)
 
-```bash
-git clone https://github.com/frankhuettner/kingo-pod.git
-cd kingo-pod && bash setup/setup-linux.sh
-```
+Every guide is a complete walkthrough: it picks a container engine (**an
+already-running Docker Desktop is used as-is**; otherwise Podman is
+installed), auto-resolves port conflicts with software you already run, starts
+the stack, and verifies it — you're done when you see **`SMOKE OK`**.
 
-All paths pick an engine (**an already-running Docker Desktop is used as-is**;
-otherwise Podman is installed), auto-resolve port conflicts with software you
-already run, start the stack, and verify it. First run pulls ~10 GB — **do it
-at home before class.**
-
-Full walkthroughs: [`docs/STUDENT-GUIDE-MAC.md`](docs/STUDENT-GUIDE-MAC.md) ·
-[`docs/STUDENT-GUIDE-WINDOWS.md`](docs/STUDENT-GUIDE-WINDOWS.md) —
-from the instructor's USB stick (no big download):
-[`docs/STUDENT-GUIDE-MAC-USB.md`](docs/STUDENT-GUIDE-MAC-USB.md) ·
-[`docs/STUDENT-GUIDE-WINDOWS-USB.md`](docs/STUDENT-GUIDE-WINDOWS-USB.md) —
-instructors: [`docs/INSTRUCTOR.md`](docs/INSTRUCTOR.md).
+👩‍🏫 **Instructors**: [`docs/INSTRUCTOR.md`](docs/INSTRUCTOR.md) — minimum
+specs, preparing the day-1 USB bundle, and what to put in the syllabus.
 
 ## The `kingo` CLI
 
