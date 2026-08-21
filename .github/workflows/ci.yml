@@ -10,9 +10,18 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A push supersedes any in-flight run of the same branch — without this, a
+# hung podman leg (see the pre-pull step) piles up zombie runs for hours.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   stack:
     runs-on: ubuntu-latest
+    # The GitHub default is 360 min — a hang should fail fast with diagnostics
+    # instead. Step-level timeouts below are tighter still.
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -53,7 +62,27 @@ jobs:
           # rootless API socket, so `podman compose` can reach the engine
           systemctl --user enable --now podman.socket 2>/dev/null || true
 
+      - name: Pre-pull images with retry (podman leg)
+        if: matrix.engine == 'podman'
+        timeout-minutes: 40
+        # Rootless podman pulls the ~10 GB stack much slower than docker, and a
+        # single stuck layer can hang `compose up -d` forever with zero output
+        # (observed: podman legs stuck in "Boot 1" for hours). Pulling per image
+        # first makes progress visible and attributes a hang to one image.
+        # kingo-jupyterhub:local is built, not pulled; short names need the
+        # docker.io/ prefix for a direct podman pull.
+        run: |
+          docker-compose -f compose.yml config --images | grep -v '^kingo-jupyterhub' | while read -r img; do
+            case "$img" in
+              *.*/*) ref="$img" ;;
+              *)     ref="docker.io/$img" ;;
+            esac
+            echo "== pulling $ref"
+            podman pull --retry 3 "$ref" || podman pull "$ref"
+          done
+
       - name: Boot 1 — up + smoke
+        timeout-minutes: 30
         # fixports first, exactly like the setup scripts do — on a clean runner
         # it's a no-op, but it keeps the student code path CI-tested.
         run: |
@@ -62,6 +91,7 @@ jobs:
           ./kingo smoke
 
       - name: Boot 2 — second cycle catches first-run-only survivors
+        timeout-minutes: 25
         run: |
           ./kingo down
           ./kingo up
