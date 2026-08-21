@@ -11,7 +11,8 @@ Setting up at home with good internet instead? Use the
 ## Before you start
 
 - An **Apple-Silicon Mac** (M1 or newer — any Mac from 2021 on).
-- **8 GB RAM** (16 GB recommended) and about **20 GB free disk space**.
+- **8 GB RAM** (16 GB recommended) and about **25 GB free disk space** during
+  setup (you delete the 13 GB image file at the end, leaving ~20 GB in use).
 - The instructor's **USB stick** with `kingo-images.tar` on it.
 
 ## Step 1 — Get the files
@@ -21,27 +22,51 @@ Setting up at home with good internet instead? Use the
 2. Double-click the ZIP to unzip it. You get a folder called **`kingo-pod-main`**.
 3. Move that folder somewhere easy, e.g. your **Home** folder or **Documents**.
 
-## Step 2 — Plug in the stick and run setup
+## Step 2 — Copy the images from the stick
 
-1. Plug in the USB stick.
-2. Open the **Terminal** app (press ⌘ Space, type *Terminal*, press Enter).
-3. Type `cd ` (with a space after it), **drag the `kingo-pod-main` folder**
+1. Plug in the USB stick and open it in **Finder**.
+2. **Drag `kingo-images.tar` into your `kingo-pod-main` folder.**
+
+The copy takes ~5–10 minutes and is the **only** part that needs the stick —
+hand it to the next student as soon as the copy is done. (The stick is only
+read, never changed.)
+
+## Step 3 — Run the setup script
+
+1. Open the **Terminal** app (press ⌘ Space, type *Terminal*, press Enter).
+2. Type `cd ` (with a space after it), **drag the `kingo-pod-main` folder**
    from Finder onto the Terminal window, and press **Enter**.
-4. Type `bash setup/setup-mac.sh ` (with a space at the end), **drag the
-   `kingo-images.tar` file from the stick** onto the Terminal window, and
-   press **Enter**.
+3. Type this and press **Enter**:
 
-The script picks a container engine (may ask for your Mac password once —
-that's Homebrew, normal), checks your ports, **loads the images from the
-stick (~5–10 minutes)** instead of downloading them, starts everything, and
-verifies it. It is safe to re-run if it stops partway — it skips what's done.
+   ```
+   bash setup/setup-mac.sh
+   ```
 
-## Step 3 — Did it work?
+The script finds the copied `kingo-images.tar` by itself: it picks a
+container engine (may ask for your Mac password once — that's Homebrew,
+normal), checks your ports, **loads the images from the file (~3 minutes)**
+instead of downloading them, starts everything, and verifies it. It is safe
+to re-run if it stops partway — and a re-run does **not** need the stick
+again.
+
+## Step 4 — Did it work?
 
 You're done when the script prints **`SMOKE OK`** followed by your personal
 table of addresses and logins. Reprint it any time with `./kingo credentials`.
-Hand the stick to the next student — it is only read, never changed.
+
+Now delete the copied image file — it has done its job, and this frees 13 GB:
+
+```
+rm kingo-images.tar
+```
 
 Everything else — the service addresses and logins, everyday commands
 (`./kingo up` / `./kingo down`), troubleshooting, and the FAQ — is in the
-[regular Mac guide](STUDENT-GUIDE-MAC.md) from **Step 3** on.
+[regular Mac guide](STUDENT-GUIDE-MAC.md) from **Step 4 ("Open your
+services")** on.
+
+> **Tight on disk space?** Skip the copy and load straight from the stick: in
+> Step 3, type `bash setup/setup-mac.sh ` (with a space at the end), **drag
+> the `kingo-images.tar` file from the stick** onto the Terminal window, and
+> press Enter. The stick must stay plugged in for the whole setup, and a
+> re-run needs it again.

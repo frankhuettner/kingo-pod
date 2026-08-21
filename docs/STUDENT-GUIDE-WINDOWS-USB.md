@@ -42,7 +42,7 @@ Ubuntu** — Ubuntu only sees drives that were present when it started. Check
 the stick's drive letter in Windows Explorer (say `E:`); inside Ubuntu the
 stick is `/mnt/e` (lowercase).
 
-## Step 4 — Run setup with the stick
+## Step 4 — Copy the images, pass the stick on, run setup
 
 Open the **Ubuntu** app from the Start menu and paste this block (right-click
 pastes), replacing `e` with your stick's drive letter:
@@ -50,30 +50,31 @@ pastes), replacing `e` with your stick's drive letter:
 ```bash
 sudo apt update && sudo apt install -y git
 git clone https://github.com/frankhuettner/kingo-pod.git
-cd kingo-pod && bash setup/setup-linux.sh /mnt/e/kingo-images.tar
+cp /mnt/e/kingo-images.tar ~/kingo-pod/
+cd kingo-pod && bash setup/setup-linux.sh
 ```
 
-The script installs the small tools over Wi-Fi, **loads the images from the
-stick (~5–10 minutes)** instead of downloading 10 GB, starts everything, and
-verifies it. It is safe to re-run if it stops partway:
+The `cp` line (~5–10 minutes) is the **only** part that needs the stick —
+as soon as it finishes, hand the stick to the next student. (The stick is
+only read, never changed.) The setup script then finds the copied file by
+itself: it installs the small tools over Wi-Fi, **loads the images from the
+copy (~3 minutes)** instead of downloading 10 GB, starts everything, and
+verifies it. It is safe to re-run if it stops partway — and a re-run does
+**not** need the stick again:
 
 ```bash
-cd ~/kingo-pod && bash setup/setup-linux.sh /mnt/e/kingo-images.tar
+cd ~/kingo-pod && bash setup/setup-linux.sh
 ```
 
-**To pass the stick on quickly**: copy the file, hand the stick to the next
-person, and run setup without the path — it finds the copy automatically:
-
-```bash
-cp /mnt/e/kingo-images.tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
-```
-
-(Afterwards `rm ~/kingo-pod/kingo-images.tar` frees the 13 GB again.)
+> **Tight on disk space?** Skip the copy and load straight from the stick:
+> leave out the `cp` line and run
+> `bash setup/setup-linux.sh /mnt/e/kingo-images.tar` instead. The stick must
+> stay plugged in for the whole setup, and a re-run needs it again.
 
 ## If the stick isn't found
 
-`bundle file not found` means the stick isn't visible inside Ubuntu yet.
-Mount it by hand (use your drive letter):
+`cp: cannot stat …` (or `bundle file not found`) means the stick isn't
+visible inside Ubuntu yet. Mount it by hand (use your drive letter):
 
 ```bash
 sudo mkdir -p /mnt/e && sudo mount -t drvfs E: /mnt/e
@@ -88,6 +89,12 @@ You're done when the script prints **`SMOKE OK`** followed by your personal
 table of addresses and logins. Reprint it any time with `./kingo credentials`.
 Open the services in your normal **Windows** browser — WSL2 forwards
 `localhost` automatically.
+
+Now delete the copied image file — it has done its job, and this frees 13 GB:
+
+```bash
+rm ~/kingo-pod/kingo-images.tar
+```
 
 Everything else — the service addresses and logins, everyday commands
 (`./kingo up` / `./kingo down`), troubleshooting, and the FAQ — is in the

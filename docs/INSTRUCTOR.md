@@ -31,20 +31,27 @@ locally-built jupyterhub one. Copy that single file onto USB sticks —
 is borderline). Most sticks ship as FAT32, which refuses files over 4 GB
 ("too large for the volume's format") — reformat first: Disk Utility (Mac) →
 Erase → format exFAT, scheme Master Boot Record; or Windows Explorer →
-right-click the stick → Format… → exFAT. Reformatting erases the stick. Bring **several sticks**: each student reads 13 GB, so one
-stick serializes the room. Students can also copy the tar into their
-`kingo-pod` folder and pass the stick straight on — the setup script picks a
-`kingo-images.tar` in its folder up automatically (tell them to delete it
-afterwards; it costs 13 GB of disk).
+right-click the stick → Format… → exFAT. Reformatting erases the stick.
+Bring **several sticks**: each student reads 13 GB from it, so one stick
+serializes the room. The USB guides therefore default to **copy, pass on,
+then install**: the student copies the tar into their `kingo-pod` folder
+(~5–10 min, the only step that needs the stick), hands the stick on, and the
+setup script picks the copy up automatically — installs overlap instead of
+queueing, and a failed setup re-runs without the stick. The guides tell
+students to delete the copy after `SMOKE OK` (it costs 13 GB of disk until
+then; loading directly from the stick stays documented as the fallback for
+disk-tight laptops).
 
 **What the student runs** — each platform has a dedicated USB guide to point
 stick students at: [`STUDENT-GUIDE-MAC-USB.md`](STUDENT-GUIDE-MAC-USB.md) and
 [`STUDENT-GUIDE-WINDOWS-USB.md`](STUDENT-GUIDE-WINDOWS-USB.md). In short:
 
-- **Windows** (Steps 1–2 of the regular guide, WSL2 + Ubuntu, must already be
-  done at home — they need a reboot and the Store): plug the stick in *before*
-  opening Ubuntu, then `bash setup/setup-linux.sh /mnt/<letter>/kingo-images.tar`.
-- **Mac**: `bash setup/setup-mac.sh ` + drag the tar file into Terminal.
+- **Windows** (WSL2 + Ubuntu must already be done at home — reboot + Store;
+  the USB guide repeats those steps): plug the stick in *before* opening
+  Ubuntu, then the guide's paste block: clone, `cp` the tar from
+  `/mnt/<letter>/`, pass the stick on, `bash setup/setup-linux.sh`.
+- **Mac**: drag the tar from the stick into the `kingo-pod-main` folder in
+  Finder, pass the stick on, then `bash setup/setup-mac.sh`.
 - **Already set up, only images missing**:
   `./kingo load /path/to/kingo-images.tar && ./kingo up` does it directly.
 
