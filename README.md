@@ -30,7 +30,10 @@ already run, start the stack, and verify it. First run pulls ~10 GB — **do it
 at home before class.**
 
 Full walkthroughs: [`docs/STUDENT-GUIDE-MAC.md`](docs/STUDENT-GUIDE-MAC.md) ·
-[`docs/STUDENT-GUIDE-WINDOWS.md`](docs/STUDENT-GUIDE-WINDOWS.md) ·
+[`docs/STUDENT-GUIDE-WINDOWS.md`](docs/STUDENT-GUIDE-WINDOWS.md) —
+from the instructor's USB stick (no big download):
+[`docs/STUDENT-GUIDE-MAC-USB.md`](docs/STUDENT-GUIDE-MAC-USB.md) ·
+[`docs/STUDENT-GUIDE-WINDOWS-USB.md`](docs/STUDENT-GUIDE-WINDOWS-USB.md) —
 instructors: [`docs/INSTRUCTOR.md`](docs/INSTRUCTOR.md).
 
 ## The `kingo` CLI

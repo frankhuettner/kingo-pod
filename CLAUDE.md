@@ -58,7 +58,8 @@ It was ported from the old `kingo-vm` repo.
   Windows setup script: students enable WSL2 + Ubuntu by following the video
   tutorial in the guide (Frank's call — a .ps1 was tried and dropped as too
   complicated), then run setup-linux.sh inside Ubuntu.
-- `docs/` — student guides (Mac/Windows) + instructor notes.
+- `docs/` — student guides (Mac/Windows, each in an internet and a USB-stick
+  variant) + instructor notes.
 - `.github/workflows/ci.yml` — both engines, two boot cycles.
 
 ## Windows = WSL2, one CLI

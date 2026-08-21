@@ -14,8 +14,8 @@ script checks itself and tells you if something needs fixing.
 - **How long?** A few minutes of setup plus the 10 GB download —
   **15–45 minutes** depending on your internet, mostly unattended.
 - **Slow or no internet at home?** Your instructor can bring the images on a
-  **USB stick** to class — the 10 GB then come from the stick instead of the
-  Wi-Fi (see the USB box in Step 2).
+  **USB stick** to class — then follow the
+  [Mac USB guide](STUDENT-GUIDE-MAC-USB.md) instead of Step 2 below.
 
 > **Already have Docker Desktop?** (e.g. from another course) — perfect, keep
 > it. Just make sure Docker Desktop is **running** before Step 2. The setup
@@ -56,12 +56,9 @@ The script does four things, in order, and says so as it goes:
 **You only do this once.** If it stops partway (Wi-Fi hiccup, closed laptop),
 just run the same command again — it is safe to re-run and skips what's done.
 
-> **Using the instructor's USB stick?** Plug the stick in, then run the same
-> command with the file on the stick added: type `bash setup/setup-mac.sh `
-> (with a space at the end), **drag the `kingo-images.tar` file** from the
-> stick onto the Terminal window, and press Enter. Everything else is
-> identical — the script takes the 10 GB of images from the stick
-> (~5–10 minutes) instead of downloading them.
+> **Got the instructor's USB stick?** Use the
+> [Mac USB guide](STUDENT-GUIDE-MAC-USB.md) instead — same result, but the
+> 10 GB of images come from the stick.
 
 ## Step 3 — Did it work?
 

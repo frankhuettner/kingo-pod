@@ -37,11 +37,13 @@ stick serializes the room. Students can also copy the tar into their
 `kingo-images.tar` in its folder up automatically (tell them to delete it
 afterwards; it costs 13 GB of disk).
 
-**What the student runs** (both guides have this as the "USB box"):
+**What the student runs** — each platform has a dedicated USB guide to point
+stick students at: [`STUDENT-GUIDE-MAC-USB.md`](STUDENT-GUIDE-MAC-USB.md) and
+[`STUDENT-GUIDE-WINDOWS-USB.md`](STUDENT-GUIDE-WINDOWS-USB.md). In short:
 
-- **Windows** (Steps 1–2, WSL2 + Ubuntu, must already be done at home — they
-  need a reboot and the Store): plug the stick in *before* opening Ubuntu, then
-  `bash setup/setup-linux.sh /mnt/<letter>/kingo-images.tar`.
+- **Windows** (Steps 1–2 of the regular guide, WSL2 + Ubuntu, must already be
+  done at home — they need a reboot and the Store): plug the stick in *before*
+  opening Ubuntu, then `bash setup/setup-linux.sh /mnt/<letter>/kingo-images.tar`.
 - **Mac**: `bash setup/setup-mac.sh ` + drag the tar file into Terminal.
 - **Already set up, only images missing**:
   `./kingo load /path/to/kingo-images.tar && ./kingo up` does it directly.
