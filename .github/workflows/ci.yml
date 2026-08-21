@@ -26,16 +26,21 @@ jobs:
         if: matrix.engine == 'docker'
         run: docker compose version
 
-      - name: Install Podman + compose provider (podman leg)
+      - name: Install Podman + Compose v2 provider (podman leg)
         if: matrix.engine == 'podman'
-        # NOTE (plan §4): podman must use the docker-compose binary as its
-        # compose provider — NOT podman-compose. ubuntu-latest ships a recent
-        # podman; if a newer major is needed, add the Kubic repo here.
+        # NOTE (plan §4): podman must use the docker-compose *v2* binary as its
+        # provider — NOT podman-compose, and NOT the apt 'docker-compose' package
+        # (that is the old Python v1). We install the v2 binary explicitly.
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman docker-compose
+          sudo apt-get install -y podman uidmap
+          tag=$(curl -fsSL https://api.github.com/repos/docker/compose/releases/latest \
+                | grep -o '"tag_name":[^,]*' | cut -d'"' -f4)
+          sudo curl -fsSL "https://github.com/docker/compose/releases/download/${tag}/docker-compose-linux-x86_64" \
+            -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
           podman --version
-          docker-compose --version
+          docker-compose version --short
           # rootless API socket, so `podman compose` can reach the engine
           systemctl --user enable --now podman.socket 2>/dev/null || true
 
