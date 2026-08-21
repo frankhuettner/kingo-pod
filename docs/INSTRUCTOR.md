@@ -28,7 +28,10 @@ their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
 measured 2026-08-21) with every image the stack needs, including the
 locally-built jupyterhub one. Copy that single file onto USB sticks —
 **32 GB, exFAT-formatted** so both Mac and Windows can read it (a 16 GB stick
-is borderline). Bring **several sticks**: each student reads 13 GB, so one
+is borderline). Most sticks ship as FAT32, which refuses files over 4 GB
+("too large for the volume's format") — reformat first: Disk Utility (Mac) →
+Erase → format exFAT, scheme Master Boot Record; or Windows Explorer →
+right-click the stick → Format… → exFAT. Reformatting erases the stick. Bring **several sticks**: each student reads 13 GB, so one
 stick serializes the room. Students can also copy the tar into their
 `kingo-pod` folder and pass the stick straight on — the setup script picks a
 `kingo-images.tar` in its folder up automatically (tell them to delete it
