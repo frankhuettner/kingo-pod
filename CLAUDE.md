@@ -54,8 +54,10 @@ It was ported from the old `kingo-vm` repo.
   CI-tested on Linux with both engines.
 - `jupyterhub/`, `cloudbeaver/`, `postgres-init/` — service config, ported as-is.
 - `setup/setup-mac.sh` (brew+podman machine), `setup/setup-linux.sh` (apt+podman,
-  also the Windows/WSL path), `setup/setup-windows.ps1` (only enables WSL2 +
-  Ubuntu, then hands off to setup-linux.sh) — all re-runnable.
+  also the Windows/WSL path) — both re-runnable. There is deliberately NO
+  Windows setup script: students enable WSL2 + Ubuntu by following the video
+  tutorial in the guide (Frank's call — a .ps1 was tried and dropped as too
+  complicated), then run setup-linux.sh inside Ubuntu.
 - `docs/` — student guides (Mac/Windows) + instructor notes.
 - `.github/workflows/ci.yml` — both engines, two boot cycles.
 

@@ -25,12 +25,14 @@ their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
 - **Mac**: `bash setup/setup-mac.sh` — installs Homebrew (if needed), Podman +
   the docker-compose provider, a Podman machine (4 CPU / 6 GB / 40 GB), then
   brings the stack up and smoke-tests it.
-- **Windows**: `setup/setup-windows.ps1` (self-elevates) only turns on WSL2 +
-  Ubuntu. Students then run `bash setup/setup-linux.sh` **inside Ubuntu**, which
-  installs Podman + the Compose v2 provider and brings the stack up. This means
-  Windows uses the exact same Linux runtime and the same bash `kingo` CLI as
-  Mac/Linux/CI — one code path, no PowerShell port. (Deviates from the plan's
-  `podman machine`-on-Windows sketch, which was flagged for Phase-2 verification.)
+- **Windows**: no script — students enable WSL2 + Ubuntu by following the
+  4-minute video tutorial in the guide (Windows features → Virtual Machine
+  Platform + WSL, reboot, Ubuntu from the Microsoft Store), then run
+  `bash setup/setup-linux.sh` **inside Ubuntu**, which installs Podman + the
+  Compose v2 provider and brings the stack up. This means Windows uses the
+  exact same Linux runtime and the same bash `kingo` CLI as Mac/Linux/CI —
+  one code path, no PowerShell port. (Deviates from the plan's `podman
+  machine`-on-Windows sketch, which was flagged for Phase-2 verification.)
 
 All setup scripts are **re-runnable**, and both handle the two most common
 "my laptop is different" cases by themselves:

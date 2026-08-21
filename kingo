@@ -59,7 +59,7 @@ ensure_ready() {
         podman machine start >/dev/null 2>&1 || true
       fi
       podman info >/dev/null 2>&1 && return 0
-      die "Podman has no ready machine. Run the setup script once: setup/setup-mac.sh (Mac) or setup/setup-windows.ps1 (Windows)."
+      die "Podman has no ready machine. Run the setup script once: setup/setup-mac.sh (Mac) or setup/setup-linux.sh (Linux, or inside WSL2 Ubuntu on Windows)."
       ;;
     docker)
       docker info >/dev/null 2>&1 && return 0
@@ -378,7 +378,7 @@ cmd_doctor() {
     echo "  [ok] $ENGINE can run containers"
   else
     echo "  [!!] $ENGINE cannot run containers yet"
-    [ "$ENGINE" = podman ] && echo "       → the Podman machine is not running. Run setup/setup-mac.sh or setup-windows.ps1."
+    [ "$ENGINE" = podman ] && echo "       → the Podman machine is not running. Run setup/setup-mac.sh (Mac) or setup/setup-linux.sh (Linux/WSL)."
     [ "$ENGINE" = docker ] && echo "       → start Docker Desktop and wait until it says 'running'."
   fi
 
@@ -396,7 +396,7 @@ cmd_doctor() {
   if [ "$ENGINE" = podman ] && ! command -v docker-compose >/dev/null 2>&1; then
     echo "  [!!] the docker-compose provider binary was not found on PATH."
     echo "       podman may fall back to podman-compose, which breaks this stack (plan §4)."
-    echo "       Mac: brew install docker-compose   Windows: see setup-windows.ps1."
+    echo "       Mac: brew install docker-compose   Linux/WSL: re-run setup/setup-linux.sh."
   fi
 
   # Both engines installed? Tell the student which one is in charge.

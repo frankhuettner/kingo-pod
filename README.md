@@ -16,8 +16,8 @@ bash setup/setup-mac.sh
 ```
 
 **Windows** (10/11): the stack runs inside WSL2 (Windows' built-in Linux).
-Right-click `setup/setup-windows.ps1` → **Run with PowerShell** to turn on WSL2
-+ Ubuntu, then inside the Ubuntu terminal:
+Turn on WSL2 and install Ubuntu once by following the 4-minute video in the
+[Windows guide](docs/STUDENT-GUIDE-WINDOWS.md), then inside the Ubuntu terminal:
 
 ```bash
 git clone https://github.com/frankhuettner/kingo-pod.git

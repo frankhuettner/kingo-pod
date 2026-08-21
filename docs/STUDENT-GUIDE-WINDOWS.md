@@ -25,16 +25,17 @@ fixing.
 
 ## Step 1 — Turn on WSL2 + Ubuntu
 
-Easiest: in the project's `setup` folder, right-click **`setup-windows.ps1`**
-→ **Run with PowerShell** → click **Yes** on the Administrator prompt. If it
-says a reboot is needed, **restart your laptop and run it once more.**
-
-(Doing it by hand instead: open **PowerShell as Administrator**, run
-`wsl --install`, and reboot.)
-
-**New to WSL? This 4-minute beginner video walks through exactly this step** —
-enabling WSL2, installing Ubuntu, and setting your Linux username/password:
+**Watch this 4-minute video and do exactly what it shows:**
 <https://www.youtube.com/watch?v=zZf4YH4WiZo>
+
+It walks you through the three things Windows needs, in order:
+
+1. In the Start menu, search **"Turn Windows features on or off"**, tick
+   **Virtual Machine Platform** and **Windows Subsystem for Linux**, click OK.
+2. **Restart** your laptop.
+3. Open the **Microsoft Store**, search **Ubuntu**, and click **Get/Install**.
+
+The video ends with the first launch of Ubuntu — that's our Step 2, below.
 
 ## Step 2 — First launch of Ubuntu
 
