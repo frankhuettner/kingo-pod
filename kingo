@@ -515,7 +515,9 @@ cmd_doctor() {
   command -v curl >/dev/null 2>&1 \
     || echo "  [!!] curl is not installed — kingo cannot check service health. Linux/WSL: sudo apt-get install -y curl"
 
-  # Memory — the stack needs ~6 GB wherever the containers actually run.
+  # Memory — the stack needs ~5 GB wherever the containers actually run
+  # (measured 2026-08-21: ~3 GB idle + headroom for notebooks/flows).
+  # Threshold 4800, not 5120: a VM given "5 GB" reports slightly less inside.
   local mem=""
   case "$ENGINE" in
     podman) mem=$(podman machine inspect --format '{{.Resources.Memory}}' 2>/dev/null | head -1 || true) ;;             # MB
@@ -524,12 +526,12 @@ cmd_doctor() {
   esac
   case "$mem" in ''|*[!0-9]*) mem="" ;; esac
   if [ -n "$mem" ] && [ "$mem" -gt 0 ]; then
-    if [ "$mem" -ge 5500 ]; then
+    if [ "$mem" -ge 4800 ]; then
       echo "  [ok] $ENGINE memory: ${mem} MB"
     else
-      echo "  [!!] $ENGINE has only ${mem} MB (the stack needs ~6 GB)."
-      if [ "$ENGINE" = podman ]; then echo "       → podman machine set --memory 6144   (or re-run setup)"
-      else echo "       → Docker Desktop → Settings → Resources → raise Memory to 6 GB+."; fi
+      echo "  [!!] $ENGINE has only ${mem} MB (the stack needs ~5 GB)."
+      if [ "$ENGINE" = podman ]; then echo "       → podman machine set --memory 5120   (or re-run setup)"
+      else echo "       → Docker Desktop → Settings → Resources → raise Memory to 5 GB+."; fi
     fi
   fi
 

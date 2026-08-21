@@ -69,14 +69,16 @@ else
   brew list podman         >/dev/null 2>&1 || brew install podman
   brew list docker-compose >/dev/null 2>&1 || brew install docker-compose
 
-  # Podman machine (4 CPU / 6 GB / 40 GB) — the default machine (2 CPU / 2 GB)
-  # is far too small; the stack needs ~6 GB.
+  # Podman machine (4 CPU / 5 GB / 40 GB) — the default machine (2 CPU / 2 GB)
+  # is far too small. Measured (2026-08-21): the full stack idles at ~3 GB, so
+  # 5120 MB leaves ~2 GB for notebooks/flows while keeping ~3 GB of an 8-GB
+  # Mac for macOS + browser.
   if podman machine list --format '{{.Name}}' 2>/dev/null | grep -q .; then
     say "A Podman machine already exists — making sure it is running ..."
     podman info >/dev/null 2>&1 || podman machine start
   else
-    say "Creating the Podman machine (4 CPU, 6 GB RAM, 40 GB disk) ..."
-    podman machine init --cpus 4 --memory 6144 --disk-size 40 --now
+    say "Creating the Podman machine (4 CPU, 5 GB RAM, 40 GB disk) ..."
+    podman machine init --cpus 4 --memory 5120 --disk-size 40 --now
   fi
   podman info >/dev/null 2>&1 || { echo "ERROR: Podman machine did not come up. Try: podman machine start"; exit 1; }
 

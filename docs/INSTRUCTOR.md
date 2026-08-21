@@ -15,7 +15,9 @@ their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
   1). WSL2 on Windows is the #1 support burden — pair students who are done with
   those still setting up.
 - **Minimum specs**: 8 GB RAM (16 GB recommended), ~20 GB free disk. The stack
-  uses ~6 GB RAM while running.
+  gets a ~5 GB budget and idles at ~3 GB (measured 2026-08-21; biggest single
+  consumer: Metabase at ~1.2 GB). If 8-GB laptops still struggle, the planned
+  `--lite` profile (drop Metabase + CloudBeaver, saves ~1.5 GB) is the next lever.
 - **Classroom Wi-Fi fallback**: if someone shows up without having pulled the
   images, an offline USB bundle (`kingo bundle` / `kingo load`, planned) lets you
   copy the ~10 GB locally instead of hammering the room's Wi-Fi.
@@ -23,7 +25,7 @@ their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
 ## Setup paths
 
 - **Mac**: `bash setup/setup-mac.sh` — installs Homebrew (if needed), Podman +
-  the docker-compose provider, a Podman machine (4 CPU / 6 GB / 40 GB), then
+  the docker-compose provider, a Podman machine (4 CPU / 5 GB / 40 GB), then
   brings the stack up and smoke-tests it.
 - **Windows**: no script — students enable WSL2 + Ubuntu by following the
   4-minute video tutorial in the guide (Windows features → Virtual Machine
