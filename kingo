@@ -120,9 +120,14 @@ init_stack() {
 # setup wizard. Idempotent via the setup-token check; non-fatal on failure.
 # JSON is parsed with grep (no python3 dependency on the host).
 setup_metabase() {
-  local mb="http://127.0.0.1:${P_METABASE}" token sid
-  token=$(curl -s -m 5 "$mb/api/session/properties" | grep -o '"setup-token":"[^"]*"' | cut -d'"' -f4 || true)
-  [ -n "${token:-}" ] || { echo "  Metabase already initialized."; return 0; }
+  local mb="http://127.0.0.1:${P_METABASE}" props token sid
+  props=$(curl -s -m 5 "$mb/api/session/properties" || true)
+  # Gate on has-user-setup, NOT the setup-token: Metabase keeps a (now useless)
+  # setup-token around even after an admin exists, so the token alone would make
+  # this re-run the setup call and warn every time.
+  echo "$props" | grep -q '"has-user-setup":true' && { echo "  Metabase already initialized."; return 0; }
+  token=$(echo "$props" | grep -o '"setup-token":"[^"]*"' | cut -d'"' -f4 || true)
+  [ -n "${token:-}" ] || { warn "Metabase not ready for pre-setup yet (skipping; re-run: kingo up)"; return 0; }
   sid=$(curl -s -m 15 -X POST "$mb/api/setup" -H 'Content-Type: application/json' -d "{
       \"token\": \"$token\",
       \"user\": {\"email\": \"$METABASE_ADMIN_EMAIL\", \"password\": \"$KINGO_STRONG_PASSWORD\",
@@ -143,7 +148,9 @@ setup_metabase() {
 cmd_up() {
   select_engine; ensure_ready
   echo "Engine: $ENGINE. Starting the Kingo stack ..."
-  compose up -d --build
+  # `up` builds the local jupyterhub image only if it's missing (first run);
+  # use `kingo update` to force a rebuild after changing the Dockerfile.
+  compose up -d
   echo "Waiting for all services to become healthy (first run pulls ~10 GB — be patient) ..."
   wait_all 90 || { echo; compose ps; die "not all services came up. See: kingo logs <service>"; }
   echo "All services healthy. Running first-run setup ..."
