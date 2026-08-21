@@ -57,8 +57,9 @@ Once the images are on disk, `kingo pull` skips them one by one, and
 end-to-end (2026-08-21, ~3 min load from local disk; a stick adds its own
 read time, plan ~5–10 min).
 
-Bundles are cross-engine by design (saved with podman in docker-compatible
-format, loads into docker and vice versa); verified live for podman→podman.
+Bundles are cross-engine: a podman-written bundle is verified live to load
+into both podman and Docker Desktop (2026-08-21) — one stick serves the whole
+class regardless of engine.
 
 ## Setup paths
 
