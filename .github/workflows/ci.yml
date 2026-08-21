@@ -22,6 +22,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free up disk space
+        # The stack extracts to ~15+ GB; a default runner has only ~14 GB free,
+        # so image pulls fail with "no space left on device". Drop preinstalled
+        # toolchains we don't use to reclaim ~25 GB.
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h / | tail -1
+
       - name: Show Docker Compose (docker leg)
         if: matrix.engine == 'docker'
         run: docker compose version
