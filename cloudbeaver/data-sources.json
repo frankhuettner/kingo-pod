@@ -1,0 +1,19 @@
+{
+  "folders": {},
+  "connections": {
+    "postgres-classroom": {
+      "provider": "postgresql",
+      "driver": "postgres-jdbc",
+      "name": "Classroom (PostgreSQL)",
+      "save-password": true,
+      "configuration": {
+        "host": "postgres",
+        "port": "5432",
+        "database": "classroom",
+        "url": "jdbc:postgresql://postgres:5432/classroom",
+        "type": "dev",
+        "auth-model": "native"
+      }
+    }
+  }
+}

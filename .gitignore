@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Claude Code local session state
+.claude/
+
+# editor / local
+*.swp
+*.log
+
+# NOTE: .env is committed ON PURPOSE — classroom credentials are public-by-design
+# and localhost-only (see PLAN-NATIVE-STACK.md §5). Do not add .env here.

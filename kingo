@@ -1,0 +1,347 @@
+#!/usr/bin/env bash
+# kingo — classroom stack helper (native, engine-agnostic).
+# Runs the container stack directly on a laptop with Podman (preferred) or
+# Docker. No VM. Mac/Linux/WSL use this bash CLI; Windows/PowerShell users have
+# the parallel kingo.ps1. Engine is auto-detected (override with KINGO_ENGINE).
+set -euo pipefail
+
+KINGO_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" && pwd)"
+cd "$KINGO_DIR"
+
+# shellcheck disable=SC1091
+set -a; source ./.env; set +a
+
+# Effective host ports (defaults match the guides; overridable via KINGO_PORT_*).
+P_LANGFLOW=${KINGO_PORT_LANGFLOW:-7860}
+P_N8N=${KINGO_PORT_N8N:-5678}
+P_JUPYTERLAB=${KINGO_PORT_JUPYTERLAB:-8888}
+P_JUPYTERHUB=${KINGO_PORT_JUPYTERHUB:-8000}
+P_MCP=${KINGO_PORT_MCP:-4040}
+P_METABASE=${KINGO_PORT_METABASE:-3000}
+P_CLOUDBEAVER=${KINGO_PORT_CLOUDBEAVER:-8978}
+P_QDRANT=${KINGO_PORT_QDRANT:-6333}
+P_POSTGRES=${KINGO_PORT_POSTGRES:-5432}
+
+die()  { echo "ERROR: $*" >&2; exit 1; }
+warn() { echo "WARN: $*" >&2; }
+
+# ── Engine detection ─────────────────────────────────────────────────────────
+# Order (per plan §4): $KINGO_ENGINE override → podman (usable or startable) →
+# docker → podman as last resort (so the error points at podman setup).
+ENGINE=""
+select_engine() {
+  if [ -n "${KINGO_ENGINE:-}" ]; then ENGINE="$KINGO_ENGINE"; return; fi
+  if command -v podman >/dev/null 2>&1; then
+    if podman info >/dev/null 2>&1; then ENGINE=podman; return; fi
+    if podman machine list -q 2>/dev/null | grep -q .; then ENGINE=podman; return; fi
+  fi
+  if command -v docker >/dev/null 2>&1; then ENGINE=docker; return; fi
+  if command -v podman >/dev/null 2>&1; then ENGINE=podman; return; fi
+  die "No container engine found. Install Podman (recommended) or Docker Desktop — see docs/STUDENT-GUIDE-*.md."
+}
+
+# Make sure the engine can actually run containers (start podman machine if it
+# exists but is stopped; tell the user to run setup if there is no machine).
+ensure_ready() {
+  case "$ENGINE" in
+    podman)
+      podman info >/dev/null 2>&1 && return 0
+      if podman machine list -q 2>/dev/null | grep -q .; then
+        echo "Starting the Podman machine (this takes a few seconds) ..."
+        podman machine start >/dev/null 2>&1 || true
+      fi
+      podman info >/dev/null 2>&1 && return 0
+      die "Podman has no ready machine. Run the setup script once: setup/setup-mac.sh (Mac) or setup/setup-windows.ps1 (Windows)."
+      ;;
+    docker)
+      docker info >/dev/null 2>&1 && return 0
+      die "Docker is installed but not running. Open Docker Desktop, wait until it says 'running', then try again."
+      ;;
+    *) die "Unknown engine '$ENGINE' (KINGO_ENGINE must be 'podman' or 'docker')." ;;
+  esac
+}
+
+# One wrapper every verb goes through: `podman compose ...` or `docker compose ...`.
+compose() { $ENGINE compose "$@"; }
+
+# ── Health checks (source of truth: plan §8) ─────────────────────────────────
+# name|port|path|expected-codes.  4040/mcp answering 401 without the bearer
+# token IS healthy. Exact codes only — "any answer counts" once passed while a
+# service was crash-looping.
+build_services() {
+  SMOKE_SERVICES=(
+    "JupyterLab|${P_JUPYTERLAB}|/api|200"
+    "JupyterHub|${P_JUPYTERHUB}|/hub/api|200"
+    "Jupyter MCP|${P_MCP}|/mcp|401"
+    "Langflow|${P_LANGFLOW}|/health|200"
+    "n8n|${P_N8N}|/healthz|200"
+    "Metabase|${P_METABASE}|/api/health|200"
+    "CloudBeaver|${P_CLOUDBEAVER}|/|200|301|302"
+    "Qdrant|${P_QDRANT}|/readyz|200"
+    "PostgreSQL|${P_POSTGRES}|tcp"
+  )
+}
+
+check() { # port path [want] -> 0 if the expected code(s) match
+  local port="$1" path="$2" want="${3:-200}" code
+  if [ "$path" = "tcp" ]; then
+    (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1
+  fi
+  code=$(curl -s -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:${port}${path}" 2>/dev/null || echo 000)
+  echo "$code" | grep -qE "^(${want})$"
+}
+
+wait_all() { # $1 = max attempts (10s apart)
+  build_services
+  local attempt all s name port path want
+  for attempt in $(seq 1 "$1"); do
+    all=1
+    for s in "${SMOKE_SERVICES[@]}"; do
+      IFS='|' read -r name port path want <<<"$s"
+      check "$port" "$path" "${want:-200}" || { all=0; break; }
+    done
+    [ "$all" = 1 ] && return 0
+    echo "  waiting for services ($attempt/$1) — last not ready: ${name} ..."
+    sleep 10
+  done
+  return 1
+}
+
+# ── First-run initialization (idempotent; absorbed from the old bake.sh) ──────
+init_stack() {
+  # Starter notebook the MCP server points at.
+  $ENGINE exec kingo-jupyterlab bash -lc \
+    'mkdir -p work && [ -f work/notebook.ipynb ] || printf "%s" "{\"cells\":[],\"metadata\":{},\"nbformat\":4,\"nbformat_minor\":5}" > work/notebook.ipynb' \
+    2>/dev/null || warn "could not create the starter notebook (retry with: kingo up)"
+  setup_metabase || warn "Metabase pre-setup skipped (worst case: you click through the wizard once)"
+}
+
+# Pre-provision the Metabase admin + classroom DB so students never see the
+# setup wizard. Idempotent via the setup-token check; non-fatal on failure.
+# JSON is parsed with grep (no python3 dependency on the host).
+setup_metabase() {
+  local mb="http://127.0.0.1:${P_METABASE}" token sid
+  token=$(curl -s -m 5 "$mb/api/session/properties" | grep -o '"setup-token":"[^"]*"' | cut -d'"' -f4 || true)
+  [ -n "${token:-}" ] || { echo "  Metabase already initialized."; return 0; }
+  sid=$(curl -s -m 15 -X POST "$mb/api/setup" -H 'Content-Type: application/json' -d "{
+      \"token\": \"$token\",
+      \"user\": {\"email\": \"$METABASE_ADMIN_EMAIL\", \"password\": \"$KINGO_STRONG_PASSWORD\",
+                 \"first_name\": \"Kingo\", \"last_name\": \"Admin\", \"site_name\": \"Kingo Classroom\"},
+      \"prefs\": {\"site_name\": \"Kingo Classroom\", \"allow_tracking\": false}
+    }" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+  [ -n "${sid:-}" ] || { warn "Metabase setup call did not return a session"; return 0; }
+  curl -s -m 15 -X POST "$mb/api/database" -H 'Content-Type: application/json' \
+    -H "X-Metabase-Session: $sid" -d "{
+      \"engine\": \"postgres\", \"name\": \"Classroom (PostgreSQL)\",
+      \"details\": {\"host\": \"postgres\", \"port\": 5432, \"dbname\": \"classroom\",
+                    \"user\": \"$KINGO_USER\", \"password\": \"$KINGO_PASSWORD\", \"ssl\": false}
+    }" >/dev/null 2>&1 || warn "could not add the classroom DB to Metabase"
+  echo "  Metabase admin + classroom DB provisioned."
+}
+
+# ── Commands ─────────────────────────────────────────────────────────────────
+cmd_up() {
+  select_engine; ensure_ready
+  echo "Engine: $ENGINE. Starting the Kingo stack ..."
+  compose up -d --build
+  echo "Waiting for all services to become healthy (first run pulls ~10 GB — be patient) ..."
+  wait_all 90 || { echo; compose ps; die "not all services came up. See: kingo logs <service>"; }
+  echo "All services healthy. Running first-run setup ..."
+  init_stack
+  echo
+  cmd_status
+  echo
+  echo "Ready. Run 'kingo credentials' for all URLs and logins."
+}
+
+cmd_down() { select_engine; compose down; }
+
+cmd_status() {
+  select_engine; build_services
+  local all_up=1 s name port path want st
+  printf '%-14s %-8s %s\n' "SERVICE" "STATUS" "URL"
+  for s in "${SMOKE_SERVICES[@]}"; do
+    IFS='|' read -r name port path want <<<"$s"
+    # status is lenient (any answer = up); smoke enforces exact codes.
+    if [ "$path" = "tcp" ]; then
+      if check "$port" tcp; then st="up"; else st="DOWN"; all_up=0; fi
+      printf '%-14s %-8s localhost:%s\n' "$name" "$st" "$port"
+    else
+      if check "$port" "$path" '[0-9]{3}'; then st="up"; else st="DOWN"; all_up=0; fi
+      printf '%-14s %-8s http://localhost:%s\n' "$name" "$st" "$port"
+    fi
+  done
+  [ "$all_up" = 1 ] || { echo; echo "Something is down. Try: kingo restart   (details: kingo logs <service>)"; }
+}
+
+cmd_credentials() {
+  cat <<EOF
+Service        URL                                      Login
+-------        ---                                      -----
+JupyterLab     http://localhost:${P_JUPYTERLAB}                    no login required
+JupyterHub     http://localhost:${P_JUPYTERHUB}                    any username / ${KINGO_PASSWORD}
+Jupyter MCP    http://localhost:${P_MCP}/mcp                Bearer token: ${MCP_TOKEN}
+Langflow       http://localhost:${P_LANGFLOW}                    auto-login (classroom instance)
+n8n            http://localhost:${P_N8N}                    create an account on first visit
+Metabase       http://localhost:${P_METABASE}                    ${METABASE_ADMIN_EMAIL} / ${KINGO_STRONG_PASSWORD}
+CloudBeaver    http://localhost:${P_CLOUDBEAVER}                    ${KINGO_USER} / ${KINGO_STRONG_PASSWORD}
+Qdrant         http://localhost:${P_QDRANT}/dashboard          no login required
+PostgreSQL     localhost:${P_POSTGRES}                          ${KINGO_USER} / ${KINGO_PASSWORD}  (db: classroom)
+
+MCP clients (Claude Desktop/Code, Cursor): point at http://localhost:${P_MCP}/mcp
+  with header  Authorization: Bearer ${MCP_TOKEN}
+OpenCode (AI coding) runs natively on your laptop — install it separately (see
+  the student guide), then run 'opencode' in a terminal. Keys: opencode auth login.
+EOF
+}
+
+cmd_mcp() {
+  echo "Jupyter MCP endpoint : http://localhost:${P_MCP}/mcp"
+  echo "Bearer token         : ${MCP_TOKEN}"
+  echo
+  echo "HTTP header for MCP clients:"
+  echo "  Authorization: Bearer ${MCP_TOKEN}"
+}
+
+# ── smoke: rigorous verification (exact codes + stability + bindings + hub) ───
+assert_loopback() {
+  # Every published port MUST bind to 127.0.0.1 (plan §5). `compose config`
+  # renders the normalized config identically for both engines (both use the
+  # docker-compose binary), so we assert host_ip there.
+  local cfg npub nloop
+  cfg="$(compose config 2>/dev/null)" || { warn "could not render compose config for the bind-address check"; return 0; }
+  if printf '%s\n' "$cfg" | grep -E 'host_ip:' | grep -qvE 'host_ip:[[:space:]]*127\.0\.0\.1'; then
+    echo "FAIL: a published port is NOT bound to 127.0.0.1:"
+    printf '%s\n' "$cfg" | grep -E 'host_ip:' | grep -vE 'host_ip:[[:space:]]*127\.0\.0\.1'
+    return 1
+  fi
+  npub=$(printf '%s\n' "$cfg" | grep -cE '^[[:space:]]*published:' || true)
+  nloop=$(printf '%s\n' "$cfg" | grep -cE 'host_ip:[[:space:]]*127\.0\.0\.1' || true)
+  if [ "${npub:-0}" -ne "${nloop:-0}" ]; then
+    echo "FAIL: ${npub} published ports but only ${nloop} bound to 127.0.0.1 (some default to 0.0.0.0)"
+    return 1
+  fi
+  return 0
+}
+
+assert_stable() {
+  echo "Re-checking stability (a crash-looping container flips to 'Restarting' within seconds) ..."
+  sleep 20
+  if compose ps --format '{{.Name}} {{.Status}}' 2>/dev/null | grep -i 'restart'; then
+    compose ps; die "containers are restart-looping"
+  fi
+  wait_all 3 || { compose ps; die "services flapped after coming up"; }
+}
+
+cmd_smoke() {
+  select_engine; ensure_ready
+  echo "Smoke test — asserting 127.0.0.1 bindings ..."
+  assert_loopback || die "port-binding check failed (see plan §5 security)"
+  echo "Waiting for exact health codes ..."
+  wait_all 90 || { compose ps; die "services did not all reach their expected codes"; }
+  assert_stable
+  # A healthy hub is not enough — it must be able to LAUNCH a Lab.
+  echo "Verifying JupyterHub can launch a Lab ..."
+  $ENGINE exec kingo-jupyterhub jupyterhub-singleuser --version >/dev/null || die "hub cannot launch single-user server"
+  $ENGINE exec kingo-jupyterhub python3 -c 'import jupyterlab' || die "jupyterlab not importable in the hub image"
+  echo "SMOKE OK — all services healthy, stable, loopback-bound, hub can launch Lab."
+}
+
+# ── doctor: preflight before setup ───────────────────────────────────────────
+port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1; }
+
+cmd_doctor() {
+  select_engine
+  echo "== kingo doctor =="
+  echo "Selected engine: $ENGINE"
+  command -v "$ENGINE" >/dev/null 2>&1 && echo "  [ok] $ENGINE is installed" || echo "  [!!] $ENGINE not on PATH"
+
+  if $ENGINE info >/dev/null 2>&1; then
+    echo "  [ok] $ENGINE can run containers"
+  else
+    echo "  [!!] $ENGINE cannot run containers yet"
+    [ "$ENGINE" = podman ] && echo "       → the Podman machine is not running. Run setup/setup-mac.sh or setup-windows.ps1."
+    [ "$ENGINE" = docker ] && echo "       → start Docker Desktop and wait until it says 'running'."
+  fi
+
+  # Memory (podman machine) — the stack needs ~6 GB.
+  if [ "$ENGINE" = podman ]; then
+    local mem
+    mem=$(podman machine inspect --format '{{.Resources.Memory}}' 2>/dev/null | head -1 || true)
+    if [ -n "${mem:-}" ]; then
+      if [ "$mem" -ge 5500 ] 2>/dev/null; then echo "  [ok] Podman machine memory: ${mem} MB"
+      else echo "  [!!] Podman machine memory ${mem} MB is low (need ~6 GB). Re-run setup, or: podman machine set --memory 6144"; fi
+    fi
+  fi
+
+  # Provider guard: warn if podman would fall back to podman-compose.
+  if [ "$ENGINE" = podman ] && ! command -v docker-compose >/dev/null 2>&1; then
+    echo "  [!!] the docker-compose provider binary was not found on PATH."
+    echo "       podman may fall back to podman-compose, which breaks this stack (plan §4)."
+    echo "       Mac: brew install docker-compose   Windows: see setup-windows.ps1."
+  fi
+
+  # Port collisions (only meaningful when the stack is down).
+  local running
+  running=$(compose ps -q 2>/dev/null | grep -c . || true)
+  if [ "${running:-0}" -gt 0 ]; then
+    echo "  [ok] the Kingo stack is running — its ports are in use by kingo, not a collision."
+  else
+    # each entry: DisplayName:ENV_SUFFIX:port  (suffix maps to KINGO_PORT_<suffix>)
+    local any=0 entry name suffix port
+    for entry in "Langflow:LANGFLOW:$P_LANGFLOW" "n8n:N8N:$P_N8N" "JupyterLab:JUPYTERLAB:$P_JUPYTERLAB" \
+                 "JupyterHub:JUPYTERHUB:$P_JUPYTERHUB" "Jupyter-MCP:MCP:$P_MCP" "Metabase:METABASE:$P_METABASE" \
+                 "CloudBeaver:CLOUDBEAVER:$P_CLOUDBEAVER" "Qdrant:QDRANT:$P_QDRANT" "PostgreSQL:POSTGRES:$P_POSTGRES"; do
+      IFS=':' read -r name suffix port <<<"$entry"
+      if port_in_use "$port"; then
+        echo "  [!!] port $port ($name) is already used by other software."
+        echo "       → set KINGO_PORT_${suffix}=<free port> in .env, then 'kingo up'."
+        any=1
+      fi
+    done
+    [ "$any" = 0 ] && echo "  [ok] all 9 host ports are free."
+  fi
+  echo "== done =="
+}
+
+# ── Dispatch ─────────────────────────────────────────────────────────────────
+case "${1:-help}" in
+  up|start)          cmd_up ;;
+  down|stop)         cmd_down ;;
+  status)            cmd_status ;;
+  smoke)             cmd_smoke ;;
+  doctor)            cmd_doctor ;;
+  credentials|creds) cmd_credentials ;;
+  mcp)               cmd_mcp ;;
+  logs)              select_engine; shift; compose logs --tail=100 -f "$@" ;;
+  restart)           select_engine; ensure_ready; shift; compose restart "$@" ;;
+  update)            select_engine; ensure_ready
+                     git pull --ff-only 2>/dev/null || true
+                     compose pull --ignore-buildable
+                     compose build
+                     compose up -d
+                     echo "Stack updated." ;;
+  reset)             select_engine; ensure_ready
+                     echo "This DELETES all data (databases, notebooks, workflows) and starts fresh."
+                     read -r -p "Type 'yes' to continue: " a
+                     [ "$a" = "yes" ] && { compose down -v && cmd_up; } || echo "Cancelled." ;;
+  help|*)            cat <<'EOF'
+kingo — classroom stack helper (Podman or Docker, no VM)
+
+  kingo up            start everything (+ first-run setup), then show status
+  kingo down          stop everything (your data stays)
+  kingo status        show which services are up
+  kingo smoke         rigorous check: exact health codes, stability, 127.0.0.1
+  kingo doctor        preflight: engine ready? memory? ports free?
+  kingo credentials   print all URLs and logins
+  kingo mcp           print the Jupyter MCP endpoint + bearer token
+  kingo logs [svc]    follow logs (e.g. kingo logs langflow)
+  kingo restart [svc] restart everything or one service
+  kingo update        pull newer images, rebuild, restart
+  kingo reset         wipe all data and start fresh (asks first)
+
+  Engine is auto-detected (Podman preferred). Force one with:
+    KINGO_ENGINE=docker kingo up
+EOF
+                     ;;
+esac

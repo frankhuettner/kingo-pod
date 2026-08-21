@@ -1,0 +1,61 @@
+name: ci
+
+# Boots the full stack on both engines and runs the smoke check, including a
+# second boot cycle (a first-run-only bug once shipped because a single cycle
+# passed). Replaces the old VM image-build workflow entirely.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  stack:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [docker, podman]
+    env:
+      KINGO_ENGINE: ${{ matrix.engine }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Docker Compose (docker leg)
+        if: matrix.engine == 'docker'
+        run: docker compose version
+
+      - name: Install Podman + compose provider (podman leg)
+        if: matrix.engine == 'podman'
+        # NOTE (plan §4): podman must use the docker-compose binary as its
+        # compose provider — NOT podman-compose. ubuntu-latest ships a recent
+        # podman; if a newer major is needed, add the Kubic repo here.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman docker-compose
+          podman --version
+          docker-compose --version
+          # rootless API socket, so `podman compose` can reach the engine
+          systemctl --user enable --now podman.socket 2>/dev/null || true
+
+      - name: Boot 1 — up + smoke
+        run: |
+          ./kingo up
+          ./kingo smoke
+
+      - name: Boot 2 — second cycle catches first-run-only survivors
+        run: |
+          ./kingo down
+          ./kingo up
+          ./kingo smoke
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          ${{ matrix.engine }} compose ps || true
+          ${{ matrix.engine }} compose logs --tail=80 || true
+
+      - name: Tear down
+        if: always()
+        run: ./kingo down || true
