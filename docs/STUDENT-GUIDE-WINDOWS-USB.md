@@ -44,32 +44,34 @@ stick is `/mnt/e` (lowercase).
 
 ## Step 4 — Copy the images, pass the stick on, run setup
 
-Open the **Ubuntu** app from the Start menu and paste this block (right-click
-pastes), replacing `e` with your stick's drive letter:
+Open the **Ubuntu** app from the Start menu and paste this command
+(right-click pastes), replacing `e` with your stick's drive letter, then
+press **Enter**. It is one long line — copy it with the copy button and
+paste it as one:
 
 ```bash
-sudo apt update && sudo apt install -y git
-git clone https://github.com/frankhuettner/kingo-pod.git
-cp /mnt/e/kingo-images.tar ~/kingo-pod/
-cd kingo-pod && bash setup/setup-linux.sh
+sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cp /mnt/e/kingo-images.tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
 ```
 
-The `cp` line (~5–10 minutes) is the **only** part that needs the stick —
-as soon as it finishes, hand the stick to the next student. (The stick is
-only read, never changed.) The setup script then finds the copied file by
-itself: it installs the small tools over Wi-Fi, **loads the images from the
-copy (~3 minutes)** instead of downloading 10 GB, starts everything, and
-verifies it. It is safe to re-run if it stops partway — and a re-run does
-**not** need the stick again:
+The `cp` part (~5–10 minutes, right after the clone) is the **only** part
+that needs the stick — as soon as the setup output starts, hand the stick to
+the next student. (The stick is only read, never changed.) The setup script
+finds the copied file by itself: it installs the small tools over Wi-Fi,
+**loads the images from the copy (~3 minutes)** instead of downloading
+10 GB, starts everything, and verifies it. If it stops partway after the
+copy, re-run it — no stick needed:
 
 ```bash
 cd ~/kingo-pod && bash setup/setup-linux.sh
 ```
 
-> **Tight on disk space?** Skip the copy and load straight from the stick:
-> leave out the `cp` line and run
-> `bash setup/setup-linux.sh /mnt/e/kingo-images.tar` instead. The stick must
-> stay plugged in for the whole setup, and a re-run needs it again.
+> **Tight on disk space?** Skip the copy and load straight from the stick —
+> use this command instead of the one above. The stick must stay plugged in
+> for the whole setup, and a re-run needs it again:
+>
+> ```bash
+> sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cd ~/kingo-pod && bash setup/setup-linux.sh /mnt/e/kingo-images.tar
+> ```
 
 ## If the stick isn't found
 
@@ -80,8 +82,14 @@ visible inside Ubuntu yet. Mount it by hand (use your drive letter):
 sudo mkdir -p /mnt/e && sudo mount -t drvfs E: /mnt/e
 ```
 
-then run the Step 4 command again. Next time: plug the stick in before
-opening Ubuntu.
+then redo the copy and setup (the clone already happened, so not the full
+Step 4 command):
+
+```bash
+cp /mnt/e/kingo-images.tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
+```
+
+Next time: plug the stick in before opening Ubuntu.
 
 ## Step 5 — Did it work?
 

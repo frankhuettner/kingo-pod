@@ -57,13 +57,12 @@ commands ask for it later.
 
 ## Step 3 — Install and start the stack (inside Ubuntu)
 
-In the Ubuntu terminal, paste this block (right-click pastes) and press
-**Enter**:
+In the Ubuntu terminal, paste this command (right-click pastes) and press
+**Enter**. It is one long line — copy it with the copy button and paste it as
+one:
 
 ```bash
-sudo apt update && sudo apt install -y git
-git clone https://github.com/frankhuettner/kingo-pod.git
-cd kingo-pod && bash setup/setup-linux.sh
+sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cd kingo-pod && bash setup/setup-linux.sh
 ```
 
 The script does four things, in order, and says so as it goes:
