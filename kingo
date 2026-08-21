@@ -530,13 +530,13 @@ cmd_bundle() {
   free_kb=$(df -Pk "$(dirname "$out")" 2>/dev/null | awk 'NR==2{print $4}' || true)
   case "$free_kb" in
     ''|*[!0-9]*) : ;;
-    *) [ "$free_kb" -lt 16000000 ] && warn "less than ~16 GB free where $out will be written — the bundle may not fit" ;;
+    *) [ "$free_kb" -lt 15000000 ] && warn "less than ~15 GB free where $out will be written — the bundle may not fit" ;;
   esac
   echo "Making sure every image is present and the local jupyterhub build exists ..."
   cmd_pull
   compose build
   imgs="$(bundle_images)"
-  echo "Writing $out (~15 GB — this takes a few minutes) ..."
+  echo "Writing $out (~13 GB — this takes a few minutes) ..."
   case "$ENGINE" in
     # podman needs -m for a multi-image (docker-compatible) archive.
     # shellcheck disable=SC2086
