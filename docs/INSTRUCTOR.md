@@ -23,7 +23,10 @@ their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
   Prepare at home: `./kingo bundle` writes `kingo-images.tar` (13 GB, measured
   2026-08-21 — a 16 GB stick is borderline, use 32 GB, exFAT-formatted so both
   Mac and Windows can read it) including the locally-built jupyterhub image, so
-  nothing at all is downloaded in class.
+  nothing at all is downloaded in class. `./kingo load` takes ~3 minutes
+  (measured from local disk; a slow USB-2 stick adds a few minutes of read
+  time). The whole path — bundle, delete all images, go offline, load, up,
+  smoke — is verified end-to-end (2026-08-21).
   The student (setup Steps done up to the download): plug in the stick, then
   `./kingo load /Volumes/<stick>/kingo-images.tar` (Mac) or
   `./kingo load /mnt/<letter>/kingo-images.tar` (Windows/WSL — the stick's
