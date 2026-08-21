@@ -1,39 +1,54 @@
 # Kingo Classroom — Windows setup
 
-You need a Windows 10 or 11 laptop with at least **8 GB of RAM** (16 GB
-recommended) and about **20 GB of free disk space**.
+Everything the class uses (Langflow, n8n, JupyterLab, Metabase, a database, …)
+runs in containers on your own laptop. On Windows it runs inside **WSL2** —
+Windows' built-in Linux. You turn WSL2 on once, then everything is a few
+copy-paste commands in an Ubuntu terminal. You do **not** need to be a Linux
+expert, and the setup script checks itself and tells you if something needs
+fixing.
 
-On Windows, the class stack runs inside **WSL2** — Windows' built-in Linux. You
-turn WSL2 on once, then run everything from an Ubuntu terminal. This is the same
-Linux setup Mac and our tests use, so it's the best-tested path. You do **not**
-need to become a Linux expert — it's a few copy-paste commands.
+## Before you start
 
-> **Do this at home, before class.** Enabling WSL2 may need **one reboot**, and
-> the first start downloads about **10 GB** of images. Get it done at home so
-> class time isn't lost to downloads.
+- **Windows 10 or 11**, with **8 GB RAM** (16 GB recommended) and about
+  **20 GB free disk space**.
+- **Do this at home, before class.** Enabling WSL2 may need **one reboot**,
+  and the first start downloads about **10 GB** of images. Get both done at
+  home so class time isn't lost to downloads.
 
-## 1. Turn on WSL2 + Ubuntu
+> **Already have Docker Desktop?** (e.g. from another course) — perfect, keep
+> it. Do Steps 1–2 anyway (WSL2 + Ubuntu are needed either way), then before
+> Step 3: open Docker Desktop → **Settings → Resources → WSL integration** →
+> turn it **on for Ubuntu**, and leave Docker Desktop running. The setup
+> script detects it and uses it — nothing extra gets installed. Everyone else
+> gets **Podman** installed inside Ubuntu instead — same stack, same commands,
+> no difference in class. (Curious why Podman? See the [FAQ](#faq).)
 
-Easiest: in the project's `setup` folder, right-click **`setup-windows.ps1`** →
-**Run with PowerShell** → click **Yes** on the Administrator prompt. If it says
-a reboot is needed, **restart and run it again.**
+## Step 1 — Turn on WSL2 + Ubuntu
 
-(Or do it by hand: open **PowerShell as Administrator**, run `wsl --install`,
-and reboot.)
+Easiest: in the project's `setup` folder, right-click **`setup-windows.ps1`**
+→ **Run with PowerShell** → click **Yes** on the Administrator prompt. If it
+says a reboot is needed, **restart your laptop and run it once more.**
 
-**New to WSL? This 4-minute beginner video walks through exactly this** —
+(Doing it by hand instead: open **PowerShell as Administrator**, run
+`wsl --install`, and reboot.)
+
+**New to WSL? This 4-minute beginner video walks through exactly this step** —
 enabling WSL2, installing Ubuntu, and setting your Linux username/password:
 <https://www.youtube.com/watch?v=zZf4YH4WiZo>
 
-## 2. First launch of Ubuntu
+## Step 2 — First launch of Ubuntu
 
 Open the **Ubuntu** app from the Start menu. The first time, it asks you to
-pick a **Linux username and password** (the password stays **invisible** while
-you type — that's normal). Remember this password: some commands ask for it.
+pick a **Linux username and password**. The password stays **invisible while
+you type — that's normal**, just type it and press Enter. Remember it: some
+commands ask for it later.
 
-## 3. Install and start the stack (inside Ubuntu)
+✔ You know this step worked when you see a colored prompt ending in `$`.
 
-In the Ubuntu terminal, paste this block and press **Enter**:
+## Step 3 — Install and start the stack (inside Ubuntu)
+
+In the Ubuntu terminal, paste this block (right-click pastes) and press
+**Enter**:
 
 ```bash
 sudo apt update && sudo apt install -y git
@@ -41,17 +56,38 @@ git clone https://github.com/frankhuettner/kingo-pod.git
 cd kingo-pod && bash setup/setup-linux.sh
 ```
 
-That installs Podman (the container engine) and starts everything. The first run
-downloads ~10 GB — be patient. When it finishes it prints the list of web
-addresses below. **You only do this once.**
+The script does four things, in order, and says so as it goes:
 
-*If anything stops halfway, just run `bash setup/setup-linux.sh` again — it's
-safe to re-run.*
+1. **Picks a container engine** — uses Docker Desktop if you connected it (see
+   the box above), otherwise installs Podman inside Ubuntu.
+2. **Checks your ports** — if other software already uses a port the class
+   needs (for example your own PostgreSQL on 5432), it automatically moves
+   Kingo to a free port and tells you.
+3. **Downloads and starts everything** (~10 GB on the first run — be patient).
+4. **Verifies it** and prints your personal table of addresses and logins.
 
-## 4. Open the services
+**You only do this once.** If it stops partway (Wi-Fi hiccup, closed laptop),
+run `bash setup/setup-linux.sh` again — it is safe to re-run and skips what's
+done.
 
-Open these in your normal **Windows** browser (WSL2 forwards `localhost` from
-Ubuntu to Windows automatically):
+## Step 4 — Did it work?
+
+You know you're done when the script prints **`SMOKE OK`** followed by a table
+of web addresses. **That printed table is the truth for *your* laptop** — if
+the script moved a port in Step 3, your address differs from the default table
+below. Reprint your table any time (in Ubuntu, inside the `kingo-pod` folder):
+
+```bash
+./kingo credentials
+```
+
+If the script ended with an ERROR instead, go to
+[If something breaks](#if-something-breaks).
+
+## Step 5 — Open your services
+
+Use your normal **Windows** browser — WSL2 forwards `localhost` from Ubuntu to
+Windows automatically. Default addresses (yours may differ — see Step 4):
 
 | Service | Address | Login |
 |---|---|---|
@@ -64,34 +100,82 @@ Ubuntu to Windows automatically):
 | Qdrant | <http://localhost:6333/dashboard> | none |
 | PostgreSQL | `localhost:5432` | `student` / `kingo2026` (db: `classroom`) |
 
-(Reprint any time with `./kingo credentials` inside the `kingo-pod` folder.)
-
 MCP (*Model Context Protocol*) is how AI assistants such as Claude Desktop,
-Claude Code, or Cursor connect to tools. Point yours at the Jupyter MCP endpoint
-`http://localhost:4040/mcp` (header `Authorization: Bearer kingo-mcp-2026`) and
-it can write and run code in the class notebook for you.
+Claude Code, or Cursor connect to tools. Point yours at the Jupyter MCP
+endpoint `http://localhost:4040/mcp` (header
+`Authorization: Bearer kingo-mcp-2026`) and it can write and run code in the
+class notebook for you. `./kingo mcp` prints exactly this.
 
-**OpenCode** (AI coding in the terminal) runs inside your Ubuntu now — install it
+**OpenCode** (AI coding in the terminal) runs inside your Ubuntu — install it
 once with:
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
 ```
 
-then run `opencode`. The first run asks for an API key; it is saved and can be
-changed anytime with `opencode auth login`.
+then run `opencode`. The first run asks for an API key; change it anytime with
+`opencode auth login`.
 
-## 5. Everyday use
+## Everyday use
 
 Open the **Ubuntu** app, then:
 
 ```bash
 cd kingo-pod
-./kingo up          # start everything (your data stays between runs)
-./kingo status      # show which services are up
-./kingo down        # stop everything
-./kingo doctor      # check the engine, memory and ports if something's off
+./kingo up            # start everything (your data stays between runs)
+./kingo down          # stop everything
+./kingo status        # which services are up?
+./kingo credentials   # my addresses + logins
+./kingo doctor        # something's wrong? start here
 ```
+
+## If something breaks
+
+**Always start with one command** (in Ubuntu, inside `kingo-pod`) — it checks
+the usual suspects and tells you what to do:
+
+```bash
+./kingo doctor
+```
+
+| What you see | What to do |
+|---|---|
+| WSL won't enable / "Virtual Machine Platform" error | Virtualization is off in your PC's firmware. Restart, enter firmware setup (usually F2, F10, or Del during boot), enable **Virtualization** (Intel VT-x / AMD-V / "SVM"), save, run Step 1 again. |
+| `port … is already used by other software` | Run `./kingo fixports`, then `./kingo up`. Kingo moves itself to free ports — your other software is untouched. Your addresses change; `./kingo credentials` shows the new ones. |
+| `ALL 10 Kingo ports are busy` | The stack is most likely **already running** (possibly under your other engine). Run `./kingo status` — if services show `up`, you're done, nothing is wrong. |
+| I have Docker Desktop, but setup installed Podman | Docker wasn't running or its WSL integration was off during setup. Both engines work — no need to change anything. To switch anyway: turn on WSL integration for Ubuntu, then `echo KINGO_ENGINE=docker >> .env.local`, `./kingo down`, `./kingo up`. |
+| Laptop feels slow (8 GB machines) | The stack needs ~6 GB RAM. Close other apps. If it stays bad, create the file `C:\Users\<you>\.wslconfig` **in Windows** containing `[wsl2]` on one line and `memory=6GB` on the next, run `wsl --shutdown` in PowerShell, then start the stack again. |
+| Ubuntu terminal says `command not found: ./kingo` | You're in the wrong folder. Run `cd ~/kingo-pod` first. |
+| Anything else | `./kingo down`, then `./kingo up`. If it persists: screenshot the error and ask the instructor / TA. |
+
+## FAQ
+
+**Why Podman and not Docker?** They do the same job and this stack runs
+identically on both (our tests run on both, every day). We default to Podman
+because it's fully open-source and free for everyone — Docker Desktop's
+license requires payment at larger companies, and we don't want the tooling
+you learn to expire with your student status. **If Docker Desktop is already
+on your laptop, the setup script simply uses it** — you are not missing
+anything either way.
+
+**I already use Docker / have my own database. Will this break my stuff?**
+No. Kingo runs in its own containers (all named `kingo-…`) with its own
+storage. The only possible overlap is a port number — and setup/`fixports`
+resolves that automatically by moving *Kingo*, never your software.
+
+**The passwords are printed in a public repo?!** Yes, on purpose. Every
+service is reachable **only from your own laptop** (`127.0.0.1` — people on
+the same Wi-Fi cannot connect; WSL2's localhost forwarding keeps it that way).
+So these are classroom conveniences, not secrets. The one real rule: the class
+shares an n8n encryption key, so **never put a real API key into an n8n
+workflow you share or export.**
+
+**Where is my data?** Databases, notebooks, and workflows live in container
+volumes inside WSL2 and survive `./kingo down` and reboots. Only
+`./kingo reset` deletes them (it asks first).
+
+**Where are my Windows files inside Ubuntu?** Your Windows drives are mounted
+under `/mnt` — e.g. `C:\Users\you\Documents` is `/mnt/c/Users/you/Documents`.
 
 ## How it all fits together
 
@@ -103,7 +187,8 @@ cd kingo-pod
 │       ▼  (WSL2 forwards localhost into Ubuntu)             │
 │  ┌─ Ubuntu on WSL2 (Windows' built-in Linux) ─────────┐    │
 │  │                                                    │    │
-│  │   Podman runs one container per service:           │    │
+│  │   container engine (Podman or Docker) runs one     │    │
+│  │   container per service:                           │    │
 │  │   [Langflow] [n8n] [JupyterLab] [Metabase] ...     │    │
 │  │       │        │                                   │    │
 │  │       └────────┴──► [PostgreSQL]   [Qdrant]        │    │
@@ -117,41 +202,20 @@ cd kingo-pod
 Two address rules cover everything:
 
 1. **From your laptop** (Windows browser, KNIME): always `localhost:<port>`.
-2. **From one service to another** — for example an n8n workflow or a Langflow
-   flow that connects to the database: use the *service name* as host, **not**
-   localhost. For PostgreSQL that is host `postgres`, port `5432`, database
-   `classroom`, user `student`, password `kingo2026`; for Qdrant it is
-   `http://qdrant:6333`. (Inside a container, `localhost` means the container
-   itself — the most common mistake.)
+2. **From one service to another** — e.g. an n8n workflow or Langflow flow
+   connecting to the database: use the *service name* as host, **not**
+   localhost. PostgreSQL: host `postgres`, port `5432`, database `classroom`,
+   user `student`, password `kingo2026`. Qdrant: `http://qdrant:6333`.
+   (Inside a container, `localhost` means the container itself — the most
+   common mistake. Rule 2 is also why moved host ports never affect
+   service-to-service connections.)
 
 ## KNIME (optional)
 
-KNIME runs on **Windows** itself, not inside Ubuntu: download **KNIME Analytics
-Platform** from <https://www.knime.com/downloads> and install it like any other
-program. To use the class database from KNIME, create a PostgreSQL connection
-with host `localhost`, port `5432`, database `classroom`, username `student`,
-password `kingo2026` — the stack must be running (`./kingo up` in Ubuntu) while
-you use it.
-
-## If something breaks
-
-1. **`./kingo doctor`** (inside `kingo-pod`) — checks the most common problems.
-2. **WSL won't enable / "Virtual Machine Platform" error**: virtualization is
-   probably off in your PC's firmware. Restart, enter firmware setup (usually
-   F2, F10, or Del at boot), turn on **Virtualization** (Intel VT-x / AMD-V /
-   "SVM"), save, and run the setup again.
-3. **A port is already in use**: `doctor` names the port. Edit `.env` (in Ubuntu:
-   `nano .env`), uncomment the matching `KINGO_PORT_...` line, set a free number,
-   save (Ctrl+O, Enter, Ctrl+X), and run `./kingo up` again.
-4. **Only 8 GB of RAM / laptop feels slow**: close other apps. If the stack is
-   short on memory, create `C:\Users\<you>\.wslconfig` (in Windows) with:
-
-   ```
-   [wsl2]
-   memory=6GB
-   ```
-
-   then run `wsl --shutdown` in PowerShell and start the stack again.
-5. **Prefer Docker?** If you install **Docker Desktop** and turn on its **WSL
-   integration** for Ubuntu, run `KINGO_ENGINE=docker ./kingo up` inside Ubuntu.
-6. Still stuck? Ask the instructor / TA.
+KNIME runs on **Windows** itself, not inside Ubuntu: download **KNIME
+Analytics Platform** from <https://www.knime.com/downloads> and install it
+like any other program. To use the class database, create a PostgreSQL
+connection with host `localhost`, port `5432` (or your moved port from
+`./kingo credentials`), database `classroom`, username `student`, password
+`kingo2026`. The stack must be running (`./kingo up` in Ubuntu) while you use
+it.

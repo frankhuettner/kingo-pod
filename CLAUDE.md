@@ -28,6 +28,22 @@ It was ported from the old `kingo-vm` repo.
 - **Credentials are public by design** and committed (`.env`); they are safe
   only because everything is loopback-bound. Keep the "no real keys in shared
   n8n exports" warning.
+- **Per-machine state lives in `.env.local`** (gitignored, sourced after
+  `.env`; a `KINGO_ENGINE` from the command line still wins). Students are
+  NEVER told to edit the committed `.env` — that would break `kingo update`'s
+  `git pull`. Setup scripts pin the engine there; `kingo fixports` writes
+  moved ports there.
+- **Port collisions are auto-resolved, never fatal mid-boot**: `kingo up`
+  preflights all 10 host ports (incl. Qdrant gRPC 6334) and points at
+  `kingo fixports`, which remaps busy ports into `.env.local`. When ALL 10
+  ports are busy at once, doctor/fixports/up must refuse and say "the stack is
+  probably already running under the other engine" — remapping would be
+  exactly wrong then (happens for real when both engines are installed).
+- **A running Docker is a first-class engine, not a grudging fallback**: both
+  setup scripts detect an already-running Docker (Desktop) and use it,
+  installing nothing; Podman is only installed when no working engine exists.
+  Many students arrive with Docker from other courses — the guides' FAQ
+  explains the Podman default; do not make the guides Podman-only.
 - **Second boot cycle** in CI (up → down → up → smoke): catches first-run-only
   survivors. (plan §9.2)
 

@@ -54,7 +54,10 @@ jobs:
           systemctl --user enable --now podman.socket 2>/dev/null || true
 
       - name: Boot 1 — up + smoke
+        # fixports first, exactly like the setup scripts do — on a clean runner
+        # it's a no-op, but it keeps the student code path CI-tested.
         run: |
+          ./kingo fixports
           ./kingo up
           ./kingo smoke
 

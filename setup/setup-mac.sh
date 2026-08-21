@@ -11,6 +11,31 @@ cd "$REPO_DIR"
 
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
+# ── 0. Already have Docker Desktop running? Use it — install nothing. ────────
+# Many students arrive with Docker Desktop from another course. That is fine:
+# the stack runs identically on it. We only install Podman when there is no
+# working engine.
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 \
+   && docker compose version >/dev/null 2>&1; then
+  say "Docker Desktop is already running — using it. Nothing to install."
+  grep -q '^KINGO_ENGINE=' .env.local 2>/dev/null || echo 'KINGO_ENGINE=docker' >> .env.local
+
+  say "Checking that no other software sits on Kingo's ports ..."
+  ./kingo fixports
+
+  say "Starting the Kingo stack (first run downloads ~10 GB — do this on home Wi-Fi) ..."
+  ./kingo up
+  say "Verifying the stack (smoke test) ..."
+  ./kingo smoke
+  say "Done! Your class services:"
+  ./kingo credentials
+  exit 0
+fi
+if command -v docker >/dev/null 2>&1; then
+  say "Note: Docker is installed but not running, so this script sets up Podman instead."
+  echo "     (Prefer Docker? Quit this script (Ctrl+C), start Docker Desktop, re-run.)"
+fi
+
 # ── 1. Homebrew ──────────────────────────────────────────────────────────────
 if ! command -v brew >/dev/null 2>&1; then
   # Load brew if it is installed but not yet on PATH (fresh shells on Apple Si).
@@ -42,6 +67,9 @@ fi
 podman info >/dev/null 2>&1 || { echo "ERROR: Podman machine did not come up. Try: podman machine start"; exit 1; }
 
 # ── 4. Bring the stack up and verify ─────────────────────────────────────────
+say "Checking that no other software sits on Kingo's ports ..."
+./kingo fixports
+
 say "Starting the Kingo stack (first run downloads ~10 GB — do this on home Wi-Fi) ..."
 ./kingo up
 

@@ -1,6 +1,11 @@
 # macOS
 .DS_Store
 
+# Per-machine overrides (engine pin, remapped ports) — written by the setup
+# scripts and `kingo fixports`. Must stay untracked so `kingo update` can
+# always `git pull` cleanly on student laptops.
+.env.local
+
 # Claude Code local session state
 .claude/
 

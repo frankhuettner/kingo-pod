@@ -32,9 +32,26 @@ their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
   Mac/Linux/CI — one code path, no PowerShell port. (Deviates from the plan's
   `podman machine`-on-Windows sketch, which was flagged for Phase-2 verification.)
 
-All setup scripts are **re-runnable**. Docker Desktop is a supported fallback:
-`KINGO_ENGINE=docker ./kingo up` (on Windows, enable Docker Desktop's WSL
-integration first, then run it inside Ubuntu).
+All setup scripts are **re-runnable**, and both handle the two most common
+"my laptop is different" cases by themselves:
+
+- **Student already has Docker Desktop** (very common): if Docker is *running*
+  when the setup script starts (on Windows: WSL integration enabled for
+  Ubuntu), the script uses it and installs nothing — it pins
+  `KINGO_ENGINE=docker` in `.env.local`. Podman is only installed when no
+  working engine is found. Manual override any time:
+  `KINGO_ENGINE=docker ./kingo up`.
+- **Student already has software on a class port** (their own PostgreSQL on
+  5432, a dev server on 3000/8000/8888, …): setup runs `./kingo fixports`,
+  which moves Kingo to the next free port and records it in `.env.local`.
+  `kingo up` also refuses to start with a busy port and names the fix, instead
+  of failing mid-boot with a cryptic compose error. Expect a handful of
+  students whose URLs differ from your slides — `./kingo credentials` on their
+  machine always prints their actual addresses.
+
+`.env.local` is gitignored, so these per-machine changes never conflict with
+`kingo update` (which does a `git pull`). Students are never told to edit the
+committed `.env`.
 
 ## Credentials (public by design)
 
@@ -57,8 +74,9 @@ share.**
 1. **Is JupyterHub still needed** now that every student runs their own
    single-user stack? JupyterLab alone would be simpler. It's kept for now
    (cheap); confirm, or decide it's for a shared class server.
-2. **Docker Desktop**: blessed as a fallback in the student guides (current
-   choice), or Podman-only to keep the guide perfectly linear?
+2. ~~**Docker Desktop**: blessed as a fallback, or Podman-only?~~ **Settled**:
+   Docker is a first-class engine — the setup scripts auto-detect a running
+   Docker Desktop and use it (see "Setup paths"), CI tests both engines.
 3. **Minimum laptop**: 8 GB RAM / Windows Home supported? Decides whether a
    `kingo up --lite` profile (drop Metabase/CloudBeaver) is worth adding.
 4. **USB offline bundle** wanted for day 1?

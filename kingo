@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # kingo — classroom stack helper (native, engine-agnostic).
 # Runs the container stack directly on a laptop with Podman (preferred) or
-# Docker. No VM. Mac/Linux/WSL use this bash CLI; Windows/PowerShell users have
-# the parallel kingo.ps1. Engine is auto-detected (override with KINGO_ENGINE).
+# Docker. No VM. The ONE CLI for Mac, Linux, and Windows-inside-WSL2.
+# Engine is auto-detected (override with KINGO_ENGINE).
 set -euo pipefail
 
 KINGO_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" && pwd)"
 cd "$KINGO_DIR"
 
+# .env holds the shared classroom defaults (committed). .env.local holds
+# per-machine overrides — engine pin, moved ports — written by the setup
+# scripts and 'kingo fixports'. It is gitignored, so students never edit the
+# committed .env and 'kingo update' can always git pull cleanly.
+# A KINGO_ENGINE given on the command line still beats the files.
+_cli_engine="${KINGO_ENGINE:-}"
 # shellcheck disable=SC1091
-set -a; source ./.env; set +a
+set -a; source ./.env; [ -f ./.env.local ] && source ./.env.local; set +a
+[ -n "$_cli_engine" ] && KINGO_ENGINE="$_cli_engine"
 
 # Effective host ports (defaults match the guides; overridable via KINGO_PORT_*).
 P_LANGFLOW=${KINGO_PORT_LANGFLOW:-7860}
@@ -20,6 +27,7 @@ P_MCP=${KINGO_PORT_MCP:-4040}
 P_METABASE=${KINGO_PORT_METABASE:-3000}
 P_CLOUDBEAVER=${KINGO_PORT_CLOUDBEAVER:-8978}
 P_QDRANT=${KINGO_PORT_QDRANT:-6333}
+P_QDRANT_GRPC=${KINGO_PORT_QDRANT_GRPC:-6334}
 P_POSTGRES=${KINGO_PORT_POSTGRES:-5432}
 
 die()  { echo "ERROR: $*" >&2; exit 1; }
@@ -147,6 +155,7 @@ setup_metabase() {
 # ── Commands ─────────────────────────────────────────────────────────────────
 cmd_up() {
   select_engine; ensure_ready
+  preflight_ports
   echo "Engine: $ENGINE. Starting the Kingo stack ..."
   # `up` builds the local jupyterhub image only if it's missing (first run);
   # use `kingo update` to force a rebuild after changing the Dockerfile.
@@ -254,13 +263,115 @@ cmd_smoke() {
   echo "SMOKE OK — all services healthy, stable, loopback-bound, hub can launch Lab."
 }
 
-# ── doctor: preflight before setup ───────────────────────────────────────────
+# ── Host ports: collision detection + automatic remapping ────────────────────
 port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1; }
 
+# All 10 published host ports (must match compose.yml exactly).
+# Each entry: DisplayName:ENV_SUFFIX:effective-port (suffix → KINGO_PORT_<suffix>).
+port_table() {
+  PORT_TABLE=(
+    "Langflow:LANGFLOW:$P_LANGFLOW"
+    "n8n:N8N:$P_N8N"
+    "JupyterLab:JUPYTERLAB:$P_JUPYTERLAB"
+    "JupyterHub:JUPYTERHUB:$P_JUPYTERHUB"
+    "Jupyter-MCP:MCP:$P_MCP"
+    "Metabase:METABASE:$P_METABASE"
+    "CloudBeaver:CLOUDBEAVER:$P_CLOUDBEAVER"
+    "Qdrant:QDRANT:$P_QDRANT"
+    "Qdrant-gRPC:QDRANT_GRPC:$P_QDRANT_GRPC"
+    "PostgreSQL:POSTGRES:$P_POSTGRES"
+  )
+}
+
+stack_running() { # any kingo container currently up?
+  local n; n=$(compose ps -q 2>/dev/null | grep -c . || true)
+  [ "${n:-0}" -gt 0 ]
+}
+
+# Fail BEFORE compose prints a cryptic "address already in use" mid-boot.
+# Only meaningful on a cold start — a running stack owns its own ports.
+count_busy_ports() { # sets BUSY_LIST (one "port (name)" per line) and BUSY_N
+  port_table
+  BUSY_LIST=""; BUSY_N=0
+  local entry name suffix port
+  for entry in "${PORT_TABLE[@]}"; do
+    IFS=':' read -r name suffix port <<<"$entry"
+    if port_in_use "$port"; then
+      BUSY_LIST="${BUSY_LIST}  - port $port ($name)"$'\n'
+      BUSY_N=$((BUSY_N + 1))
+    fi
+  done
+}
+
+# All 10 ports busy at once almost always means the Kingo stack itself is
+# already running but this engine can't see it (started under the other
+# engine, or the engine is temporarily unreachable) — moving ports would be
+# exactly wrong then.
+all_busy_hint() {
+  echo "ALL ${#PORT_TABLE[@]} Kingo ports are busy at once — that usually means the Kingo stack"
+  echo "is ALREADY RUNNING (possibly under your other container engine)."
+  echo "Check with './kingo status' — if services show 'up', everything already works."
+}
+
+# Fail BEFORE compose prints a cryptic "address already in use" mid-boot.
+# Only meaningful on a cold start — a running stack owns its own ports.
+preflight_ports() {
+  stack_running && return 0
+  count_busy_ports
+  [ "$BUSY_N" = 0 ] && return 0
+  if [ "$BUSY_N" = "${#PORT_TABLE[@]}" ]; then
+    all_busy_hint
+    die "not starting a second copy"
+  fi
+  echo "Other software on this machine is already using ports Kingo needs:"
+  printf '%s' "$BUSY_LIST"
+  echo
+  echo "Easy fix: run  ./kingo fixports  — it moves Kingo to free ports"
+  echo "automatically (your other software is untouched) — then run './kingo up' again."
+  die "ports busy — see above"
+}
+
+cmd_fixports() {
+  select_engine
+  stack_running && die "the stack is running, so its own ports look busy. Run './kingo down' first, then './kingo fixports'."
+  count_busy_ports
+  if [ "$BUSY_N" = "${#PORT_TABLE[@]}" ]; then
+    all_busy_hint
+    die "refusing to remap all ports"
+  fi
+  # Track every port the stack will use so a moved port can't land on another.
+  local used=" " entry
+  for entry in "${PORT_TABLE[@]}"; do used="${used}${entry##*:} "; done
+  local moved=0 name suffix port newport
+  for entry in "${PORT_TABLE[@]}"; do
+    IFS=':' read -r name suffix port <<<"$entry"
+    port_in_use "$port" || continue
+    newport=$((port + 1))
+    while port_in_use "$newport" || [ "${used#* $newport }" != "$used" ]; do
+      newport=$((newport + 1))
+    done
+    used="${used}${newport} "
+    { [ -f .env.local ] && grep -v "^KINGO_PORT_${suffix}=" .env.local || true; } > .env.local.tmp
+    echo "KINGO_PORT_${suffix}=${newport}" >> .env.local.tmp
+    mv .env.local.tmp .env.local
+    echo "  $name: port $port is taken by other software → Kingo will use $newport instead"
+    moved=1
+  done
+  if [ "$moved" = 1 ]; then
+    echo
+    echo "Saved to .env.local (stays out of git; 'kingo update' is unaffected)."
+    echo "Your addresses change accordingly — 'kingo credentials' always shows the right ones."
+    echo "Now run: ./kingo up"
+  else
+    echo "All ${#PORT_TABLE[@]} Kingo ports are free — nothing to change."
+  fi
+}
+
+# ── doctor: preflight before setup ───────────────────────────────────────────
 cmd_doctor() {
   select_engine
   echo "== kingo doctor =="
-  echo "Selected engine: $ENGINE"
+  echo "Selected engine: $ENGINE${KINGO_ENGINE:+  (pinned via KINGO_ENGINE)}"
   command -v "$ENGINE" >/dev/null 2>&1 && echo "  [ok] $ENGINE is installed" || echo "  [!!] $ENGINE not on PATH"
 
   if $ENGINE info >/dev/null 2>&1; then
@@ -288,25 +399,26 @@ cmd_doctor() {
     echo "       Mac: brew install docker-compose   Windows: see setup-windows.ps1."
   fi
 
+  # Both engines installed? Tell the student which one is in charge.
+  if [ "$ENGINE" = podman ] && command -v docker >/dev/null 2>&1; then
+    echo "  [ok] Docker is also installed; kingo is using Podman (both work fine)."
+    echo "       To switch permanently:  echo KINGO_ENGINE=docker >> .env.local"
+  fi
+
   # Port collisions (only meaningful when the stack is down).
-  local running
-  running=$(compose ps -q 2>/dev/null | grep -c . || true)
-  if [ "${running:-0}" -gt 0 ]; then
+  if stack_running; then
     echo "  [ok] the Kingo stack is running — its ports are in use by kingo, not a collision."
   else
-    # each entry: DisplayName:ENV_SUFFIX:port  (suffix maps to KINGO_PORT_<suffix>)
-    local any=0 entry name suffix port
-    for entry in "Langflow:LANGFLOW:$P_LANGFLOW" "n8n:N8N:$P_N8N" "JupyterLab:JUPYTERLAB:$P_JUPYTERLAB" \
-                 "JupyterHub:JUPYTERHUB:$P_JUPYTERHUB" "Jupyter-MCP:MCP:$P_MCP" "Metabase:METABASE:$P_METABASE" \
-                 "CloudBeaver:CLOUDBEAVER:$P_CLOUDBEAVER" "Qdrant:QDRANT:$P_QDRANT" "PostgreSQL:POSTGRES:$P_POSTGRES"; do
-      IFS=':' read -r name suffix port <<<"$entry"
-      if port_in_use "$port"; then
-        echo "  [!!] port $port ($name) is already used by other software."
-        echo "       → set KINGO_PORT_${suffix}=<free port> in .env, then 'kingo up'."
-        any=1
-      fi
-    done
-    [ "$any" = 0 ] && echo "  [ok] all 9 host ports are free."
+    count_busy_ports
+    if [ "$BUSY_N" = "${#PORT_TABLE[@]}" ]; then
+      echo "  [??] $(all_busy_hint | head -2 | tr '\n' ' ')"
+      echo "       Check with './kingo status' — if services show 'up', all is well."
+    elif [ "$BUSY_N" -gt 0 ]; then
+      printf '%s' "$BUSY_LIST" | sed 's/^  - /  [!!] busy: /'
+      echo "       → run './kingo fixports' to move Kingo to free ports automatically."
+    else
+      echo "  [ok] all ${#PORT_TABLE[@]} host ports are free."
+    fi
   fi
   echo "== done =="
 }
@@ -318,6 +430,7 @@ case "${1:-help}" in
   status)            cmd_status ;;
   smoke)             cmd_smoke ;;
   doctor)            cmd_doctor ;;
+  fixports)          cmd_fixports ;;
   credentials|creds) cmd_credentials ;;
   mcp)               cmd_mcp ;;
   logs)              select_engine; shift; compose logs --tail=100 -f "$@" ;;
@@ -340,6 +453,8 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo status        show which services are up
   kingo smoke         rigorous check: exact health codes, stability, 127.0.0.1
   kingo doctor        preflight: engine ready? memory? ports free?
+  kingo fixports      a port is taken (e.g. your own Postgres)? move Kingo
+                      to free ports automatically (saved in .env.local)
   kingo credentials   print all URLs and logins
   kingo mcp           print the Jupyter MCP endpoint + bearer token
   kingo logs [svc]    follow logs (e.g. kingo logs langflow)

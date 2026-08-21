@@ -1,43 +1,73 @@
 # Kingo Classroom — Mac setup
 
-Runs on any Apple-Silicon Mac (M1 or newer, i.e. Macs from 2021 on) with at
-least **8 GB of RAM** (16 GB recommended) and about **20 GB of free disk
-space**. The whole class stack runs in containers on your own Mac — there is
-no virtual machine to import anymore.
+Everything the class uses (Langflow, n8n, JupyterLab, Metabase, a database, …)
+runs in containers on your own Mac. **One script sets everything up**; the
+script checks itself and tells you if something needs fixing.
 
-> **Do this at home, before class.** The very first start downloads about
-> **10 GB** of images. On classroom Wi-Fi that is slow and painful; at home it
-> is a one-time wait. After that, starting is quick and works offline.
+## Before you start
 
-## 1. Get the files
+- An **Apple-Silicon Mac** (M1 or newer — any Mac from 2021 on).
+- **8 GB RAM** (16 GB recommended) and about **20 GB free disk space**.
+- **Do this at home, before class.** The first start downloads about **10 GB**
+  of images. On classroom Wi-Fi that is slow and painful; at home it is a
+  one-time wait. After that, starting is quick and works offline.
+
+> **Already have Docker Desktop?** (e.g. from another course) — perfect, keep
+> it. Just make sure Docker Desktop is **running** before Step 2. The setup
+> script detects it and uses it, and installs nothing new. Your existing
+> containers, images, and settings are not touched. Everyone else gets
+> **Podman** installed instead — same stack, same commands, no difference in
+> class. (Curious why Podman? See the [FAQ](#faq).)
+
+## Step 1 — Get the files
 
 1. Open the project on GitHub and click the green **Code** button →
    **Download ZIP**.
-2. Double-click the downloaded ZIP to unzip it. You now have a folder like
-   `kingo-classroom`.
+2. Double-click the ZIP to unzip it. You get a folder called **`kingo-pod-main`**.
 3. Move that folder somewhere easy, e.g. your **Home** folder or **Documents**.
 
-## 2. Run the one-time setup
+## Step 2 — Run the setup script
 
-1. Open the **Terminal** app (press ⌘ Space, type *Terminal*, Enter).
-2. Type `cd ` (with a space) and then **drag the `kingo-classroom` folder** from
-   Finder onto the Terminal window, and press **Enter**.
+1. Open the **Terminal** app (press ⌘ Space, type *Terminal*, press Enter).
+2. Type `cd ` (with a space after it), then **drag the `kingo-pod-main`
+   folder** from Finder onto the Terminal window, and press **Enter**.
 3. Type this and press **Enter**:
 
    ```
    bash setup/setup-mac.sh
    ```
 
-The script installs Podman (the container engine) and starts everything. It may
-ask for your Mac password once (for Homebrew). **You only do this once.** When
-it finishes it prints the list of web addresses below.
+The script does four things, in order, and says so as it goes:
 
-*If anything stops halfway, just run the same command again — it is safe to
-re-run.*
+1. **Picks a container engine** — uses Docker Desktop if it's already running,
+   otherwise installs Podman (a free engine). May ask for your Mac password
+   once (that's Homebrew — normal).
+2. **Checks your ports** — if other software on your Mac already uses a port
+   the class needs (for example your own PostgreSQL on 5432), it automatically
+   moves Kingo to a free port and tells you.
+3. **Downloads and starts everything** (~10 GB on the first run — be patient).
+4. **Verifies it** and prints your personal table of addresses and logins.
 
-## 3. Open the services
+**You only do this once.** If it stops partway (Wi-Fi hiccup, closed laptop),
+just run the same command again — it is safe to re-run and skips what's done.
 
-Open these in Safari or Chrome:
+## Step 3 — Did it work?
+
+You know you're done when the script prints **`SMOKE OK`** followed by a table
+of web addresses. **That printed table is the truth for *your* Mac** — if the
+script moved a port in Step 2, your address differs from the default table
+below. You can reprint your table any time:
+
+```
+./kingo credentials
+```
+
+If the script ended with an ERROR instead, go to
+[If something breaks](#if-something-breaks).
+
+## Step 4 — Open your services
+
+Default addresses (yours may differ — see Step 3). Open them in Safari or Chrome:
 
 | Service | Address | Login |
 |---|---|---|
@@ -50,35 +80,78 @@ Open these in Safari or Chrome:
 | Qdrant | <http://localhost:6333/dashboard> | none |
 | PostgreSQL | `localhost:5432` | `student` / `kingo2026` (db: `classroom`) |
 
-(You can reprint this table any time with `./kingo credentials`.)
-
 MCP (*Model Context Protocol*) is how AI assistants such as Claude Desktop,
 Claude Code, or Cursor connect to tools. Point yours at the Jupyter MCP
 endpoint `http://localhost:4040/mcp` (header
 `Authorization: Bearer kingo-mcp-2026`) and it can write and run code in the
-class notebook for you.
+class notebook for you. `./kingo mcp` prints exactly this.
 
-**OpenCode** (AI coding in the terminal) now runs natively on your Mac — it is
-no longer inside the stack. Install it once with:
+**OpenCode** (AI coding in the terminal) runs natively on your Mac — it is not
+inside the stack. Install it once with:
 
 ```
 brew install opencode
 ```
 
-then run `opencode` in any Terminal. The first run asks for an API key; it is
-saved and can be changed anytime with `opencode auth login`.
+then run `opencode` in any Terminal. The first run asks for an API key; change
+it anytime with `opencode auth login`.
 
-## 4. Everyday use
+## Everyday use
 
-Open Terminal in the `kingo-classroom` folder (step 2 above) and use:
+Open Terminal in the `kingo-pod-main` folder (the `cd` + drag trick from
+Step 2) and use:
 
-- **Start**: `./kingo up`  (or open **Podman Desktop** and press start)
-- **Stop**: `./kingo down`  — your data (databases, notebooks, workflows) stays
-- **Check**: `./kingo status`  — shows which services are up
-- **Problems?** `./kingo doctor`  — checks the engine, memory and ports
+```
+./kingo up            # start everything (your data stays between runs)
+./kingo down          # stop everything
+./kingo status        # which services are up?
+./kingo credentials   # my addresses + logins
+./kingo doctor        # something's wrong? start here
+```
 
-Podman Desktop (optional, from <https://podman-desktop.io>) gives you the same
-thing with start/stop buttons if you prefer clicking to typing.
+## If something breaks
+
+**Always start with one command** — it checks the usual suspects and tells you
+what to do:
+
+```
+./kingo doctor
+```
+
+| What you see | What to do |
+|---|---|
+| `port … is already used by other software` | Run `./kingo fixports`, then `./kingo up`. Kingo moves itself to free ports — your other software is untouched. Your addresses change; `./kingo credentials` shows the new ones. |
+| `ALL 10 Kingo ports are busy` | The stack is most likely **already running** (possibly under your other engine). Run `./kingo status` — if services show `up`, you're done, nothing is wrong. |
+| I have Docker Desktop, but setup installed Podman | Docker wasn't running during setup. Both work — no need to change anything. To switch to Docker anyway: `echo KINGO_ENGINE=docker >> .env.local`, then `./kingo down` and `./kingo up`. |
+| `Podman has no ready machine` / Podman won't start | Run `podman machine start`, then `./kingo up`. Still broken: `podman machine stop`, then `podman machine start`. |
+| `Docker is installed but not running` | Open the Docker Desktop app, wait until it says "running", try again. |
+| Mac feels slow / fans spin (8 GB Macs) | The stack needs ~6 GB RAM while running. Close other apps and browser tabs, or `./kingo down` when not using it. |
+| Anything else | `./kingo down`, then `./kingo up`. If it persists: screenshot the error and ask the instructor / TA. |
+
+## FAQ
+
+**Why Podman and not Docker?** They do the same job and this stack runs
+identically on both (our tests run on both, every day). We default to Podman
+because it's fully open-source and free for everyone — Docker Desktop's
+license requires payment at larger companies, and we don't want the tooling
+you learn to expire with your student status. **If Docker Desktop is already
+on your Mac, the setup script simply uses it** — you are not missing anything
+either way.
+
+**I already use Docker / have my own database. Will this break my stuff?**
+No. Kingo runs in its own containers (all named `kingo-…`) with its own
+storage. The only possible overlap is a port number — and setup/`fixports`
+resolves that automatically by moving *Kingo*, never your software.
+
+**The passwords are printed in a public repo?!** Yes, on purpose. Every
+service is reachable **only from your own Mac** (`127.0.0.1` — people on the
+same Wi-Fi cannot connect), so these are classroom conveniences, not secrets.
+The one real rule: the class shares an n8n encryption key, so **never put a
+real API key into an n8n workflow you share or export.**
+
+**Where is my data?** Databases, notebooks, and workflows live in container
+volumes on your Mac and survive `./kingo down` and reboots. Only
+`./kingo reset` deletes them (it asks first).
 
 ## How it all fits together
 
@@ -88,8 +161,8 @@ thing with start/stop buttons if you prefer clicking to typing.
 │   Browser, KNIME, MCP clients, OpenCode                    │
 │       │                                                    │
 │       │  always talk to  localhost:<port>                  │
-│       ▼  (published on 127.0.0.1 by Podman)                │
-│  ┌─ Podman machine — a tiny, invisible Linux VM ───────┐   │
+│       ▼  (published on 127.0.0.1 only)                     │
+│  ┌─ Container engine (Podman or Docker) ───────────────┐   │
 │  │                                                     │   │
 │  │   one container per service:                        │   │
 │  │   [Langflow] [n8n] [JupyterLab] [Metabase] ...      │   │
@@ -105,33 +178,19 @@ thing with start/stop buttons if you prefer clicking to typing.
 Two address rules cover everything:
 
 1. **From your Mac** (browser, KNIME, MCP clients): always `localhost:<port>`.
-2. **From one service to another** — for example an n8n workflow or a Langflow
-   flow that connects to the database: use the *service name* as host, **not**
-   localhost. For PostgreSQL that is host `postgres`, port `5432`, database
-   `classroom`, user `student`, password `kingo2026`; for Qdrant it is
-   `http://qdrant:6333`. (Inside a container, `localhost` means the container
-   itself — the most common mistake.)
+2. **From one service to another** — e.g. an n8n workflow or Langflow flow
+   connecting to the database: use the *service name* as host, **not**
+   localhost. PostgreSQL: host `postgres`, port `5432`, database `classroom`,
+   user `student`, password `kingo2026`. Qdrant: `http://qdrant:6333`.
+   (Inside a container, `localhost` means the container itself — the most
+   common mistake. Rule 2 is also why moved host ports never affect
+   service-to-service connections.)
 
 ## KNIME (optional)
 
 KNIME runs on your Mac itself, not in a container: download **KNIME Analytics
-Platform** from <https://www.knime.com/downloads> and install it like any other
-app. To use the class database from KNIME, create a PostgreSQL connection with
-host `localhost`, port `5432`, database `classroom`, username `student`,
-password `kingo2026` — the stack must be running (`./kingo up`) while you use it.
-
-## If something breaks
-
-1. **`./kingo doctor`** — it checks the most common problems and tells you what
-   to fix.
-2. **A port is already in use** (e.g. you already run Postgres.app on 5432):
-   `./kingo doctor` names the port. Open the `.env` file, uncomment the matching
-   `KINGO_PORT_...` line, set a free number, save, and run `./kingo up` again.
-   The browser address changes to the new number; nothing else does.
-3. **Only 8 GB of RAM / Mac feels slow**: close other apps and browser tabs. The
-   stack needs about 6 GB while running.
-4. **Podman won't start**: run `podman machine start`, then `./kingo up`. If it
-   stays broken, `podman machine stop` then `podman machine start`.
-5. **Prefer Docker?** If you already have **Docker Desktop**, you can use it
-   instead: start Docker Desktop, then run `KINGO_ENGINE=docker ./kingo up`.
-6. Still stuck? Ask the instructor / TA.
+Platform** from <https://www.knime.com/downloads> and install it like any
+other app. To use the class database, create a PostgreSQL connection with host
+`localhost`, port `5432` (or your moved port from `./kingo credentials`),
+database `classroom`, username `student`, password `kingo2026`. The stack must
+be running (`./kingo up`) while you use it.

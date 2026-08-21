@@ -24,8 +24,10 @@ git clone https://github.com/frankhuettner/kingo-pod.git
 cd kingo-pod && bash setup/setup-linux.sh
 ```
 
-All paths install the engine, start the stack, and verify it. First run pulls
-~10 GB — **do it at home before class.**
+All paths pick an engine (**an already-running Docker Desktop is used as-is**;
+otherwise Podman is installed), auto-resolve port conflicts with software you
+already run, start the stack, and verify it. First run pulls ~10 GB — **do it
+at home before class.**
 
 Full walkthroughs: [`docs/STUDENT-GUIDE-MAC.md`](docs/STUDENT-GUIDE-MAC.md) ·
 [`docs/STUDENT-GUIDE-WINDOWS.md`](docs/STUDENT-GUIDE-WINDOWS.md) ·
@@ -39,6 +41,8 @@ kingo down        stop everything (data stays)
 kingo status      show which services are up
 kingo smoke       rigorous check: exact health codes, stability, 127.0.0.1
 kingo doctor      preflight: engine ready? memory? ports free?
+kingo fixports    move Kingo off ports taken by other software (e.g. your
+                  own Postgres on 5432) — saved to gitignored .env.local
 kingo credentials print all URLs and logins
 kingo mcp         print the Jupyter MCP endpoint + bearer token
 kingo update      pull newer images, rebuild, restart
