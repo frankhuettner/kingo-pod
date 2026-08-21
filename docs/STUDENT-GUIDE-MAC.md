@@ -11,6 +11,11 @@ script checks itself and tells you if something needs fixing.
 - **Do this at home, before class.** The first start downloads about **10 GB**
   of images. On classroom Wi-Fi that is slow and painful; at home it is a
   one-time wait. After that, starting is quick and works offline.
+- **How long?** A few minutes of setup plus the 10 GB download —
+  **15–45 minutes** depending on your internet, mostly unattended.
+- **Slow or no internet at home?** Your instructor can bring the images on a
+  **USB stick** to class — you then run one `./kingo load` command instead of
+  downloading.
 
 > **Already have Docker Desktop?** (e.g. from another course) — perfect, keep
 > it. Just make sure Docker Desktop is **running** before Step 2. The setup

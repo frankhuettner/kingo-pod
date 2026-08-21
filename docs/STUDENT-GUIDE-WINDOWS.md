@@ -14,6 +14,13 @@ fixing.
 - **Do this at home, before class.** Enabling WSL2 may need **one reboot**,
   and the first start downloads about **10 GB** of images. Get both done at
   home so class time isn't lost to downloads.
+- **How long?** WSL2 + Ubuntu (Steps 1–2): about **15–20 minutes**, most of it
+  the restart and the Store download. The stack (Step 3): a few minutes of
+  install plus the 10 GB download — **15–45 minutes** depending on your
+  internet. Total: plan **about an hour**, mostly unattended.
+- **Slow or no internet at home?** Your instructor can bring the images on a
+  **USB stick** to class — you then run one `./kingo load` command instead of
+  downloading. Still do Steps 1–2 (WSL2 + Ubuntu) at home.
 
 > **Already have Docker Desktop?** (e.g. from another course) — perfect, keep
 > it. Do Steps 1–2 anyway (WSL2 + Ubuntu are needed either way), then before
