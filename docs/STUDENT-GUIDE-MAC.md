@@ -121,7 +121,7 @@ what to do:
 | What you see | What to do |
 |---|---|
 | `port … is already used by other software` | Run `./kingo fixports`, then `./kingo up`. Kingo moves itself to free ports — your other software is untouched. Your addresses change; `./kingo credentials` shows the new ones. |
-| `ALL 10 Kingo ports are busy` | The stack is most likely **already running** (possibly under your other engine). Run `./kingo status` — if services show `up`, you're done, nothing is wrong. |
+| `ALL of Kingo's ports are busy` | The stack is most likely **already running** (possibly under your other engine). Run `./kingo status` — if services show `up`, you're done, nothing is wrong. |
 | I have Docker Desktop, but setup installed Podman | Docker wasn't running during setup. Both work — no need to change anything. To switch to Docker anyway: `echo KINGO_ENGINE=docker >> .env.local`, then `./kingo down` and `./kingo up`. |
 | `Podman has no ready machine` / Podman won't start | Run `podman machine start`, then `./kingo up`. Still broken: `podman machine stop`, then `podman machine start`. |
 | `Docker is installed but not running` | Open the Docker Desktop app, wait until it says "running", try again. |

@@ -69,16 +69,18 @@ jobs:
         # single stuck layer can hang `compose up -d` forever with zero output
         # (observed: podman legs stuck in "Boot 1" for hours). Pulling per image
         # first makes progress visible and attributes a hang to one image.
-        # kingo-jupyterhub:local is built, not pulled; short names need the
-        # docker.io/ prefix for a direct podman pull.
+        # Services with a build: key (jupyterhub) are excluded structurally;
+        # short names need the docker.io/ prefix for a direct podman pull.
         run: |
-          docker-compose -f compose.yml config --images | grep -v '^kingo-jupyterhub' | while read -r img; do
+          docker-compose -f compose.yml config --format json \
+            | jq -r '.services[] | select(.build == null) | .image' \
+            | while read -r img; do
             case "$img" in
               *.*/*) ref="$img" ;;
               *)     ref="docker.io/$img" ;;
             esac
             echo "== pulling $ref"
-            podman pull --retry 3 "$ref" || podman pull "$ref"
+            podman pull --retry 3 "$ref"
           done
 
       - name: Boot 1 — up + smoke

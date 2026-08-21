@@ -72,23 +72,26 @@ ensure_ready() {
 # One wrapper every verb goes through: `podman compose ...` or `docker compose ...`.
 compose() { $ENGINE compose "$@"; }
 
-# ── Health checks (source of truth: plan §8) ─────────────────────────────────
-# name|port|path|expected-codes.  4040/mcp answering 401 without the bearer
-# token IS healthy. Exact codes only — "any answer counts" once passed while a
-# service was crash-looping.
-build_services() {
-  SMOKE_SERVICES=(
-    "JupyterLab|${P_JUPYTERLAB}|/api|200"
-    "JupyterHub|${P_JUPYTERHUB}|/hub/api|200"
-    "Jupyter MCP|${P_MCP}|/mcp|401"
-    "Langflow|${P_LANGFLOW}|/health|200"
-    "n8n|${P_N8N}|/healthz|200"
-    "Metabase|${P_METABASE}|/api/health|200"
-    "CloudBeaver|${P_CLOUDBEAVER}|/|200|301|302"
-    "Qdrant|${P_QDRANT}|/readyz|200"
-    "PostgreSQL|${P_POSTGRES}|tcp"
-  )
-}
+# ── The service table: the ONE list every command derives from ───────────────
+# DisplayName|ENV_SUFFIX|host port|health path|expected codes
+#   suffix → the KINGO_PORT_<suffix> override (port already reflects overrides)
+#   path 'tcp' → plain TCP probe;  path '-' → port-only (no health/status row)
+# Health codes are the source of truth (plan §8): 4040/mcp answering 401
+# without the bearer token IS healthy. Exact codes only — "any answer counts"
+# once passed while a service was crash-looping. `kingo smoke` asserts this
+# table matches compose.yml's published ports, so they cannot drift silently.
+SERVICE_TABLE=(
+  "JupyterLab|JUPYTERLAB|${P_JUPYTERLAB}|/api|200"
+  "JupyterHub|JUPYTERHUB|${P_JUPYTERHUB}|/hub/api|200"
+  "Jupyter MCP|MCP|${P_MCP}|/mcp|401"
+  "Langflow|LANGFLOW|${P_LANGFLOW}|/health|200"
+  "n8n|N8N|${P_N8N}|/healthz|200"
+  "Metabase|METABASE|${P_METABASE}|/api/health|200"
+  "CloudBeaver|CLOUDBEAVER|${P_CLOUDBEAVER}|/|200|301|302"
+  "Qdrant|QDRANT|${P_QDRANT}|/readyz|200"
+  "Qdrant gRPC|QDRANT_GRPC|${P_QDRANT_GRPC}|-|-"
+  "PostgreSQL|POSTGRES|${P_POSTGRES}|tcp|-"
+)
 
 check() { # port path [want] -> 0 if the expected code(s) match
   local port="$1" path="$2" want="${3:-200}" code
@@ -100,12 +103,12 @@ check() { # port path [want] -> 0 if the expected code(s) match
 }
 
 wait_all() { # $1 = max attempts (10s apart)
-  build_services
-  local attempt all s name port path want
+  local attempt all s name suffix port path want
   for attempt in $(seq 1 "$1"); do
     all=1
-    for s in "${SMOKE_SERVICES[@]}"; do
-      IFS='|' read -r name port path want <<<"$s"
+    for s in "${SERVICE_TABLE[@]}"; do
+      IFS='|' read -r name suffix port path want <<<"$s"
+      [ "$path" = "-" ] && continue
       check "$port" "$path" "${want:-200}" || { all=0; break; }
     done
     [ "$all" = 1 ] && return 0
@@ -173,11 +176,12 @@ cmd_up() {
 cmd_down() { select_engine; compose down; }
 
 cmd_status() {
-  select_engine; build_services
-  local all_up=1 s name port path want st
+  select_engine
+  local all_up=1 s name suffix port path want st
   printf '%-14s %-8s %s\n' "SERVICE" "STATUS" "URL"
-  for s in "${SMOKE_SERVICES[@]}"; do
-    IFS='|' read -r name port path want <<<"$s"
+  for s in "${SERVICE_TABLE[@]}"; do
+    IFS='|' read -r name suffix port path want <<<"$s"
+    [ "$path" = "-" ] && continue
     # status is lenient (any answer = up); smoke enforces exact codes.
     if [ "$path" = "tcp" ]; then
       if check "$port" tcp; then st="up"; else st="DOWN"; all_up=0; fi
@@ -237,6 +241,11 @@ assert_loopback() {
     echo "FAIL: ${npub} published ports but only ${nloop} bound to 127.0.0.1 (some default to 0.0.0.0)"
     return 1
   fi
+  # Drift guard: preflight/fixports/doctor only protect ports they know about.
+  if [ "${npub:-0}" -ne "${#SERVICE_TABLE[@]}" ]; then
+    echo "FAIL: compose.yml publishes ${npub} ports but kingo's SERVICE_TABLE lists ${#SERVICE_TABLE[@]} — update SERVICE_TABLE"
+    return 1
+  fi
   return 0
 }
 
@@ -266,36 +275,16 @@ cmd_smoke() {
 # ── Host ports: collision detection + automatic remapping ────────────────────
 port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1; }
 
-# All 10 published host ports (must match compose.yml exactly).
-# Each entry: DisplayName:ENV_SUFFIX:effective-port (suffix → KINGO_PORT_<suffix>).
-port_table() {
-  PORT_TABLE=(
-    "Langflow:LANGFLOW:$P_LANGFLOW"
-    "n8n:N8N:$P_N8N"
-    "JupyterLab:JUPYTERLAB:$P_JUPYTERLAB"
-    "JupyterHub:JUPYTERHUB:$P_JUPYTERHUB"
-    "Jupyter-MCP:MCP:$P_MCP"
-    "Metabase:METABASE:$P_METABASE"
-    "CloudBeaver:CLOUDBEAVER:$P_CLOUDBEAVER"
-    "Qdrant:QDRANT:$P_QDRANT"
-    "Qdrant-gRPC:QDRANT_GRPC:$P_QDRANT_GRPC"
-    "PostgreSQL:POSTGRES:$P_POSTGRES"
-  )
-}
-
 stack_running() { # any kingo container currently up?
   local n; n=$(compose ps -q 2>/dev/null | grep -c . || true)
   [ "${n:-0}" -gt 0 ]
 }
 
-# Fail BEFORE compose prints a cryptic "address already in use" mid-boot.
-# Only meaningful on a cold start — a running stack owns its own ports.
 count_busy_ports() { # sets BUSY_LIST (one "port (name)" per line) and BUSY_N
-  port_table
   BUSY_LIST=""; BUSY_N=0
-  local entry name suffix port
-  for entry in "${PORT_TABLE[@]}"; do
-    IFS=':' read -r name suffix port <<<"$entry"
+  local entry name suffix port rest
+  for entry in "${SERVICE_TABLE[@]}"; do
+    IFS='|' read -r name suffix port rest <<<"$entry"
     if port_in_use "$port"; then
       BUSY_LIST="${BUSY_LIST}  - port $port ($name)"$'\n'
       BUSY_N=$((BUSY_N + 1))
@@ -303,23 +292,25 @@ count_busy_ports() { # sets BUSY_LIST (one "port (name)" per line) and BUSY_N
   done
 }
 
-# All 10 ports busy at once almost always means the Kingo stack itself is
-# already running but this engine can't see it (started under the other
-# engine, or the engine is temporarily unreachable) — moving ports would be
-# exactly wrong then.
+# ALL ports busy at once almost always means the Kingo stack itself is already
+# running but this engine can't see it (started under the other engine, or the
+# engine is temporarily unreachable) — moving ports would be exactly wrong
+# then. Deliberately no count in the text: the guides quote this string.
 all_busy_hint() {
-  echo "ALL ${#PORT_TABLE[@]} Kingo ports are busy at once — that usually means the Kingo stack"
+  echo "ALL of Kingo's ports are busy at once — that usually means the Kingo stack"
   echo "is ALREADY RUNNING (possibly under your other container engine)."
   echo "Check with './kingo status' — if services show 'up', everything already works."
 }
 
 # Fail BEFORE compose prints a cryptic "address already in use" mid-boot.
-# Only meaningful on a cold start — a running stack owns its own ports.
+# The port probes are pure bash (milliseconds); the compose subprocess is only
+# consulted once a port is actually busy, so the everyday all-free start never
+# pays for it.
 preflight_ports() {
-  stack_running && return 0
   count_busy_ports
   [ "$BUSY_N" = 0 ] && return 0
-  if [ "$BUSY_N" = "${#PORT_TABLE[@]}" ]; then
+  stack_running && return 0   # the busy ports are our own containers
+  if [ "$BUSY_N" = "${#SERVICE_TABLE[@]}" ]; then
     all_busy_hint
     die "not starting a second copy"
   fi
@@ -333,38 +324,42 @@ preflight_ports() {
 
 cmd_fixports() {
   select_engine
-  stack_running && die "the stack is running, so its own ports look busy. Run './kingo down' first, then './kingo fixports'."
+  # The setup scripts run this unconditionally, so a running stack is a
+  # friendly no-op ("safe to re-run"), not an error.
+  if stack_running; then
+    echo "The Kingo stack is running — its ports are in use by Kingo itself; nothing to fix."
+    return 0
+  fi
   count_busy_ports
-  if [ "$BUSY_N" = "${#PORT_TABLE[@]}" ]; then
+  [ "$BUSY_N" = 0 ] && { echo "All of Kingo's ports are free — nothing to change."; return 0; }
+  if [ "$BUSY_N" = "${#SERVICE_TABLE[@]}" ]; then
     all_busy_hint
     die "refusing to remap all ports"
   fi
   # Track every port the stack will use so a moved port can't land on another.
-  local used=" " entry
-  for entry in "${PORT_TABLE[@]}"; do used="${used}${entry##*:} "; done
-  local moved=0 name suffix port newport
-  for entry in "${PORT_TABLE[@]}"; do
-    IFS=':' read -r name suffix port <<<"$entry"
+  local used=" " entry name suffix port rest newport
+  for entry in "${SERVICE_TABLE[@]}"; do
+    IFS='|' read -r name suffix port rest <<<"$entry"
+    used="${used}${port} "
+  done
+  for entry in "${SERVICE_TABLE[@]}"; do
+    IFS='|' read -r name suffix port rest <<<"$entry"
     port_in_use "$port" || continue
     newport=$((port + 1))
-    while port_in_use "$newport" || [ "${used#* $newport }" != "$used" ]; do
+    while port_in_use "$newport" || [[ "$used" == *" $newport "* ]]; do
       newport=$((newport + 1))
     done
     used="${used}${newport} "
-    { [ -f .env.local ] && grep -v "^KINGO_PORT_${suffix}=" .env.local || true; } > .env.local.tmp
-    echo "KINGO_PORT_${suffix}=${newport}" >> .env.local.tmp
-    mv .env.local.tmp .env.local
+    # .env/.env.local are sourced in order, so the last assignment wins — a
+    # plain append is enough (a later re-run may leave a superseded line
+    # behind, which is harmless).
+    echo "KINGO_PORT_${suffix}=${newport}" >> .env.local
     echo "  $name: port $port is taken by other software → Kingo will use $newport instead"
-    moved=1
   done
-  if [ "$moved" = 1 ]; then
-    echo
-    echo "Saved to .env.local (stays out of git; 'kingo update' is unaffected)."
-    echo "Your addresses change accordingly — 'kingo credentials' always shows the right ones."
-    echo "Now run: ./kingo up"
-  else
-    echo "All ${#PORT_TABLE[@]} Kingo ports are free — nothing to change."
-  fi
+  echo
+  echo "Saved to .env.local (stays out of git; 'kingo update' is unaffected)."
+  echo "Your addresses change accordingly — 'kingo credentials' always shows the right ones."
+  echo "Now run: ./kingo up"
 }
 
 # ── doctor: preflight before setup ───────────────────────────────────────────
@@ -410,14 +405,13 @@ cmd_doctor() {
     echo "  [ok] the Kingo stack is running — its ports are in use by kingo, not a collision."
   else
     count_busy_ports
-    if [ "$BUSY_N" = "${#PORT_TABLE[@]}" ]; then
-      echo "  [??] $(all_busy_hint | head -2 | tr '\n' ' ')"
-      echo "       Check with './kingo status' — if services show 'up', all is well."
+    if [ "$BUSY_N" = "${#SERVICE_TABLE[@]}" ]; then
+      all_busy_hint | sed -e '1s/^/  [??] /' -e '2,$s/^/       /'
     elif [ "$BUSY_N" -gt 0 ]; then
       printf '%s' "$BUSY_LIST" | sed 's/^  - /  [!!] busy: /'
       echo "       → run './kingo fixports' to move Kingo to free ports automatically."
     else
-      echo "  [ok] all ${#PORT_TABLE[@]} host ports are free."
+      echo "  [ok] all ${#SERVICE_TABLE[@]} host ports are free."
     fi
   fi
   echo "== done =="
