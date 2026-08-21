@@ -95,8 +95,26 @@ ensure_ready() {
   esac
 }
 
+# All class images are PUBLIC — anonymous pulls must always work. But podman
+# falls back to ~/.docker/config.json for registry auth, and the compose
+# provider reads that file itself: a broken Docker credential helper from
+# another course (gcloud with an expired token, ECR, …) then kills even
+# anonymous pulls. Under podman, point both at a kingo-owned neutral config.
+# (Deliberately NOT under docker: its config also carries the Desktop context,
+# and the daemon resolves auth via the student's own config anyway — doctor
+# diagnoses a broken helper there instead.)
+neutral_auth() {
+  [ "$ENGINE" = podman ] || return 0
+  [ -n "${REGISTRY_AUTH_FILE:-}" ] && return 0   # explicit user choice wins
+  mkdir -p .kingo-auth
+  [ -f .kingo-auth/auth.json ]   || echo '{}' > .kingo-auth/auth.json
+  [ -f .kingo-auth/config.json ] || echo '{}' > .kingo-auth/config.json
+  export REGISTRY_AUTH_FILE="$KINGO_DIR/.kingo-auth/auth.json"
+  export DOCKER_CONFIG="$KINGO_DIR/.kingo-auth"
+}
+
 # One wrapper every verb goes through: `podman compose ...` or `docker compose ...`.
-compose() { $ENGINE compose "$@"; }
+compose() { neutral_auth; $ENGINE compose "$@"; }
 
 # ── The service table: the ONE list every command derives from ───────────────
 # DisplayName|ENV_SUFFIX|host port|health path|expected codes
@@ -478,7 +496,7 @@ pull_retry() { # $1: image ref — up to 3 attempts
 }
 
 cmd_pull() {
-  select_engine; ensure_ready
+  select_engine; ensure_ready; neutral_auth
   local imgs img ref
   # All pullable images: everything in compose.yml except the locally-built
   # jupyterhub tag (*:local), plus that build's BASE image from its Dockerfile.
@@ -491,7 +509,7 @@ cmd_pull() {
       *)     ref="docker.io/$img" ;;  # short name — qualify it for podman
     esac
     echo "== pulling $ref"
-    pull_retry "$ref" || die "could not pull $ref after 3 attempts — check your internet connection, then re-run: ./kingo pull"
+    pull_retry "$ref" || die "could not pull $ref after 3 attempts — check your internet connection (or, if the error above mentions credentials: ./kingo doctor explains), then re-run: ./kingo pull"
   done
   echo "All images pulled."
 }
@@ -581,6 +599,23 @@ cmd_doctor() {
       echo "  [!!] $ENGINE has only ${mem} MB (the stack needs ~5 GB)."
       if [ "$ENGINE" = podman ]; then echo "       → podman machine set --memory 5120   (or re-run setup)"
       else echo "       → Docker Desktop → Settings → Resources → raise Memory to 5 GB+."; fi
+    fi
+  fi
+
+  # A broken Docker credential helper (gcloud with an expired token, ECR, …
+  # from another course) breaks even anonymous pulls. kingo neutralizes it on
+  # the podman side; under docker the student's own config is in charge.
+  if [ "$ENGINE" = docker ]; then
+    local store
+    store=$(grep -o '"credsStore"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.docker/config.json" 2>/dev/null | cut -d'"' -f4 || true)
+    if [ -n "${store:-}" ]; then
+      if ! command -v "docker-credential-${store}" >/dev/null 2>&1 \
+         || ! "docker-credential-${store}" list >/dev/null 2>&1; then
+        echo "  [!!] your Docker credential helper (docker-credential-${store}) is not working."
+        echo "       It breaks image downloads even though Kingo's images need NO login."
+        echo "       Fix the helper (e.g. 'gcloud auth login') or remove the credsStore"
+        echo "       line from ~/.docker/config.json, then retry."
+      fi
     fi
   fi
 
