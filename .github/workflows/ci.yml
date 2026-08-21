@@ -10,11 +10,13 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A push supersedes any in-flight run of the same branch — without this, a
-# hung podman leg (see the pre-pull step) piles up zombie runs for hours.
+# A push supersedes any in-flight run of the same PR branch — without this, a
+# hung podman leg (see the pre-pull step) piles up zombie runs for hours. On
+# main, runs queue instead of cancelling: every main commit keeps its own CI
+# verdict (the job-level timeout bounds a hung run either way).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   stack:
@@ -78,26 +80,13 @@ jobs:
       - name: Pre-pull images with retry (podman leg)
         if: matrix.engine == 'podman'
         timeout-minutes: 40
-        # `shell: bash` (unlike the default `bash -e`) turns on pipefail, so a
-        # failing docker-compose/jq can't silently feed the loop empty input.
-        shell: bash
         # Rootless podman pulls the ~10 GB stack much slower than docker, and a
         # single stuck layer can hang `compose up -d` forever with zero output
-        # (observed: podman legs stuck in "Boot 1" for hours). Pulling per image
-        # first makes progress visible and attributes a hang to one image.
-        # Services with a build: key (jupyterhub) are excluded structurally;
-        # short names need the docker.io/ prefix for a direct podman pull.
-        run: |
-          docker-compose -f compose.yml config --format json \
-            | jq -r '.services[] | select(.build == null) | .image' \
-            | while read -r img; do
-            case "$img" in
-              *.*/*) ref="$img" ;;
-              *)     ref="docker.io/$img" ;;
-            esac
-            echo "== pulling $ref"
-            podman pull --retry 3 "$ref"
-          done
+        # (observed: podman legs stuck in "Boot 1" for hours). `kingo pull`
+        # pulls per image with retries (incl. the jupyterhub BASE image the old
+        # jq filter missed) — the same command the setup scripts run for
+        # students, so CI tests the student path too.
+        run: ./kingo pull
 
       - name: Boot 1 — up + smoke
         timeout-minutes: 30

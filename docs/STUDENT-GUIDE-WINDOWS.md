@@ -68,8 +68,14 @@ The script does four things, in order, and says so as it goes:
 4. **Verifies it** and prints your personal table of addresses and logins.
 
 **You only do this once.** If it stops partway (Wi-Fi hiccup, closed laptop),
-run `bash setup/setup-linux.sh` again — it is safe to re-run and skips what's
-done.
+run it again — it is safe to re-run and skips what's done:
+
+```bash
+cd ~/kingo-pod && bash setup/setup-linux.sh
+```
+
+(Only if the *download* itself broke off and even the re-run fails: delete the
+half-finished folder with `rm -rf ~/kingo-pod` and start Step 3 from the top.)
 
 ## Step 4 — Did it work?
 
@@ -142,11 +148,13 @@ the usual suspects and tells you what to do:
 | What you see | What to do |
 |---|---|
 | WSL won't enable / "Virtual Machine Platform" error | Virtualization is off in your PC's firmware. Restart, enter firmware setup (usually F2, F10, or Del during boot), enable **Virtualization** (Intel VT-x / AMD-V / "SVM"), save, run Step 1 again. |
-| `port … is already used by other software` | Run `./kingo fixports`, then `./kingo up`. Kingo moves itself to free ports — your other software is untouched. Your addresses change; `./kingo credentials` shows the new ones. |
+| `this Ubuntu is running under WSL 1` | In Windows PowerShell run `wsl --set-version Ubuntu 2` (takes a few minutes), then reopen Ubuntu and re-run the setup script. |
+| `Other software on this machine is already using ports Kingo needs` | Run `./kingo fixports`, then `./kingo up`. Kingo moves itself to free ports — your other software is untouched. Your addresses change; `./kingo credentials` shows the new ones. |
+| `The Kingo stack is ALREADY RUNNING under your other engine` | Nothing is broken — the stack is up under your other container engine. Follow the two commands the message prints. |
 | `ALL of Kingo's ports are busy` | The stack is most likely **already running** (possibly under your other engine). Run `./kingo status` — if services show `up`, you're done, nothing is wrong. |
-| I have Docker Desktop, but setup installed Podman | Docker wasn't running or its WSL integration was off during setup. Both engines work — no need to change anything. To switch anyway: turn on WSL integration for Ubuntu, then `echo KINGO_ENGINE=docker >> .env.local`, `./kingo down`, `./kingo up`. |
+| I have Docker Desktop, but setup installed Podman | Docker wasn't running or its WSL integration was off during setup. Both engines work — no need to change anything. To switch anyway: turn on WSL integration for Ubuntu, then `./kingo down` (stops the Podman stack **first**), then `echo KINGO_ENGINE=docker >> .env.local`, then `./kingo up`. |
 | Laptop feels slow (8 GB machines) | The stack needs ~6 GB RAM. Close other apps. If it stays bad, create the file `C:\Users\<you>\.wslconfig` **in Windows** containing `[wsl2]` on one line and `memory=6GB` on the next, run `wsl --shutdown` in PowerShell, then start the stack again. |
-| Ubuntu terminal says `command not found: ./kingo` | You're in the wrong folder. Run `cd ~/kingo-pod` first. |
+| Ubuntu terminal says `./kingo: No such file or directory` | You're in the wrong folder. Run `cd ~/kingo-pod` first. |
 | Anything else | `./kingo down`, then `./kingo up`. If it persists: screenshot the error and ask the instructor / TA. |
 
 ## FAQ

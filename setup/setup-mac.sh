@@ -20,11 +20,27 @@ pin_engine() {
   mv .env.local.tmp .env.local
 }
 
-# ── 1. Engine: use a running Docker Desktop as-is, else install Podman ───────
+# ── 1. Engine: keep a running stack's engine; else use a running Docker
+#      Desktop; else install Podman ──────────────────────────────────────────
 # Many students arrive with Docker Desktop from another course. That is fine:
 # the stack runs identically on it. Podman is only installed when no working
 # engine is present.
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 \
+#
+# Re-running setup must never flip a working install to the other engine —
+# that would strand the class data in the old engine's volumes. So if the
+# stack is already running somewhere, that engine wins, full stop.
+RUNNING_ENGINE=""
+for eng in docker podman; do
+  if command -v "$eng" >/dev/null 2>&1 \
+     && [ -n "$("$eng" ps --filter name=kingo- -q 2>/dev/null)" ]; then
+    RUNNING_ENGINE="$eng"; break
+  fi
+done
+
+if [ -n "$RUNNING_ENGINE" ]; then
+  say "The Kingo stack is already running under ${RUNNING_ENGINE} — keeping it. Nothing to install."
+  pin_engine "$RUNNING_ENGINE"
+elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 \
    && docker compose version >/dev/null 2>&1; then
   say "Docker Desktop is already running — using it. Nothing to install."
   pin_engine docker
@@ -71,7 +87,10 @@ fi
 say "Checking that no other software sits on Kingo's ports ..."
 ./kingo fixports
 
-say "Starting the Kingo stack (first run downloads ~10 GB — do this on home Wi-Fi) ..."
+say "Downloading the container images (~10 GB on the first run — the long part; do this on home Wi-Fi) ..."
+./kingo pull
+
+say "Starting the Kingo stack ..."
 ./kingo up
 
 say "Verifying the stack (smoke test) ..."

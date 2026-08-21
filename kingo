@@ -12,11 +12,21 @@ cd "$KINGO_DIR"
 # per-machine overrides — engine pin, moved ports — written by the setup
 # scripts and 'kingo fixports'. It is gitignored, so students never edit the
 # committed .env and 'kingo update' can always git pull cleanly.
-# A KINGO_ENGINE given on the command line still beats the files.
-_cli_engine="${KINGO_ENGINE:-}"
+#
+# Self-heal Windows line endings / a UTF-8 BOM in .env.local first: editing it
+# with Notepad over \\wsl$ adds both, and a single stray \r inside a value
+# breaks the engine name, every port probe, and compose itself.
+if [ -f ./.env.local ] && LC_ALL=C grep -qE $'\r|\xef\xbb\xbf' ./.env.local 2>/dev/null; then
+  tr -d '\r' < ./.env.local | LC_ALL=C sed $'1s/^\xef\xbb\xbf//' > ./.env.local.clean
+  mv ./.env.local.clean ./.env.local
+fi
+# Any KINGO_* variable given on the command line still beats both files.
+_cli_overrides="$(env | LC_ALL=C grep -E '^KINGO_[A-Z0-9_]+=' || true)"
 # shellcheck disable=SC1091
 set -a; source ./.env; [ -f ./.env.local ] && source ./.env.local; set +a
-[ -n "$_cli_engine" ] && KINGO_ENGINE="$_cli_engine"
+if [ -n "$_cli_overrides" ]; then
+  while IFS= read -r _kv; do export "$_kv"; done <<<"$_cli_overrides"
+fi
 
 # Effective host ports (defaults match the guides; overridable via KINGO_PORT_*).
 P_LANGFLOW=${KINGO_PORT_LANGFLOW:-7860}
@@ -32,6 +42,14 @@ P_POSTGRES=${KINGO_PORT_POSTGRES:-5432}
 
 die()  { echo "ERROR: $*" >&2; exit 1; }
 warn() { echo "WARN: $*" >&2; }
+
+# Catch a typo'd engine name in .env.local (or the environment) up front —
+# otherwise it only surfaces deep inside ensure_ready, and doctor would
+# happily report on a nonsense engine.
+case "${KINGO_ENGINE:-}" in
+  ''|podman|docker) ;;
+  *) die "KINGO_ENGINE is '$KINGO_ENGINE' — it must be 'podman' or 'docker'. Check .env.local (or your shell environment)." ;;
+esac
 
 # ── Engine detection ─────────────────────────────────────────────────────────
 # Order (per plan §4): $KINGO_ENGINE override → podman (usable or startable) →
@@ -53,6 +71,11 @@ select_engine() {
 ensure_ready() {
   case "$ENGINE" in
     podman)
+      # The provider guard is not optional: without the docker-compose binary,
+      # `podman compose` silently falls back to podman-compose, which breaks
+      # this stack (plan §4).
+      command -v docker-compose >/dev/null 2>&1 \
+        || die "the docker-compose provider binary is missing — podman would fall back to podman-compose, which breaks this stack. Mac: brew install docker-compose. Linux/WSL: re-run setup/setup-linux.sh."
       podman info >/dev/null 2>&1 && return 0
       if podman machine list -q 2>/dev/null | grep -q .; then
         echo "Starting the Podman machine (this takes a few seconds) ..."
@@ -62,8 +85,11 @@ ensure_ready() {
       die "Podman has no ready machine. Run the setup script once: setup/setup-mac.sh (Mac) or setup/setup-linux.sh (Linux, or inside WSL2 Ubuntu on Windows)."
       ;;
     docker)
-      docker info >/dev/null 2>&1 && return 0
-      die "Docker is installed but not running. Open Docker Desktop, wait until it says 'running', then try again."
+      docker info >/dev/null 2>&1 \
+        || die "Docker is installed but not running. Open Docker Desktop, wait until it says 'running', then try again."
+      docker compose version >/dev/null 2>&1 \
+        || die "Docker is running but has no Compose plugin ('docker compose'). Install Docker Desktop, or the docker-compose-plugin package on native Linux."
+      return 0
       ;;
     *) die "Unknown engine '$ENGINE' (KINGO_ENGINE must be 'podman' or 'docker')." ;;
   esac
@@ -99,6 +125,7 @@ check() { # port path [want] -> 0 if the expected code(s) match
     (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1
   fi
   code=$(curl -s -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:${port}${path}" 2>/dev/null || echo 000)
+  [ "$code" = 000 ] && return 1   # nothing answered (or curl is missing) — never "up"
   echo "$code" | grep -qE "^(${want})$"
 }
 
@@ -164,7 +191,7 @@ cmd_up() {
   # use `kingo update` to force a rebuild after changing the Dockerfile.
   compose up -d
   echo "Waiting for all services to become healthy (first run pulls ~10 GB — be patient) ..."
-  wait_all 90 || { echo; compose ps; die "not all services came up. See: kingo logs <service>"; }
+  wait_all 90 || { echo; compose ps; die "not all services came up. See: ./kingo logs"; }
   echo "All services healthy. Running first-run setup ..."
   init_stack
   echo
@@ -177,21 +204,29 @@ cmd_down() { select_engine; compose down; }
 
 cmd_status() {
   select_engine
-  local all_up=1 s name suffix port path want st
+  local all_up=1 any_up=0 s name suffix port path want st
   printf '%-14s %-8s %s\n' "SERVICE" "STATUS" "URL"
   for s in "${SERVICE_TABLE[@]}"; do
     IFS='|' read -r name suffix port path want <<<"$s"
     [ "$path" = "-" ] && continue
     # status is lenient (any answer = up); smoke enforces exact codes.
     if [ "$path" = "tcp" ]; then
-      if check "$port" tcp; then st="up"; else st="DOWN"; all_up=0; fi
+      if check "$port" tcp; then st="up"; any_up=1; else st="DOWN"; all_up=0; fi
       printf '%-14s %-8s localhost:%s\n' "$name" "$st" "$port"
     else
-      if check "$port" "$path" '[0-9]{3}'; then st="up"; else st="DOWN"; all_up=0; fi
+      if check "$port" "$path" '[0-9]{3}'; then st="up"; any_up=1; else st="DOWN"; all_up=0; fi
       printf '%-14s %-8s http://localhost:%s\n' "$name" "$st" "$port"
     fi
   done
-  [ "$all_up" = 1 ] || { echo; echo "Something is down. Try: kingo restart   (details: kingo logs <service>)"; }
+  if [ "$all_up" != 1 ]; then
+    echo
+    if [ "$any_up" = 0 ]; then
+      # 'restart' after 'down' is a silent no-op — a stopped stack needs 'up'.
+      echo "Everything is down — the stack is probably just stopped. Start it: ./kingo up"
+    else
+      echo "Something is down. Try: ./kingo restart   (details: ./kingo logs)"
+    fi
+  fi
 }
 
 cmd_credentials() {
@@ -241,9 +276,18 @@ assert_loopback() {
     echo "FAIL: ${npub} published ports but only ${nloop} bound to 127.0.0.1 (some default to 0.0.0.0)"
     return 1
   fi
-  # Drift guard: preflight/fixports/doctor only protect ports they know about.
-  if [ "${npub:-0}" -ne "${#SERVICE_TABLE[@]}" ]; then
-    echo "FAIL: compose.yml publishes ${npub} ports but kingo's SERVICE_TABLE lists ${#SERVICE_TABLE[@]} — update SERVICE_TABLE"
+  # Drift guard: preflight/fixports/doctor only protect ports they know about,
+  # and a count-only check would miss a changed number (e.g. the never-probed
+  # Qdrant gRPC port) — so compare the values, not the count.
+  local tports cports s
+  tports=$(for s in "${SERVICE_TABLE[@]}"; do printf '%s\n' "$s" | cut -d'|' -f3; done | sort -n)
+  cports=$(printf '%s\n' "$cfg" | grep -E '^[[:space:]]*published:' | grep -oE '[0-9]+' | sort -n)
+  if [ "$tports" != "$cports" ]; then
+    echo "FAIL: compose.yml's published ports and kingo's SERVICE_TABLE disagree — update SERVICE_TABLE"
+    # shellcheck disable=SC2086
+    echo "  compose.yml:  " $cports
+    # shellcheck disable=SC2086
+    echo "  SERVICE_TABLE:" $tports
     return 1
   fi
   return 0
@@ -273,49 +317,97 @@ cmd_smoke() {
 }
 
 # ── Host ports: collision detection + automatic remapping ────────────────────
-port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1; }
-
-stack_running() { # any kingo container currently up?
-  local n; n=$(compose ps -q 2>/dev/null | grep -c . || true)
-  [ "${n:-0}" -gt 0 ]
+# A port is busy if ANYTHING listens on it — including apps that bind only the
+# IPv6 loopback (::1): the browser's 'localhost' often prefers ::1, so those
+# collide for real even though 127.0.0.1 looks free.
+port_in_use() {
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && { exec 3>&- 3<&-; return 0; }
+  (exec 3<>"/dev/tcp/::1/$1") 2>/dev/null && { exec 3>&- 3<&-; return 0; }
+  return 1
 }
 
-count_busy_ports() { # sets BUSY_LIST (one "port (name)" per line) and BUSY_N
-  BUSY_LIST=""; BUSY_N=0
-  local entry name suffix port rest
+engine_kingo_ports() { # $1: engine — host ports of its running kingo-* containers
+  command -v "$1" >/dev/null 2>&1 || return 0
+  "$1" ps --filter name=kingo- --format '{{.Ports}}' 2>/dev/null \
+    | grep -oE ':[0-9]+->' | grep -oE '[0-9]+' | sort -u || true
+}
+
+# Attribute every busy port: held by our own stack under $ENGINE (fine), by
+# the Kingo stack under the OTHER engine (refuse — remapping or double-booting
+# would be exactly wrong), or by foreign software (fixports moves those).
+# Sets: OURS_N, OTHER_ENGINE_N + OTHER_ENGINE, FOREIGN_N + FOREIGN_LIST +
+# FOREIGN_PORTS. The probes are pure bash (milliseconds); the engine CLIs are
+# only consulted once a port is actually busy, so the everyday all-free start
+# never pays for them.
+count_busy_ports() {
+  FOREIGN_LIST=""; FOREIGN_PORTS=" "; FOREIGN_N=0; OURS_N=0
+  OTHER_ENGINE=""; OTHER_ENGINE_N=0
+  local busy="" entry name suffix port rest mine theirs oeng
   for entry in "${SERVICE_TABLE[@]}"; do
     IFS='|' read -r name suffix port rest <<<"$entry"
-    if port_in_use "$port"; then
-      BUSY_LIST="${BUSY_LIST}  - port $port ($name)"$'\n'
-      BUSY_N=$((BUSY_N + 1))
-    fi
+    if port_in_use "$port"; then busy="${busy}${port}|${name}"$'\n'; fi
   done
+  [ -n "$busy" ] || return 0
+  mine=" $(engine_kingo_ports "$ENGINE" | tr '\n' ' ') "
+  oeng=docker; [ "$ENGINE" = docker ] && oeng=podman
+  theirs=" $(engine_kingo_ports "$oeng" | tr '\n' ' ') "
+  while IFS='|' read -r port name; do
+    [ -n "$port" ] || continue
+    if [[ "$mine" == *" $port "* ]]; then
+      OURS_N=$((OURS_N + 1))
+    elif [[ "$theirs" == *" $port "* ]]; then
+      OTHER_ENGINE_N=$((OTHER_ENGINE_N + 1)); OTHER_ENGINE="$oeng"
+    else
+      FOREIGN_LIST="${FOREIGN_LIST}  - port $port ($name)"$'\n'
+      FOREIGN_PORTS="${FOREIGN_PORTS}${port} "
+      FOREIGN_N=$((FOREIGN_N + 1))
+    fi
+  done <<<"$busy"
 }
 
-# ALL ports busy at once almost always means the Kingo stack itself is already
-# running but this engine can't see it (started under the other engine, or the
-# engine is temporarily unreachable) — moving ports would be exactly wrong
-# then. Deliberately no count in the text: the guides quote this string.
+# The stack is visibly running under the other engine — say exactly what to do.
+other_engine_hint() { # requires count_busy_ports (sets OTHER_ENGINE)
+  echo "The Kingo stack is ALREADY RUNNING under your other engine (${OTHER_ENGINE})."
+  echo "Nothing is broken — but this command is talking to ${ENGINE}."
+  echo "Either keep using it there:   KINGO_ENGINE=${OTHER_ENGINE} ./kingo status"
+  echo "or move it over:              KINGO_ENGINE=${OTHER_ENGINE} ./kingo down   then:   ./kingo up"
+}
+
+# Fallback when attribution sees nothing: ALL ports busy at once almost always
+# means the Kingo stack itself is running but no engine CLI can see it (e.g.
+# the other engine is temporarily unreachable) — moving ports would be exactly
+# wrong then. Deliberately no count in the text: the guides quote this string.
 all_busy_hint() {
   echo "ALL of Kingo's ports are busy at once — that usually means the Kingo stack"
   echo "is ALREADY RUNNING (possibly under your other container engine)."
   echo "Check with './kingo status' — if services show 'up', everything already works."
 }
 
+dup_ports() { # echoes host ports assigned twice (stale .env.local overrides)
+  local entry name suffix port rest seen=" "
+  for entry in "${SERVICE_TABLE[@]}"; do
+    IFS='|' read -r name suffix port rest <<<"$entry"
+    case "$seen" in *" $port "*) printf ' %s' "$port" ;; esac
+    seen="${seen}${port} "
+  done
+}
+
 # Fail BEFORE compose prints a cryptic "address already in use" mid-boot.
-# The port probes are pure bash (milliseconds); the compose subprocess is only
-# consulted once a port is actually busy, so the everyday all-free start never
-# pays for it.
 preflight_ports() {
+  local dups; dups="$(dup_ports)"
+  [ -z "$dups" ] || die "two services are configured onto the same host port:${dups} — fix the KINGO_PORT_* lines in .env.local"
   count_busy_ports
-  [ "$BUSY_N" = 0 ] && return 0
-  stack_running && return 0   # the busy ports are our own containers
-  if [ "$BUSY_N" = "${#SERVICE_TABLE[@]}" ]; then
+  if [ "$OTHER_ENGINE_N" -gt 0 ]; then
+    other_engine_hint
+    die "not starting a second copy"
+  fi
+  [ "$FOREIGN_N" = 0 ] && return 0   # all free, or busy only by our own containers
+  if [ "$FOREIGN_N" = "${#SERVICE_TABLE[@]}" ]; then
     all_busy_hint
     die "not starting a second copy"
   fi
   echo "Other software on this machine is already using ports Kingo needs:"
-  printf '%s' "$BUSY_LIST"
+  printf '%s' "$FOREIGN_LIST"
   echo
   echo "Easy fix: run  ./kingo fixports  — it moves Kingo to free ports"
   echo "automatically (your other software is untouched) — then run './kingo up' again."
@@ -324,15 +416,22 @@ preflight_ports() {
 
 cmd_fixports() {
   select_engine
+  count_busy_ports
   # The setup scripts run this unconditionally, so a running stack is a
   # friendly no-op ("safe to re-run"), not an error.
-  if stack_running; then
-    echo "The Kingo stack is running — its ports are in use by Kingo itself; nothing to fix."
+  if [ "$OTHER_ENGINE_N" -gt 0 ]; then
+    other_engine_hint
+    die "refusing to remap ports the Kingo stack itself is using"
+  fi
+  if [ "$FOREIGN_N" = 0 ]; then
+    if [ "$OURS_N" -gt 0 ]; then
+      echo "The Kingo stack is running — its ports are in use by Kingo itself; nothing to fix."
+    else
+      echo "All of Kingo's ports are free — nothing to change."
+    fi
     return 0
   fi
-  count_busy_ports
-  [ "$BUSY_N" = 0 ] && { echo "All of Kingo's ports are free — nothing to change."; return 0; }
-  if [ "$BUSY_N" = "${#SERVICE_TABLE[@]}" ]; then
+  if [ "$FOREIGN_N" = "${#SERVICE_TABLE[@]}" ]; then
     all_busy_hint
     die "refusing to remap all ports"
   fi
@@ -344,7 +443,9 @@ cmd_fixports() {
   done
   for entry in "${SERVICE_TABLE[@]}"; do
     IFS='|' read -r name suffix port rest <<<"$entry"
-    port_in_use "$port" || continue
+    # Move ONLY foreign-held ports — a port busy under our own (possibly
+    # partial) stack is exactly where the service should stay.
+    [[ "$FOREIGN_PORTS" == *" $port "* ]] || continue
     newport=$((port + 1))
     while port_in_use "$newport" || [[ "$used" == *" $newport "* ]]; do
       newport=$((newport + 1))
@@ -362,6 +463,39 @@ cmd_fixports() {
   echo "Now run: ./kingo up"
 }
 
+# ── pull: per-image download with retries ────────────────────────────────────
+# `compose pull` can sit on one stuck layer forever with zero output (this bit
+# CI for hours). Pulling per image shows progress, attributes a hang to a
+# single image, and gives each one 3 tries. Used by the setup scripts,
+# `kingo update`, and CI.
+pull_retry() { # $1: image ref — up to 3 attempts
+  local i
+  for i in 1 2 3; do
+    if $ENGINE pull "$1"; then return 0; fi
+    if [ "$i" -lt 3 ]; then warn "pull failed (attempt $i/3): $1 — retrying ..."; fi
+  done
+  return 1
+}
+
+cmd_pull() {
+  select_engine; ensure_ready
+  local imgs img ref
+  # All pullable images: everything in compose.yml except the locally-built
+  # jupyterhub tag (*:local), plus that build's BASE image from its Dockerfile.
+  imgs="$( { compose config --images 2>/dev/null | grep -v ':local$'; \
+             awk '/^FROM/{print $2; exit}' jupyterhub/Dockerfile; } || true)"
+  [ -n "$imgs" ] || die "could not read the image list from compose.yml"
+  for img in $imgs; do
+    case "$img" in
+      *.*/*) ref="$img" ;;            # registry is explicit (quay.io/…)
+      *)     ref="docker.io/$img" ;;  # short name — qualify it for podman
+    esac
+    echo "== pulling $ref"
+    pull_retry "$ref" || die "could not pull $ref after 3 attempts — check your internet connection, then re-run: ./kingo pull"
+  done
+  echo "All images pulled."
+}
+
 # ── doctor: preflight before setup ───────────────────────────────────────────
 cmd_doctor() {
   select_engine
@@ -377,13 +511,25 @@ cmd_doctor() {
     [ "$ENGINE" = docker ] && echo "       → start Docker Desktop and wait until it says 'running'."
   fi
 
-  # Memory (podman machine) — the stack needs ~6 GB.
-  if [ "$ENGINE" = podman ]; then
-    local mem
-    mem=$(podman machine inspect --format '{{.Resources.Memory}}' 2>/dev/null | head -1 || true)
-    if [ -n "${mem:-}" ]; then
-      if [ "$mem" -ge 5500 ] 2>/dev/null; then echo "  [ok] Podman machine memory: ${mem} MB"
-      else echo "  [!!] Podman machine memory ${mem} MB is low (need ~6 GB). Re-run setup, or: podman machine set --memory 6144"; fi
+  # kingo's health probes are curl; without it every service reads DOWN.
+  command -v curl >/dev/null 2>&1 \
+    || echo "  [!!] curl is not installed — kingo cannot check service health. Linux/WSL: sudo apt-get install -y curl"
+
+  # Memory — the stack needs ~6 GB wherever the containers actually run.
+  local mem=""
+  case "$ENGINE" in
+    podman) mem=$(podman machine inspect --format '{{.Resources.Memory}}' 2>/dev/null | head -1 || true) ;;             # MB
+    docker) mem=$(docker info --format '{{.MemTotal}}' 2>/dev/null || true)
+            case "$mem" in ''|*[!0-9]*) mem="" ;; *) mem=$((mem / 1048576)) ;; esac ;;  # bytes → MB
+  esac
+  case "$mem" in ''|*[!0-9]*) mem="" ;; esac
+  if [ -n "$mem" ] && [ "$mem" -gt 0 ]; then
+    if [ "$mem" -ge 5500 ]; then
+      echo "  [ok] $ENGINE memory: ${mem} MB"
+    else
+      echo "  [!!] $ENGINE has only ${mem} MB (the stack needs ~6 GB)."
+      if [ "$ENGINE" = podman ]; then echo "       → podman machine set --memory 6144   (or re-run setup)"
+      else echo "       → Docker Desktop → Settings → Resources → raise Memory to 6 GB+."; fi
     fi
   fi
 
@@ -397,22 +543,27 @@ cmd_doctor() {
   # Both engines installed? Tell the student which one is in charge.
   if [ "$ENGINE" = podman ] && command -v docker >/dev/null 2>&1; then
     echo "  [ok] Docker is also installed; kingo is using Podman (both work fine)."
-    echo "       To switch permanently:  echo KINGO_ENGINE=docker >> .env.local"
+    echo "       To switch: run './kingo down', then 'echo KINGO_ENGINE=docker >> .env.local', then './kingo up'."
   fi
 
-  # Port collisions (only meaningful when the stack is down).
-  if stack_running; then
+  # Two services on the same host port (stale .env.local override)?
+  local dups; dups="$(dup_ports)"
+  [ -z "$dups" ] || echo "  [!!] two services are configured onto the same host port:${dups} — fix the KINGO_PORT_* lines in .env.local"
+
+  # Port collisions, attributed per port.
+  count_busy_ports
+  if [ "$OTHER_ENGINE_N" -gt 0 ]; then
+    other_engine_hint | sed -e '1s/^/  [??] /' -e '2,$s/^/       /'
+  elif [ "$FOREIGN_N" = "${#SERVICE_TABLE[@]}" ]; then
+    all_busy_hint | sed -e '1s/^/  [??] /' -e '2,$s/^/       /'
+  elif [ "$FOREIGN_N" -gt 0 ]; then
+    printf '%s' "$FOREIGN_LIST" | sed 's/^  - /  [!!] busy: /'
+    echo "       → run './kingo fixports' to move Kingo to free ports automatically."
+    [ "$OURS_N" -gt 0 ] && echo "  [ok] the other busy ports belong to the running Kingo stack itself."
+  elif [ "$OURS_N" -gt 0 ]; then
     echo "  [ok] the Kingo stack is running — its ports are in use by kingo, not a collision."
   else
-    count_busy_ports
-    if [ "$BUSY_N" = "${#SERVICE_TABLE[@]}" ]; then
-      all_busy_hint | sed -e '1s/^/  [??] /' -e '2,$s/^/       /'
-    elif [ "$BUSY_N" -gt 0 ]; then
-      printf '%s' "$BUSY_LIST" | sed 's/^  - /  [!!] busy: /'
-      echo "       → run './kingo fixports' to move Kingo to free ports automatically."
-    else
-      echo "  [ok] all ${#SERVICE_TABLE[@]} host ports are free."
-    fi
+    echo "  [ok] all ${#SERVICE_TABLE[@]} host ports are free."
   fi
   echo "== done =="
 }
@@ -429,16 +580,28 @@ case "${1:-help}" in
   mcp)               cmd_mcp ;;
   logs)              select_engine; shift; compose logs --tail=100 -f "$@" ;;
   restart)           select_engine; ensure_ready; shift; compose restart "$@" ;;
+  pull)              cmd_pull ;;
   update)            select_engine; ensure_ready
-                     git pull --ff-only 2>/dev/null || true
-                     compose pull --ignore-buildable
+                     # ZIP installs (the documented Mac path) have no .git —
+                     # say so instead of silently skipping the class files.
+                     if [ -d .git ]; then
+                       git pull --ff-only 2>/dev/null || warn "git pull failed (no network?) — updating images only"
+                     else
+                       warn "this folder was installed from a ZIP (no git) — updating images only. For new class files, download the ZIP again (see the student guide)."
+                     fi
+                     cmd_pull
                      compose build
                      compose up -d
                      echo "Stack updated." ;;
   reset)             select_engine; ensure_ready
                      echo "This DELETES all data (databases, notebooks, workflows) and starts fresh."
                      read -r -p "Type 'yes' to continue: " a
-                     [ "$a" = "yes" ] && { compose down -v && cmd_up; } || echo "Cancelled." ;;
+                     if [ "$a" = "yes" ]; then
+                       compose down -v
+                       cmd_up
+                     else
+                       echo "Cancelled."
+                     fi ;;
   help|*)            cat <<'EOF'
 kingo — classroom stack helper (Podman or Docker, no VM)
 
@@ -453,6 +616,7 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo mcp           print the Jupyter MCP endpoint + bearer token
   kingo logs [svc]    follow logs (e.g. kingo logs langflow)
   kingo restart [svc] restart everything or one service
+  kingo pull          download all images, one at a time with retries
   kingo update        pull newer images, rebuild, restart
   kingo reset         wipe all data and start fresh (asks first)
 

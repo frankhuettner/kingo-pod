@@ -15,6 +15,17 @@ cd "$REPO_DIR"
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
+# ── 0. WSL sanity: containers need WSL 2, not WSL 1 ──────────────────────────
+# The guide's video installs WSL2, but a manual install on Windows 10 can
+# silently land on WSL1 — no real Linux kernel, so neither Podman nor Docker
+# can work there. Catch it here, with the actual fix.
+if grep -qi microsoft /proc/version 2>/dev/null && ! grep -q WSL2 /proc/version 2>/dev/null; then
+  echo "ERROR: this Ubuntu is running under WSL 1 — containers need WSL 2."
+  echo "Fix it in Windows PowerShell:   wsl --set-version Ubuntu 2"
+  echo "(takes a few minutes; then reopen Ubuntu and re-run this script)"
+  exit 1
+fi
+
 # Pin the chosen engine in gitignored .env.local, overwriting any stale pin
 # left by an earlier setup run on the other engine.
 pin_engine() {
@@ -23,13 +34,32 @@ pin_engine() {
   mv .env.local.tmp .env.local
 }
 
-# ── 1. Engine: use a running Docker as-is, else install Podman ───────────────
+# ── 1. Engine: keep a running stack's engine; else use a running Docker;
+#      else install Podman ───────────────────────────────────────────────────
 # Many students arrive with Docker Desktop from another course. That is fine:
 # the stack runs identically on it. Podman is only installed when no working
 # engine is present.
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 \
+#
+# Re-running setup must never flip a working install to the other engine —
+# that would strand the class data in the old engine's volumes. So if the
+# stack is already running somewhere, that engine wins, full stop.
+RUNNING_ENGINE=""
+for eng in docker podman; do
+  if command -v "$eng" >/dev/null 2>&1 \
+     && [ -n "$("$eng" ps --filter name=kingo- -q 2>/dev/null)" ]; then
+    RUNNING_ENGINE="$eng"; break
+  fi
+done
+
+if [ -n "$RUNNING_ENGINE" ]; then
+  say "The Kingo stack is already running under ${RUNNING_ENGINE} — keeping it. Nothing to install."
+  command -v curl >/dev/null 2>&1 || { $SUDO apt-get update; $SUDO apt-get install -y curl; }
+  pin_engine "$RUNNING_ENGINE"
+elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 \
    && docker compose version >/dev/null 2>&1; then
   say "Docker is already running — using it. Nothing to install."
+  # kingo's health checks need curl; the Docker path installs nothing else.
+  command -v curl >/dev/null 2>&1 || { $SUDO apt-get update; $SUDO apt-get install -y curl; }
   pin_engine docker
 else
   # Podman + rootless prerequisites + curl
@@ -66,6 +96,17 @@ else
   fi
   compose_v2_ok || { echo "ERROR: Compose v2 provider is not available on PATH"; exit 1; }
 
+  # Podman itself must be new enough to have the `podman compose` shim (4.7+).
+  # Ubuntu 22.04's apt ships 3.4 — that install "succeeds" and then every
+  # kingo command fails at the very end, so refuse HERE with the actual fix.
+  if ! podman compose version >/dev/null 2>&1; then
+    echo "ERROR: this Podman ($(podman --version)) has no 'compose' subcommand (needs Podman 4.7+)."
+    echo "Your Ubuntu is too old — 22.04 ships Podman 3.4. Easiest fix: use Ubuntu 24.04."
+    echo "On Windows: install the 'Ubuntu 24.04 LTS' app from the Microsoft Store, open it,"
+    echo "and run this script there (your Windows files are untouched)."
+    exit 1
+  fi
+
   # Native/rootless podman needs no 'podman machine' — on WSL, WSL2 IS the VM.
   say "Podman: $(podman --version)   Compose: v$(docker-compose version --short)"
 
@@ -76,7 +117,10 @@ fi
 say "Checking that no other software sits on Kingo's ports ..."
 ./kingo fixports
 
-say "Starting the Kingo stack (first run downloads ~10 GB — do this on home Wi-Fi) ..."
+say "Downloading the container images (~10 GB on the first run — the long part; do this on home Wi-Fi) ..."
+./kingo pull
+
+say "Starting the Kingo stack ..."
 ./kingo up
 
 say "Verifying the stack (smoke test) ..."

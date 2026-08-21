@@ -87,10 +87,10 @@ endpoint `http://localhost:4040/mcp` (header
 class notebook for you. `./kingo mcp` prints exactly this.
 
 **OpenCode** (AI coding in the terminal) runs natively on your Mac — it is not
-inside the stack. Install it once with:
+inside the stack. Install it once with (works whether or not you have Homebrew):
 
 ```
-brew install opencode
+curl -fsSL https://opencode.ai/install | bash
 ```
 
 then run `opencode` in any Terminal. The first run asks for an API key; change
@@ -120,9 +120,10 @@ what to do:
 
 | What you see | What to do |
 |---|---|
-| `port … is already used by other software` | Run `./kingo fixports`, then `./kingo up`. Kingo moves itself to free ports — your other software is untouched. Your addresses change; `./kingo credentials` shows the new ones. |
+| `Other software on this machine is already using ports Kingo needs` | Run `./kingo fixports`, then `./kingo up`. Kingo moves itself to free ports — your other software is untouched. Your addresses change; `./kingo credentials` shows the new ones. |
+| `The Kingo stack is ALREADY RUNNING under your other engine` | Nothing is broken — the stack is up under your other container engine. Follow the two commands the message prints. |
 | `ALL of Kingo's ports are busy` | The stack is most likely **already running** (possibly under your other engine). Run `./kingo status` — if services show `up`, you're done, nothing is wrong. |
-| I have Docker Desktop, but setup installed Podman | Docker wasn't running during setup. Both work — no need to change anything. To switch to Docker anyway: `echo KINGO_ENGINE=docker >> .env.local`, then `./kingo down` and `./kingo up`. |
+| I have Docker Desktop, but setup installed Podman | Docker wasn't running during setup. Both work — no need to change anything. To switch to Docker anyway: `./kingo down` (stops the Podman stack **first**), then `echo KINGO_ENGINE=docker >> .env.local`, then `./kingo up`. |
 | `Podman has no ready machine` / Podman won't start | Run `podman machine start`, then `./kingo up`. Still broken: `podman machine stop`, then `podman machine start`. |
 | `Docker is installed but not running` | Open the Docker Desktop app, wait until it says "running", try again. |
 | Mac feels slow / fans spin (8 GB Macs) | The stack needs ~6 GB RAM while running. Close other apps and browser tabs, or `./kingo down` when not using it. |

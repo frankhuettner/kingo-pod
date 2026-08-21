@@ -45,6 +45,7 @@ kingo fixports    move Kingo off ports taken by other software (e.g. your
                   own Postgres on 5432) — saved to gitignored .env.local
 kingo credentials print all URLs and logins
 kingo mcp         print the Jupyter MCP endpoint + bearer token
+kingo pull        download all images, one at a time with retries
 kingo update      pull newer images, rebuild, restart
 kingo reset       wipe all data and start fresh (asks first)
 ```
