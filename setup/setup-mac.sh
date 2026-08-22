@@ -63,9 +63,10 @@ else
   fi
   if ! command -v brew >/dev/null 2>&1; then
     echo "ERROR: Homebrew is not installed (and no running Docker Desktop was found)."
-    echo "Install it first — that is its own step in the Mac guide:"
-    echo '    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
-    echo "then open a NEW Terminal window and re-run this script."
+    echo "Install it first — that is its own step in the Mac guide: open"
+    echo "    https://brew.sh"
+    echo "and run the install command shown there. Then open a NEW Terminal"
+    echo "window and re-run this script."
     exit 1
   fi
 

@@ -32,14 +32,11 @@ and if **Docker Desktop is running**, the script installs nothing at all.
 Everyone else:
 
 1. Open the **Terminal** app (press ⌘ Space, type *Terminal*, press Enter).
-2. Paste this — it is the official installer from [brew.sh](https://brew.sh) —
-   and press **Enter**. It asks for your **Mac password** (typing stays
-   invisible — that's normal) and takes a few minutes:
-
-   ```
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-   ```
-
+2. Open **<https://brew.sh>** in your browser. Right under "Install Homebrew"
+   the page shows one long install command with a copy button — copy it,
+   paste it into Terminal, and press **Enter**. It asks for your **Mac
+   password** (typing stays invisible — that's normal) and takes a few
+   minutes.
 3. If the installer ends by printing **"Next steps"** with commands to run,
    copy, paste, and run those too (they put `brew` on your PATH).
 
