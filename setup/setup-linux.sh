@@ -90,12 +90,20 @@ else
   compose_v2_ok() { docker-compose version --short 2>/dev/null | grep -qE '^v?2\.'; }
   if ! compose_v2_ok; then
     say "Installing the Compose v2 provider ..."
-    # A broken file from an earlier failed attempt shadows /usr/bin on PATH
-    # and makes every re-run fail the same way — clear it.
+    # A broken file from an earlier failed attempt sits exactly where the
+    # link below goes and makes every re-run fail the same way — clear it.
     if [ -e /usr/local/bin/docker-compose ]; then
       $SUDO rm -f /usr/local/bin/docker-compose
     fi
     $SUDO apt-get install -y docker-compose-v2 >/dev/null 2>&1 || true
+    # The package ships ONLY the docker CLI plugin under /usr/libexec — no
+    # command on PATH. podman's compose shim and kingo both look for
+    # `docker-compose` on PATH, so link it (the plugin binary runs fine
+    # standalone; it is the same binary GitHub releases ship).
+    if ! command -v docker-compose >/dev/null 2>&1 \
+       && [ -x /usr/libexec/docker/cli-plugins/docker-compose ]; then
+      $SUDO ln -sf /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
+    fi
   fi
   if ! compose_v2_ok; then
     # Older Ubuntu without the docker-compose-v2 package: static binary.
@@ -132,6 +140,14 @@ else
   say "Podman: $(podman --version)   Compose: v$(docker-compose version --short)"
 
   pin_engine podman
+fi
+
+# CI hook: stop after the engine + compose install. Lets ci.yml run this real
+# code on stock Ubuntu 24.04 (the field failed exactly here, 2026-08) without
+# pulling the 10 GB stack.
+if [ -n "${KINGO_SETUP_ENGINE_ONLY:-}" ]; then
+  say "KINGO_SETUP_ENGINE_ONLY set — engine and compose are ready, stopping here."
+  exit 0
 fi
 
 # ── 2. Ports, then images (USB bundle or download), then up and verify ───────

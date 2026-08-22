@@ -19,6 +19,26 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # The stack jobs below install their own engine + compose — they never
+  # execute setup-linux.sh. That is how a broken compose install once shipped
+  # and was first caught by a student in the field (2026-08). This job runs
+  # the REAL script's engine+compose section on a stock Ubuntu 24.04
+  # container — the same starting point as a WSL student's fresh Ubuntu.
+  setup-script:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup-linux.sh engine + compose install on stock Ubuntu 24.04
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            -e KINGO_SETUP_ENGINE_ONLY=1 -e DEBIAN_FRONTEND=noninteractive \
+            ubuntu:24.04 bash -c '
+              bash setup/setup-linux.sh
+              docker-compose version --short | grep -Eq "^v?2\." \
+                && echo "compose v2 OK: $(docker-compose version --short)"
+            '
+
   stack:
     runs-on: ubuntu-latest
     # The GitHub default is 360 min — a hang should fail fast with diagnostics
