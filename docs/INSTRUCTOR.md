@@ -79,7 +79,12 @@ class regardless of engine.
   4-minute video tutorial in the guide (Windows features → Virtual Machine
   Platform + WSL, reboot, Ubuntu from the Microsoft Store), then run
   `bash setup/setup-linux.sh` **inside Ubuntu**, which installs Podman + the
-  Compose v2 provider and brings the stack up. This means Windows uses the
+  Compose v2 provider and brings the stack up. On some Windows versions the
+  Store route alone doesn't produce a working Ubuntu — the guides carry the
+  fallback (`wsl --install` in Command Prompt installs WSL2 + Ubuntu in one
+  go), reported by a student 2026-08. Compose v2 comes from apt
+  (`docker-compose-v2`), not GitHub — a campus network was seen serving a
+  broken file for the GitHub release download while `git clone` worked fine. This means Windows uses the
   exact same Linux runtime and the same bash `kingo` CLI as Mac/Linux/CI —
   one code path, no PowerShell port. (Deviates from the plan's `podman
   machine`-on-Windows sketch, which was flagged for Phase-2 verification.)

@@ -26,6 +26,18 @@ It walks you through the three things Windows needs, in order:
 
 The video ends with the first launch of Ubuntu — that's Step 2, below.
 
+> **No Ubuntu after the restart, or it opens and shows an error?** On some
+> Windows versions the Store route isn't enough. Open **Command Prompt** from
+> the Start menu and run:
+>
+> ```
+> wsl --install
+> ```
+>
+> This installs WSL2 **and** Ubuntu in one go — no Store needed. Approve the
+> admin prompt if one appears, restart again if it asks, then continue with
+> Step 2.
+
 ## Step 2 — First launch of Ubuntu
 
 Open the **Ubuntu** app from the Start menu. The first time, it asks you to

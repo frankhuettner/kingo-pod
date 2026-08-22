@@ -46,6 +46,18 @@ It walks you through the three things Windows needs, in order:
 
 The video ends with the first launch of Ubuntu — that's our Step 2, below.
 
+> **No Ubuntu after the restart, or it opens and shows an error?** On some
+> Windows versions the Store route isn't enough. Open **Command Prompt** from
+> the Start menu and run:
+>
+> ```
+> wsl --install
+> ```
+>
+> This installs WSL2 **and** Ubuntu in one go — no Store needed. Approve the
+> admin prompt if one appears, restart again if it asks, then continue with
+> Step 2.
+
 ## Step 2 — First launch of Ubuntu
 
 Open the **Ubuntu** app from the Start menu. The first time, it asks you to
@@ -160,6 +172,8 @@ the usual suspects and tells you what to do:
 | What you see | What to do |
 |---|---|
 | WSL won't enable / "Virtual Machine Platform" error | Virtualization is off in your PC's firmware. Restart, enter firmware setup (usually F2, F10, or Del during boot), enable **Virtualization** (Intel VT-x / AMD-V / "SVM"), save, run Step 1 again. |
+| No Ubuntu after the restart, or Ubuntu opens and errors (`WslRegisterDistribution failed`) | In Command Prompt run `wsl --install` — it installs WSL2 **and** Ubuntu in one go, no Store needed. Restart if asked, then continue at Step 2. |
+| `ERROR: could not install a working Compose v2` | Your network is blocking a download. Re-run the setup script on a different network (phone hotspot works), or run the command the error prints and screenshot what it says. |
 | `this Ubuntu is running under WSL 1` | In Windows PowerShell run `wsl --set-version Ubuntu 2` (takes a few minutes), then reopen Ubuntu and re-run the setup script. |
 | `Other software on this machine is already using ports Kingo needs` | Run `./kingo fixports`, then `./kingo up`. Kingo moves itself to free ports — your other software is untouched. Your addresses change; `./kingo credentials` shows the new ones. |
 | `The Kingo stack is ALREADY RUNNING under your other engine` | Nothing is broken — the stack is up under your other container engine. Follow the two commands the message prints. |

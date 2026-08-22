@@ -80,12 +80,26 @@ else
     podman system migrate 2>/dev/null || true
   fi
 
-  # Compose v2 provider binary. Must be Compose v2 — NOT the apt
-  # 'docker-compose' package (the old Python v1) and NOT podman-compose
-  # (breaks depends_on: service_healthy, plan §4).
+  # Compose v2 provider binary. Must be Compose v2 — NOT the old Python
+  # 'docker-compose' v1 and NOT podman-compose (breaks depends_on:
+  # service_healthy, plan §4). Ubuntu 24.04's 'docker-compose-v2' package IS
+  # v2, and comes over the same apt channel as Podman itself — so it works on
+  # networks that mangle GitHub release downloads (a student's campus network
+  # served a non-runnable file with HTTP 200, 2026-08; git clone was fine,
+  # only the release CDN was intercepted). apt first, GitHub as fallback.
   compose_v2_ok() { docker-compose version --short 2>/dev/null | grep -qE '^v?2\.'; }
   if ! compose_v2_ok; then
-    say "Installing the Compose v2 provider binary ..."
+    say "Installing the Compose v2 provider ..."
+    # A broken file from an earlier failed attempt shadows /usr/bin on PATH
+    # and makes every re-run fail the same way — clear it.
+    if [ -e /usr/local/bin/docker-compose ]; then
+      $SUDO rm -f /usr/local/bin/docker-compose
+    fi
+    $SUDO apt-get install -y docker-compose-v2 >/dev/null 2>&1 || true
+  fi
+  if ! compose_v2_ok; then
+    # Older Ubuntu without the docker-compose-v2 package: static binary.
+    say "Downloading the Compose v2 binary from GitHub ..."
     arch="$(uname -m)"   # x86_64 or aarch64
     tag="$(curl -fsSL https://api.github.com/repos/docker/compose/releases/latest \
            | grep -o '"tag_name":[^,]*' | cut -d'"' -f4 || true)"
@@ -94,7 +108,14 @@ else
       -o /usr/local/bin/docker-compose
     $SUDO chmod +x /usr/local/bin/docker-compose
   fi
-  compose_v2_ok || { echo "ERROR: Compose v2 provider is not available on PATH"; exit 1; }
+  compose_v2_ok || {
+    echo "ERROR: could not install a working Compose v2 (docker-compose)."
+    echo "Run the package install by hand to see why it fails:"
+    echo "    sudo apt-get install -y docker-compose-v2"
+    echo "then re-run this script. (If apt says the package does not exist,"
+    echo "your Ubuntu is too old for this stack — use Ubuntu 24.04.)"
+    exit 1
+  }
 
   # Podman itself must be new enough to have the `podman compose` shim (4.7+).
   # Ubuntu 22.04's apt ships 3.4 — that install "succeeds" and then every
