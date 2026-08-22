@@ -76,6 +76,22 @@ ensure_ready() {
       # this stack (plan §4).
       command -v docker-compose >/dev/null 2>&1 \
         || die "the docker-compose provider binary is missing — podman would fall back to podman-compose, which breaks this stack. Mac: brew install docker-compose. Linux/WSL: re-run setup/setup-linux.sh."
+      # Rootless podman's Docker-compat API socket is a systemd USER unit and
+      # is NOT enabled by default — the compose provider is a Docker client
+      # and dies without it ("Cannot connect to the Docker daemon"; first
+      # real WSL run, 2026-08-22). Self-heal by starting it. Macs are
+      # unaffected (the podman machine serves the socket).
+      if [ "$(uname -s)" = "Linux" ]; then
+        if [ -d /run/systemd/system ]; then
+          if ! systemctl --user is-active --quiet podman.socket 2>/dev/null; then
+            systemctl --user enable --now podman.socket >/dev/null 2>&1 || true
+            systemctl --user is-active --quiet podman.socket 2>/dev/null \
+              || die "podman's API socket did not start. Look at: systemctl --user status podman.socket — then retry, or re-run setup/setup-linux.sh."
+          fi
+        elif grep -qi microsoft /proc/version 2>/dev/null; then
+          die "this WSL Ubuntu runs without systemd, which rootless podman needs. In Windows PowerShell run 'wsl --update'; make sure /etc/wsl.conf contains '[boot]' and 'systemd=true'; then 'wsl --shutdown', reopen Ubuntu, and retry."
+        fi
+      fi
       podman info >/dev/null 2>&1 && return 0
       if podman machine list -q 2>/dev/null | grep -q .; then
         echo "Starting the Podman machine (this takes a few seconds) ..."

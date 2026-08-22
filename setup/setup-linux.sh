@@ -136,6 +136,33 @@ else
     exit 1
   fi
 
+  # Rootless podman's Docker-compatible API socket is a systemd USER unit
+  # and is NOT enabled by default — but the compose provider (docker-compose)
+  # is a Docker client and cannot start the stack without it. The first real
+  # WSL run died exactly here ("Cannot connect to the Docker daemon",
+  # 2026-08-22). Linger keeps the user manager (and with it this socket +
+  # healthcheck timers) alive even with no terminal open.
+  if [ -d /run/systemd/system ]; then
+    $SUDO loginctl enable-linger "$(id -un)" 2>/dev/null || true
+    if ! systemctl --user is-active --quiet podman.socket 2>/dev/null; then
+      say "Enabling the Podman API socket (the compose provider needs it) ..."
+      systemctl --user enable --now podman.socket || true
+    fi
+    systemctl --user is-active --quiet podman.socket || {
+      echo "ERROR: the Podman user socket (podman.socket) did not start."
+      echo "Look at:   systemctl --user status podman.socket"
+      exit 1
+    }
+  elif grep -qi microsoft /proc/version 2>/dev/null; then
+    echo "ERROR: this WSL Ubuntu is running without systemd, which Podman needs."
+    echo "Fix it in Windows PowerShell:   wsl --update"
+    echo "then inside Ubuntu make sure /etc/wsl.conf contains these two lines:"
+    echo "    [boot]"
+    echo "    systemd=true"
+    echo "then in PowerShell:   wsl --shutdown   — reopen Ubuntu and re-run this script."
+    exit 1
+  fi
+
   # Native/rootless podman needs no 'podman machine' — on WSL, WSL2 IS the VM.
   say "Podman: $(podman --version)   Compose: v$(docker-compose version --short)"
 
