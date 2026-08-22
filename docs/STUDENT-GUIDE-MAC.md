@@ -15,14 +15,14 @@ script checks itself and tells you if something needs fixing.
   **15–45 minutes** depending on your internet, mostly unattended.
 - **Slow or no internet at home?** Your instructor can bring the images on a
   **USB stick** to class — then follow the
-  [Mac USB guide](STUDENT-GUIDE-MAC-USB.md) instead of Step 2 below.
+  [Mac USB guide](STUDENT-GUIDE-MAC-USB.md) instead of Steps 2–3 below.
 
 > **Already have Docker Desktop?** (e.g. from another course) — perfect, keep
-> it. Just make sure Docker Desktop is **running** before Step 2. The setup
-> script detects it and uses it, and installs nothing new. Your existing
-> containers, images, and settings are not touched. Everyone else gets
-> **Podman** installed instead — same stack, same commands, no difference in
-> class. (Curious why Podman? See the [FAQ](#faq).)
+> it. Just make sure Docker Desktop is **running** before Step 3, and you can
+> skip Step 2 (Homebrew). The setup script detects Docker and uses it, and
+> installs nothing new. Your existing containers, images, and settings are not
+> touched. Everyone else gets **Podman** installed instead — same stack, same
+> commands, no difference in class. (Curious why Podman? See the [FAQ](#faq).)
 
 ## Step 1 — Get the files
 
@@ -31,9 +31,30 @@ script checks itself and tells you if something needs fixing.
 2. Double-click the ZIP to unzip it. You get a folder called **`kingo-pod-main`**.
 3. Move that folder somewhere easy, e.g. your **Home** folder or **Documents**.
 
-## Step 2 — Run the setup script
+## Step 2 — Install Homebrew
+
+Homebrew is the Mac's standard software installer; the setup script uses it
+to install the container engine. **Two groups skip this step**: if typing
+`brew --version` in Terminal shows a version number, you already have it —
+and if **Docker Desktop is running**, the script installs nothing at all.
+
+Everyone else:
 
 1. Open the **Terminal** app (press ⌘ Space, type *Terminal*, press Enter).
+2. Paste this — it is the official installer from [brew.sh](https://brew.sh) —
+   and press **Enter**. It asks for your **Mac password** (typing stays
+   invisible — that's normal) and takes a few minutes:
+
+   ```
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+
+3. If the installer ends by printing **"Next steps"** with commands to run,
+   copy, paste, and run those too (they put `brew` on your PATH).
+
+## Step 3 — Run the setup script
+
+1. Open a **new** Terminal window (⌘ N — so it picks up Homebrew).
 2. Type `cd ` (with a space after it), then **drag the `kingo-pod-main`
    folder** from Finder onto the Terminal window, and press **Enter**.
 3. Type this and press **Enter**:
@@ -45,8 +66,7 @@ script checks itself and tells you if something needs fixing.
 The script does four things, in order, and says so as it goes:
 
 1. **Picks a container engine** — uses Docker Desktop if it's already running,
-   otherwise installs Podman (a free engine). May ask for your Mac password
-   once (that's Homebrew — normal).
+   otherwise installs Podman (a free engine) via Homebrew.
 2. **Checks your ports** — if other software on your Mac already uses a port
    the class needs (for example your own PostgreSQL on 5432), it automatically
    moves Kingo to a free port and tells you.
@@ -60,11 +80,11 @@ just run the same command again — it is safe to re-run and skips what's done.
 > [Mac USB guide](STUDENT-GUIDE-MAC-USB.md) instead — same result, but the
 > 10 GB of images come from the stick.
 
-## Step 3 — Did it work?
+## Step 4 — Did it work?
 
 You know you're done when the script prints **`SMOKE OK`** followed by a table
 of web addresses. **That printed table is the truth for *your* Mac** — if the
-script moved a port in Step 2, your address differs from the default table
+script moved a port in Step 3, your address differs from the default table
 below. You can reprint your table any time:
 
 ```
@@ -74,9 +94,9 @@ below. You can reprint your table any time:
 If the script ended with an ERROR instead, go to
 [If something breaks](#if-something-breaks).
 
-## Step 4 — Open your services
+## Step 5 — Open your services
 
-Default addresses (yours may differ — see Step 3). Open them in Safari or Chrome:
+Default addresses (yours may differ — see Step 4). Open them in Safari or Chrome:
 
 | Service | Address | Login |
 |---|---|---|
@@ -108,7 +128,7 @@ it anytime with `opencode auth login`.
 ## Everyday use
 
 Open Terminal in the `kingo-pod-main` folder (the `cd` + drag trick from
-Step 2) and use:
+Step 3) and use:
 
 ```
 ./kingo up            # start everything (your data stays between runs)
@@ -129,6 +149,7 @@ what to do:
 
 | What you see | What to do |
 |---|---|
+| `ERROR: Homebrew is not installed` | Do [Step 2](#step-2--install-homebrew), then re-run the setup script in a **new** Terminal window. |
 | `Other software on this machine is already using ports Kingo needs` | Run `./kingo fixports`, then `./kingo up`. Kingo moves itself to free ports — your other software is untouched. Your addresses change; `./kingo credentials` shows the new ones. |
 | `The Kingo stack is ALREADY RUNNING under your other engine` | Nothing is broken — the stack is up under your other container engine. Follow the two commands the message prints. |
 | `ALL of Kingo's ports are busy` | The stack is most likely **already running** (possibly under your other engine). Run `./kingo status` — if services show `up`, you're done, nothing is wrong. |

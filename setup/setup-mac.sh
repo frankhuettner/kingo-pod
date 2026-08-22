@@ -3,6 +3,8 @@
 # stops partway). Uses an already-running Docker Desktop as-is; otherwise
 # installs Podman + the docker-compose provider and creates a Podman machine
 # with enough resources. Either way it then brings the stack up and verifies.
+# Homebrew is a PREREQUISITE (its own step in the guide) — this script never
+# installs Homebrew itself.
 #
 #   bash setup/setup-mac.sh
 set -euo pipefail
@@ -50,19 +52,22 @@ else
     echo "     (Prefer Docker? Quit this script (Ctrl+C), start Docker Desktop, re-run.)"
   fi
 
-  # Homebrew
+  # Homebrew is a prerequisite, deliberately NOT installed here (Frank's
+  # call, 2026-08): its installer wants a password and curl-pipes a script —
+  # that belongs in the student's own hands as an explicit guide step, not
+  # buried mid-script. We only look in the standard locations, since a fresh
+  # install is often not on the shell's PATH yet.
   if ! command -v brew >/dev/null 2>&1; then
-    # Load brew if it is installed but not yet on PATH (fresh shells on Apple Si).
     eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null)" || true
     eval "$(/usr/local/bin/brew shellenv 2>/dev/null)" || true
   fi
   if ! command -v brew >/dev/null 2>&1; then
-    say "Installing Homebrew (you may be asked for your Mac password) ..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null)" || true
-    eval "$(/usr/local/bin/brew shellenv 2>/dev/null)" || true
+    echo "ERROR: Homebrew is not installed (and no running Docker Desktop was found)."
+    echo "Install it first — that is its own step in the Mac guide:"
+    echo '    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+    echo "then open a NEW Terminal window and re-run this script."
+    exit 1
   fi
-  command -v brew >/dev/null 2>&1 || { echo "ERROR: Homebrew still not on PATH. Open a new Terminal and re-run."; exit 1; }
 
   # Podman + compose provider
   say "Installing Podman and the docker-compose provider (skips what's present) ..."

@@ -72,9 +72,13 @@ class regardless of engine.
 
 ## Setup paths
 
-- **Mac**: `bash setup/setup-mac.sh` — installs Homebrew (if needed), Podman +
-  the docker-compose provider, a Podman machine (4 CPU / 5 GB / 40 GB), then
-  brings the stack up and smoke-tests it.
+- **Mac**: Homebrew first — it is its own step in the guides, deliberately
+  NOT done by the script (the installer wants a password and pipes a script
+  from the internet; that belongs in the student's own hands, visible and
+  attributable). The script refuses with instructions if brew is missing and
+  no Docker is running. Then `bash setup/setup-mac.sh` — installs Podman +
+  the docker-compose provider via brew, creates a Podman machine
+  (4 CPU / 5 GB / 40 GB), then brings the stack up and smoke-tests it.
 - **Windows**: no script — students enable WSL2 + Ubuntu by following the
   4-minute video tutorial in the guide (Windows features → Virtual Machine
   Platform + WSL, reboot, Ubuntu from the Microsoft Store), then run

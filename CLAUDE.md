@@ -53,8 +53,10 @@ It was ported from the old `kingo-vm` repo.
 - `kingo` (bash) — the ONE CLI, used on Mac, Linux, and Windows-in-WSL2, and
   CI-tested on Linux with both engines.
 - `jupyterhub/`, `cloudbeaver/`, `postgres-init/` — service config, ported as-is.
-- `setup/setup-mac.sh` (brew+podman machine), `setup/setup-linux.sh` (apt+podman,
-  also the Windows/WSL path) — both re-runnable. There is deliberately NO
+- `setup/setup-mac.sh` (brew podman + machine; Homebrew itself is a guide
+  prerequisite — the script deliberately refuses to install it, Frank's call),
+  `setup/setup-linux.sh` (apt+podman, also the Windows/WSL path) — both
+  re-runnable. There is deliberately NO
   Windows setup script: students enable WSL2 + Ubuntu by following the video
   tutorial in the guide (Frank's call — a .ps1 was tried and dropped as too
   complicated), then run setup-linux.sh inside Ubuntu.
