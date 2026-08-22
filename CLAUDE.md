@@ -46,6 +46,11 @@ It was ported from the old `kingo-vm` repo.
   explains the Podman default; do not make the guides Podman-only.
 - **Second boot cycle** in CI (up → down → up → smoke): catches first-run-only
   survivors. (plan §9.2)
+- **Student guides contain no multi-line command blocks**: students paste
+  whole blocks at once (sudo's password prompt then swallows the rest, or an
+  up/down menu executes in sequence). Every runnable block is ONE
+  `&&`-chained line with its own copy button; command *menus* are markdown
+  tables. ASCII diagrams are exempt.
 
 ## Layout
 

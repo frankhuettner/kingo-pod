@@ -69,9 +69,12 @@ commands ask for it later.
 
 ## Step 3 — Install and start the stack (inside Ubuntu)
 
-In the Ubuntu terminal, paste this command (right-click pastes) and press
-**Enter**. It is one long line — copy it with the copy button and paste it as
-one:
+> **Pasting into Ubuntu works differently than you are used to:** Ctrl+V
+> often does nothing there. **Right-click into the Ubuntu window** to paste
+> (on some machines it's Ctrl+Shift+V).
+
+Copy this command with its **copy button** (it is one long line), paste it
+into the Ubuntu terminal, and press **Enter**:
 
 ```bash
 sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cd kingo-pod && bash setup/setup-linux.sh
@@ -149,16 +152,29 @@ then run `opencode`. The first run asks for an API key; change it anytime with
 
 ## Everyday use
 
-Open the **Ubuntu** app, then:
+Open the **Ubuntu** app and go to the class folder:
 
 ```bash
 cd kingo-pod
-./kingo up            # start everything (your data stays between runs)
-./kingo down          # stop everything
-./kingo status        # which services are up?
-./kingo credentials   # my addresses + logins
-./kingo doctor        # something's wrong? start here
 ```
+
+then one command per job:
+
+| Command | What it does |
+|---|---|
+| `./kingo up` | start everything (your data stays between runs) |
+| `./kingo down` | stop everything |
+| `./kingo status` | which services are up? |
+| `./kingo credentials` | my addresses + logins |
+| `./kingo doctor` | something's wrong? start here |
+
+> **What if I just close the Ubuntu window?** Nothing breaks — the stack
+> keeps running in the background: your services stay reachable in the
+> browser, and it keeps using ~5 GB RAM. It stops only when you run
+> `./kingo down` or shut down / restart Windows. Your data survives all of
+> these — closed windows, `down`, reboots. After a reboot, open Ubuntu and
+> run `./kingo up` again. (Docker Desktop users: the stack may come back by
+> itself when Docker starts — `./kingo status` shows what's up.)
 
 ## If something breaks
 

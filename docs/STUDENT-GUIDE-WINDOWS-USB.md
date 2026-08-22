@@ -56,10 +56,13 @@ stick is `/mnt/e` (lowercase).
 
 ## Step 4 — Copy the images, pass the stick on, run setup
 
-Open the **Ubuntu** app from the Start menu and paste this command
-(right-click pastes), replacing `e` with your stick's drive letter, then
-press **Enter**. It is one long line — copy it with the copy button and
-paste it as one:
+> **Pasting into Ubuntu works differently than you are used to:** Ctrl+V
+> often does nothing there. **Right-click into the Ubuntu window** to paste
+> (on some machines it's Ctrl+Shift+V).
+
+Open the **Ubuntu** app from the Start menu. Copy this command with its
+**copy button** (it is one long line), paste it into Ubuntu, replace `e`
+with your stick's drive letter if it differs, and press **Enter**:
 
 ```bash
 sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cp /mnt/e/kingo-images.tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh

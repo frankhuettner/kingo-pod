@@ -125,15 +125,23 @@ it anytime with `opencode auth login`.
 ## Everyday use
 
 Open Terminal in the `kingo-pod-main` folder (the `cd` + drag trick from
-Step 3) and use:
+Step 3), then one command per job:
 
-```
-./kingo up            # start everything (your data stays between runs)
-./kingo down          # stop everything
-./kingo status        # which services are up?
-./kingo credentials   # my addresses + logins
-./kingo doctor        # something's wrong? start here
-```
+| Command | What it does |
+|---|---|
+| `./kingo up` | start everything (your data stays between runs) |
+| `./kingo down` | stop everything |
+| `./kingo status` | which services are up? |
+| `./kingo credentials` | my addresses + logins |
+| `./kingo doctor` | something's wrong? start here |
+
+> **What if I just close the Terminal window?** Nothing breaks — the stack
+> keeps running in the background: your services stay reachable in the
+> browser, and it keeps using ~5 GB RAM. It stops only when you run
+> `./kingo down` or shut down / restart the Mac. Your data survives all of
+> these — closed windows, `down`, reboots. After a reboot, run `./kingo up`
+> again. (Docker Desktop users: the stack may come back by itself when
+> Docker starts — `./kingo status` shows what's up.)
 
 ## If something breaks
 
