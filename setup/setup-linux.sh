@@ -181,18 +181,26 @@ fi
 say "Checking that no other software sits on Kingo's ports ..."
 ./kingo fixports
 
-# USB bundle: `setup-linux.sh /mnt/e/kingo-images.tar` loads the images from
-# the instructor's stick instead of downloading; a kingo-images.tar sitting in
-# this folder (copied from the stick) is picked up automatically. Either way
-# the pull below then skips everything that is already present.
+# USB bundle: `setup-linux.sh /mnt/e/kingo-images-<arch>.tar` loads the images
+# from the instructor's stick instead of downloading; a kingo-images-<arch>.tar
+# (or a legacy kingo-images.tar) sitting in this folder — copied from the stick
+# — is picked up automatically. Bundles are single-arch, so we look for THIS
+# machine's arch first; `kingo load` refuses a wrong-arch tar. Either way the
+# pull below then skips everything that is already present.
 BUNDLE="${1:-}"
-[ -z "$BUNDLE" ] && [ -f kingo-images.tar ] && BUNDLE="kingo-images.tar"
+if [ -z "$BUNDLE" ]; then
+  bundle_arch="$(dpkg --print-architecture 2>/dev/null || uname -m)"
+  for cand in "kingo-images-$bundle_arch.tar" kingo-images.tar; do
+    [ -f "$cand" ] && BUNDLE="$cand" && break
+  done
+fi
 if [ -n "$BUNDLE" ]; then
   say "Loading the container images from the USB bundle ($BUNDLE) — no big download needed ..."
   ./kingo load "$BUNDLE"
-  if [ "$BUNDLE" = "kingo-images.tar" ]; then
-    echo "    (you can now delete kingo-images.tar in this folder to free ~13 GB)"
-  fi
+  case "$BUNDLE" in
+    */*) : ;;  # loaded straight from a stick path — nothing to clean up here
+    *)   echo "    (you can now delete $BUNDLE in this folder to free ~13 GB)" ;;
+  esac
 fi
 
 say "Making sure all container images are present (~10 GB download on a first run without the USB bundle) ..."

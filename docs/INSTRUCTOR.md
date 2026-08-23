@@ -24,16 +24,29 @@ their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
 
 ## USB bundle (day-1 Wi-Fi saver)
 
-**Prepare at home**: `./kingo bundle` writes `kingo-images.tar` (13 GB,
+**Prepare at home**: `./kingo bundle` writes `kingo-images-<arch>.tar` (13 GB,
 measured 2026-08-21) with every image the stack needs, including the
-locally-built jupyterhub one. Copy that single file onto USB sticks —
-**32 GB, exFAT-formatted** so both Mac and Windows can read it (a 16 GB stick
-is borderline). Most sticks ship as FAT32, which refuses files over 4 GB
-("too large for the volume's format") — reformat first: Disk Utility (Mac) →
-Erase → format exFAT, scheme Master Boot Record; or Windows Explorer →
-right-click the stick → Format… → exFAT. Reformatting erases the stick.
-Bring **several sticks**: each student reads 13 GB from it, so one stick
-serializes the room. The USB guides therefore default to **copy, pass on,
+locally-built jupyterhub one. **A bundle is single-architecture** — `save`
+writes only the local image blobs, which match the machine that built them —
+so an arm64 tar will *not* run on an amd64 laptop, and vice versa. For a mixed
+class, build BOTH and put both on each stick:
+
+- On an **Apple-Silicon Mac**: `./kingo bundle` → `kingo-images-arm64.tar`
+  (for Mac students).
+- On an **amd64 machine** (a Windows PC's WSL2 Ubuntu, or any Intel/AMD Linux
+  box): `./kingo bundle` → `kingo-images-amd64.tar` (for Windows students).
+
+With both tars on one stick, students auto-pick the right one for their laptop
+(the setup script and the guides' copy commands select by architecture, and
+`kingo load` refuses a wrong-arch tar with a clear message). Format the stick
+**exFAT** so both Mac and Windows can read it, and size it for **two** 13 GB
+files: a **64 GB** stick is comfortable; a 32 GB one fits both only barely, so
+prefer one 32 GB stick per architecture if that is all you have. Most sticks
+ship as FAT32, which refuses files over 4 GB ("too large for the volume's
+format") — reformat first: Disk Utility (Mac) → Erase → format exFAT, scheme
+Master Boot Record; or Windows Explorer → right-click the stick → Format… →
+exFAT. Reformatting erases the stick. Bring **several sticks**: each student
+reads 13 GB from it, so one stick serializes the room. The USB guides therefore default to **copy, pass on,
 then install**: the student copies the tar into their `kingo-pod` folder
 (~5–10 min, the only step that needs the stick), hands the stick on, and the
 setup script picks the copy up automatically — installs overlap instead of
@@ -53,7 +66,8 @@ stick students at: [`STUDENT-GUIDE-MAC-USB.md`](STUDENT-GUIDE-MAC-USB.md) and
 - **Mac**: drag the tar from the stick into the `kingo-pod-main` folder in
   Finder, pass the stick on, then `bash setup/setup-mac.sh`.
 - **Already set up, only images missing**:
-  `./kingo load /path/to/kingo-images.tar && ./kingo up` does it directly.
+  `./kingo load /path/to/kingo-images-<arch>.tar && ./kingo up` does it
+  directly (`load` with no path auto-finds this machine's arch tar).
 
 **What still touches the internet** — the stick replaces only the 13 GB image
 download, which is the part classroom Wi-Fi can't take. A student starting

@@ -13,7 +13,9 @@ Setting up at home with good internet instead? Use the
 - An **Apple-Silicon Mac** (M1 or newer — any Mac from 2021 on).
 - **8 GB RAM** (16 GB recommended) and about **25 GB free disk space** during
   setup (you delete the 13 GB image file at the end, leaving ~20 GB in use).
-- The instructor's **USB stick** with `kingo-images.tar` on it.
+- The instructor's **USB stick**. It holds two image files;
+  `kingo-images-arm64.tar` is the one for your Mac (the other, `-amd64`, is
+  for Windows PCs).
 
 ## Step 1 — Get the files
 
@@ -43,7 +45,8 @@ Everyone else:
 ## Step 3 — Copy the images from the stick
 
 1. Plug in the USB stick and open it in **Finder**.
-2. **Drag `kingo-images.tar` into your `kingo-pod-main` folder.**
+2. **Drag `kingo-images-arm64.tar` into your `kingo-pod-main` folder.** (That
+   is the Mac file — ignore `kingo-images-amd64.tar`, which is for Windows.)
 
 The copy takes ~5–10 minutes and is the **only** part that needs the stick —
 hand it to the next student as soon as the copy is done. (The stick is only
@@ -60,7 +63,7 @@ read, never changed.)
    bash setup/setup-mac.sh
    ```
 
-The script finds the copied `kingo-images.tar` by itself: it picks a
+The script finds the copied `kingo-images-arm64.tar` by itself: it picks a
 container engine, checks your ports, **loads the images from the file
 (~3 minutes)** instead of downloading them, starts everything, and verifies
 it. It is safe to re-run if it stops partway — and a re-run does **not** need
@@ -74,7 +77,7 @@ table of addresses and logins. Reprint it any time with `./kingo credentials`.
 Now delete the copied image file — it has done its job, and this frees 13 GB:
 
 ```
-rm kingo-images.tar
+rm kingo-images-*.tar
 ```
 
 Everything else — the service addresses and logins, everyday commands
@@ -84,6 +87,6 @@ services")** on.
 
 > **Tight on disk space?** Skip the copy and load straight from the stick: in
 > Step 4, type `bash setup/setup-mac.sh ` (with a space at the end), **drag
-> the `kingo-images.tar` file from the stick** onto the Terminal window, and
+> the `kingo-images-arm64.tar` file from the stick** onto the Terminal window, and
 > press Enter. The stick must stay plugged in for the whole setup, and a
 > re-run needs it again.

@@ -541,8 +541,8 @@ cmd_pull() {
 }
 
 # ── bundle/load: offline image transfer (classroom Wi-Fi fallback) ───────────
-# The instructor runs `kingo bundle` at home and copies kingo-images.tar to
-# USB sticks; a student runs `kingo load <path-to-tar>` and `kingo up` then
+# The instructor runs `kingo bundle` at home and copies kingo-images-<arch>.tar
+# to USB sticks; a student runs `kingo load <path-to-tar>` and `kingo up` then
 # starts without downloading anything. The bundle includes the locally-BUILT
 # jupyterhub image (not just its base), so the build needs no network either.
 bundle_images() { # every image the stack needs, one per line
@@ -550,9 +550,22 @@ bundle_images() { # every image the stack needs, one per line
     awk '/^FROM/{print $2; exit}' jupyterhub/Dockerfile; } || true
 }
 
+# Docker-style architecture of THIS machine (amd64 / arm64). A bundle is
+# single-arch — `save` writes only the local image blobs, which match the host
+# — so an arm64 stick will NOT run on an amd64 laptop (and vice versa). Used to
+# name bundles and to guard `load`. Macs (Apple Silicon) = arm64; Windows PCs
+# and Intel Macs = amd64.
+host_docker_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64)  echo amd64 ;;
+    aarch64|arm64) echo arm64 ;;
+    *)             uname -m ;;
+  esac
+}
+
 cmd_bundle() {
   select_engine; ensure_ready
-  local out="${1:-kingo-images.tar}" imgs free_kb
+  local out="${1:-kingo-images-$(host_docker_arch).tar}" imgs free_kb
   free_kb=$(df -Pk "$(dirname "$out")" 2>/dev/null | awk 'NR==2{print $4}' || true)
   case "$free_kb" in
     ''|*[!0-9]*) : ;;
@@ -571,21 +584,45 @@ cmd_bundle() {
     *)      docker save -o "$out" $imgs ;;
   esac
   echo
-  echo "Bundle written: $out"
-  echo "Copy it onto USB sticks. A student loads it with:"
-  echo "  ./kingo load /path/to/kingo-images.tar     (then: ./kingo up)"
+  echo "Bundle written: $out   (architecture: $(host_docker_arch))"
+  echo
+  echo "This bundle runs ONLY on $(host_docker_arch) machines"
+  echo "  (arm64 = Apple-Silicon Macs;  amd64 = Windows PCs and Intel Macs)."
+  echo "For a class with both, build the OTHER arch on a matching machine and"
+  echo "put BOTH tars on the same stick — students auto-pick the one for their"
+  echo "laptop. A student loads this one with:"
+  echo "  ./kingo load /path/to/$out     (then: ./kingo up)"
 }
 
 cmd_load() {
   select_engine; ensure_ready
-  local in="${1:-kingo-images.tar}"
-  [ -f "$in" ] || die "bundle file not found: $in   (usage: ./kingo load /path/to/kingo-images.tar — on Windows/WSL a USB stick is under /mnt/<letter>/, on Mac under /Volumes/)"
+  local in="${1:-}"
+  if [ -z "$in" ]; then
+    for cand in "kingo-images-$(host_docker_arch).tar" kingo-images.tar; do
+      [ -f "$cand" ] && in="$cand" && break
+    done
+    [ -n "$in" ] || in="kingo-images-$(host_docker_arch).tar"
+  fi
+  [ -f "$in" ] || die "bundle file not found: $in   (usage: ./kingo load /path/to/kingo-images-<arch>.tar — on Windows/WSL a USB stick is under /mnt/<letter>/, on Mac under /Volumes/)"
   echo "Loading images from $in (takes a few minutes) ..."
   $ENGINE load -i "$in"
   # A bundle written by podman stores the local build as
   # localhost/kingo-jupyterhub:local — docker would not match compose's
   # kingo-jupyterhub:local and would try to rebuild (needs network). Retag.
   $ENGINE tag localhost/kingo-jupyterhub:local kingo-jupyterhub:local 2>/dev/null || true
+  # Bundles are single-arch: loading an amd64 stick on an arm64 machine (or the
+  # reverse) "succeeds" here but every service then dies with an exec-format
+  # error at `up`. Catch the wrong-stick case now, with a message that names the
+  # tar to use — on a one-stick-both-arches stick both are present.
+  local want got
+  want="$(host_docker_arch)"
+  got="$($ENGINE image inspect kingo-jupyterhub:local --format '{{.Architecture}}' 2>/dev/null || true)"
+  [ -n "$got" ] || got="$($ENGINE image inspect "$(compose config --images 2>/dev/null | head -n1)" --format '{{.Architecture}}' 2>/dev/null || true)"
+  if [ -n "$got" ] && [ "$got" != "$want" ]; then
+    die "this bundle holds $got images but your machine is $want — you loaded the wrong stick.
+   Use the $want tar instead:  kingo-images-$want.tar
+   (arm64 = Apple-Silicon Macs;  amd64 = Windows PCs and Intel Macs.)"
+  fi
   echo "Images loaded. Now run:  ./kingo up   (no download needed)"
 }
 
@@ -731,9 +768,11 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo logs [svc]    follow logs (e.g. kingo logs langflow)
   kingo restart [svc] restart everything or one service
   kingo pull          download all images, one at a time with retries
-  kingo bundle [file] save all images into one tar for USB sticks (instructor)
+  kingo bundle [file] save all images into one arch-stamped tar for USB sticks
+                      (instructor; default kingo-images-<arch>.tar)
   kingo load [file]   load images from a USB bundle — 'kingo up' then
-                      needs no download (classroom Wi-Fi fallback)
+                      needs no download (classroom Wi-Fi fallback); refuses a
+                      wrong-architecture bundle
   kingo update        pull newer images, rebuild, restart
   kingo reset         wipe all data and start fresh (asks first)
 

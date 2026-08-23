@@ -60,12 +60,17 @@ stick is `/mnt/e` (lowercase).
 > often does nothing there. **Right-click into the Ubuntu window** to paste
 > (on some machines it's Ctrl+Shift+V).
 
+The stick holds **two image files** — `kingo-images-amd64.tar` (for normal
+Windows PCs) and `kingo-images-arm64.tar` (for the rare ARM laptop). The
+command below copies the right one for *your* machine automatically — the
+`$(dpkg --print-architecture)` part just fills in your laptop's type.
+
 Open the **Ubuntu** app from the Start menu. Copy this command with its
 **copy button** (it is one long line), paste it into Ubuntu, replace `e`
 with your stick's drive letter if it differs, and press **Enter**:
 
 ```bash
-sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cp /mnt/e/kingo-images.tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
+sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cp /mnt/e/kingo-images-$(dpkg --print-architecture).tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
 ```
 
 The `cp` part (~5–10 minutes, right after the clone) is the **only** part
@@ -85,7 +90,7 @@ cd ~/kingo-pod && bash setup/setup-linux.sh
 > for the whole setup, and a re-run needs it again:
 >
 > ```bash
-> sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cd ~/kingo-pod && bash setup/setup-linux.sh /mnt/e/kingo-images.tar
+> sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cd ~/kingo-pod && bash setup/setup-linux.sh /mnt/e/kingo-images-$(dpkg --print-architecture).tar
 > ```
 
 ## If the stick isn't found
@@ -101,7 +106,7 @@ then redo the copy and setup (the clone already happened, so not the full
 Step 4 command):
 
 ```bash
-cp /mnt/e/kingo-images.tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
+cp /mnt/e/kingo-images-$(dpkg --print-architecture).tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
 ```
 
 Next time: plug the stick in before opening Ubuntu.
@@ -116,7 +121,7 @@ Open the services in your normal **Windows** browser — WSL2 forwards
 Now delete the copied image file — it has done its job, and this frees 13 GB:
 
 ```bash
-rm ~/kingo-pod/kingo-images.tar
+rm ~/kingo-pod/kingo-images-*.tar
 ```
 
 Everything else — the service addresses and logins, everyday commands

@@ -51,6 +51,15 @@ It was ported from the old `kingo-vm` repo.
   up/down menu executes in sequence). Every runnable block is ONE
   `&&`-chained line with its own copy button; command *menus* are markdown
   tables. ASCII diagrams are exempt.
+- **USB bundles are single-architecture and arch-stamped**
+  (`kingo-images-<arch>.tar`): `save` writes only the host's local image blobs,
+  so an arm64 tar exec-format-crashes at `up` on an amd64 laptop. `kingo bundle`
+  names by host arch; both setup scripts and the USB-guide copy commands
+  auto-pick the host-arch tar; `kingo load` inspects `kingo-jupyterhub:local`'s
+  arch and REFUSES a mismatch (else it loads fine, then crashes at `up`). A
+  mixed class needs BOTH tars on one stick — build amd64 on an amd64 box, arm64
+  on an Apple-Silicon Mac. Do NOT collapse back to a single `kingo-images.tar`
+  name (kept only as an auto-detect fallback).
 
 ## Layout
 
