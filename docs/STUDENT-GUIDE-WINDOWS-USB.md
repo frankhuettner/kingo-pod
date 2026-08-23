@@ -75,7 +75,10 @@ sudo apt update && sudo apt install -y git && git clone https://github.com/frank
 
 The `cp` part (~5–10 minutes, right after the clone) is the **only** part
 that needs the stick — as soon as the setup output starts, hand the stick to
-the next student. (The stick is only read, never changed.) The setup script
+the next student. **You do not need to "safely remove" it:** nothing is ever
+written to the stick, so once the setup output appears just unplug it and pass
+it on. (If Windows says the drive is *"still in use,"* that is only WSL reading
+it — it is safe to pull.) The setup script
 finds the copied file by itself: it installs the small tools over Wi-Fi,
 **loads the images from the copy (~3 minutes)** instead of downloading
 10 GB, starts everything, and verifies it. If it stops partway after the

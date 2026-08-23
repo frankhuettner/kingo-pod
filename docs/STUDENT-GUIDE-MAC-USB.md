@@ -49,8 +49,10 @@ Everyone else:
    is the Mac file — ignore `kingo-images-amd64.tar`, which is for Windows.)
 
 The copy takes ~5–10 minutes and is the **only** part that needs the stick —
-hand it to the next student as soon as the copy is done. (The stick is only
-read, never changed.)
+hand it to the next student as soon as the copy is done. **You do not need to
+"eject" it first:** nothing is ever written to the stick, so once the copy
+finishes just unplug it and pass it on. (If macOS says *"Disk not ejected
+properly,"* that is harmless here — nothing was being written to it.)
 
 ## Step 4 — Run the setup script
 
