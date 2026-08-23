@@ -92,13 +92,27 @@ ensure_ready() {
           die "this WSL Ubuntu runs without systemd, which rootless podman needs. In Windows PowerShell run 'wsl --update'; make sure /etc/wsl.conf contains '[boot]' and 'systemd=true'; then 'wsl --shutdown', reopen Ubuntu, and retry."
         fi
       fi
-      podman info >/dev/null 2>&1 && return 0
-      if podman machine list -q 2>/dev/null | grep -q .; then
-        echo "Starting the Podman machine (this takes a few seconds) ..."
-        podman machine start >/dev/null 2>&1 || true
+      if ! podman info >/dev/null 2>&1; then
+        if podman machine list -q 2>/dev/null | grep -q .; then
+          echo "Starting the Podman machine (this takes a few seconds) ..."
+          podman machine start >/dev/null 2>&1 || true
+        fi
+        podman info >/dev/null 2>&1 \
+          || die "Podman has no ready machine. Run the setup script once: setup/setup-mac.sh (Mac) or setup/setup-linux.sh (Linux, or inside WSL2 Ubuntu on Windows)."
       fi
-      podman info >/dev/null 2>&1 && return 0
-      die "Podman has no ready machine. Run the setup script once: setup/setup-mac.sh (Mac) or setup/setup-linux.sh (Linux, or inside WSL2 Ubuntu on Windows)."
+      # podman itself is reachable now. On macOS the machine ALSO exposes a
+      # Docker-API socket that the compose provider (docker-compose) talks to,
+      # and it can go stale after sleep/wake while podman stays fine — then
+      # every compose command dies with a raw "Cannot connect to the Docker
+      # daemon" deep inside the provider. Probe it here so the cause is clear.
+      # (Teardown doesn't reach this — cmd_down falls back to the engine CLI.)
+      if [ "$(uname -s)" = Darwin ] && ! podman compose ls >/dev/null 2>&1; then
+        die "the Podman machine is running, but the Docker-API socket that docker-compose needs is not responding (podman itself works — that's why 'podman ps' is fine).
+   Restore it with:   podman machine stop && podman machine start
+   Heads-up: that briefly stops ALL your podman containers, not only Kingo's.
+   If you only want the Kingo stack DOWN, that no longer needs this socket — just run:  ./kingo down"
+      fi
+      return 0
       ;;
     docker)
       docker info >/dev/null 2>&1 \
@@ -234,7 +248,32 @@ cmd_up() {
   echo "Ready. Run 'kingo credentials' for all URLs and logins."
 }
 
-cmd_down() { select_engine; compose down; }
+# Tear the stack down WITHOUT the compose provider, using the engine CLI's own
+# connection (which stays healthy on macOS even when the machine's Docker-API
+# socket that docker-compose needs goes stale after sleep/wake). Scoped to
+# Kingo's own containers + network by the compose project label (name prefix as
+# a fallback) — never touches other Docker/Podman workloads on the machine.
+cli_teardown() {
+  local ids
+  ids=$($ENGINE ps -aq --filter label=com.docker.compose.project=kingo 2>/dev/null)
+  [ -n "$ids" ] || ids=$($ENGINE ps -aq --filter name=kingo- 2>/dev/null)
+  if [ -n "$ids" ]; then
+    # shellcheck disable=SC2086
+    $ENGINE rm -f $ids >/dev/null 2>&1 || { $ENGINE stop $ids >/dev/null 2>&1; $ENGINE rm $ids >/dev/null 2>&1; }
+  fi
+  $ENGINE network rm kingo_default >/dev/null 2>&1 || true
+}
+
+cmd_down() {
+  select_engine
+  # Prefer a clean compose teardown. If the compose provider can't reach the
+  # engine socket (the sleep/wake staleness above), fall back to the CLI so the
+  # stack always comes down — a stuck-up stack was a real, confusing failure.
+  if compose down; then return 0; fi
+  warn "the compose provider could not reach the engine — taking the Kingo stack down directly instead (your other containers are untouched)."
+  cli_teardown
+  echo "Kingo stack stopped."
+}
 
 cmd_status() {
   select_engine
@@ -635,6 +674,18 @@ cmd_doctor() {
 
   if $ENGINE info >/dev/null 2>&1; then
     echo "  [ok] $ENGINE can run containers"
+    # macOS podman: the engine can be fine while the Docker-API socket the
+    # compose provider needs is stale (sleep/wake). Surface it — 'up' needs it,
+    # 'down' does not (it falls back to the engine CLI).
+    if [ "$ENGINE" = podman ] && [ "$(uname -s)" = Darwin ]; then
+      if podman compose ls >/dev/null 2>&1; then
+        echo "  [ok] the compose provider can reach the Podman machine"
+      else
+        echo "  [!!] the Podman machine runs, but the Docker-API socket docker-compose needs is not responding."
+        echo "       → 'up' can't work until you restart the machine: podman machine stop && podman machine start"
+        echo "         (that briefly stops ALL your podman containers). 'down' still works without it."
+      fi
+    fi
   else
     echo "  [!!] $ENGINE cannot run containers yet"
     [ "$ENGINE" = podman ] && echo "       → the Podman machine is not running. Run setup/setup-mac.sh (Mac) or setup/setup-linux.sh (Linux/WSL)."
