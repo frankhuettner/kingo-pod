@@ -70,7 +70,7 @@ Open the **Ubuntu** app from the Start menu. Copy this command with its
 with your stick's drive letter if it differs, and press **Enter**:
 
 ```bash
-sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cp /mnt/e/kingo-images-$(dpkg --print-architecture).tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
+sudo apt update && sudo apt install -y git && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null || true; } && cd ~/kingo-pod && git pull --ff-only && cp /mnt/e/kingo-images-$(dpkg --print-architecture).tar . && bash setup/setup-linux.sh
 ```
 
 The `cp` part (~5–10 minutes, right after the clone) is the **only** part
@@ -93,7 +93,7 @@ cd ~/kingo-pod && bash setup/setup-linux.sh
 > for the whole setup, and a re-run needs it again:
 >
 > ```bash
-> sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cd ~/kingo-pod && bash setup/setup-linux.sh /mnt/e/kingo-images-$(dpkg --print-architecture).tar
+> sudo apt update && sudo apt install -y git && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null || true; } && cd ~/kingo-pod && git pull --ff-only && bash setup/setup-linux.sh /mnt/e/kingo-images-$(dpkg --print-architecture).tar
 > ```
 
 ## If the stick isn't found

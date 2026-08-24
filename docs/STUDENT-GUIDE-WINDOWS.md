@@ -77,7 +77,7 @@ Copy this command with its **copy button** (it is one long line), paste it
 into the Ubuntu terminal, and press **Enter**:
 
 ```bash
-sudo apt update && sudo apt install -y git && git clone https://github.com/frankhuettner/kingo-pod.git && cd kingo-pod && bash setup/setup-linux.sh
+sudo apt update && sudo apt install -y git && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null || true; } && cd kingo-pod && git pull --ff-only && bash setup/setup-linux.sh
 ```
 
 The script does four things, in order, and says so as it goes:

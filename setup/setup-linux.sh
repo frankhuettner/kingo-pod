@@ -15,6 +15,22 @@ cd "$REPO_DIR"
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
+# ── Self-update: run the LATEST setup logic ──────────────────────────────────
+# A student who cloned an older, buggier version and re-runs must not keep
+# hitting the same fixed bug. Pull the newest commit and re-exec ONCE (guarded
+# against a loop), but NEVER block on it: offline / USB-bundle runs, a missing
+# git, or any local divergence just proceed with what is already on disk.
+if [ -z "${KINGO_NO_SELFUPDATE:-}" ] && [ -d .git ] && command -v git >/dev/null 2>&1; then
+  _before="$(git rev-parse HEAD 2>/dev/null || true)"
+  if timeout 30 git pull --ff-only >/dev/null 2>&1; then
+    _after="$(git rev-parse HEAD 2>/dev/null || true)"
+    if [ -n "$_after" ] && [ "$_before" != "$_after" ]; then
+      say "Updated to the latest version — re-running setup ..."
+      KINGO_NO_SELFUPDATE=1 exec bash "$0" "$@"
+    fi
+  fi
+fi
+
 # ── 0. WSL sanity: containers need WSL 2, not WSL 1 ──────────────────────────
 # The guide's video installs WSL2, but a manual install on Windows 10 can
 # silently land on WSL1 — no real Linux kernel, so neither Podman nor Docker

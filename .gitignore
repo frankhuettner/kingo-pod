@@ -13,8 +13,9 @@
 *.swp
 *.log
 
-# USB offline bundle written by `kingo bundle` (~15 GB)
-kingo-images.tar
+# USB offline bundle written by `kingo bundle` (~13 GB each) — arch-stamped
+# (kingo-images-amd64.tar / -arm64.tar) plus the legacy single name.
+kingo-images*.tar
 
 # kingo-owned neutral registry auth (shields podman pulls from broken
 # Docker credential helpers — gcloud/ECR leftovers from other courses)
