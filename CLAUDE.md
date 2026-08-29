@@ -54,6 +54,17 @@ It was ported from the old `kingo-vm` repo.
   ports are busy at once, doctor/fixports/up must refuse and say "the stack is
   probably already running under the other engine" — remapping would be
   exactly wrong then (happens for real when both engines are installed).
+- **Leaked engine forwards are healed surgically, never by engine restart**:
+  on macOS, gvproxy (the podman machine's port forwarder) can keep a host port
+  LISTENing after `down` removed its container (seen live 2026-08-29:
+  6333/6334). `kingo down` and the `up` preflight drop such forwards via
+  gvproxy's forwarder API (host socket, else the in-machine gateway endpoint)
+  — but ONLY provably-orphaned ones: gvproxy lists the forward AND no running
+  podman container publishes that port; if `podman ps` fails, touch nothing
+  (the stack might be running invisibly). The all-ports-busy refusal path is
+  deliberately NOT auto-healed. Never advise a blanket engine/machine restart
+  in guides or error text without the "stops ALL your containers" warning —
+  students may run containers from other courses.
 - **A running Docker is a first-class engine, not a grudging fallback**: both
   setup scripts detect an already-running Docker (Desktop) and use it,
   installing nothing; Podman is only installed when no working engine exists.

@@ -269,9 +269,10 @@ cmd_down() {
   # Prefer a clean compose teardown. If the compose provider can't reach the
   # engine socket (the sleep/wake staleness above), fall back to the CLI so the
   # stack always comes down — a stuck-up stack was a real, confusing failure.
-  if compose down; then return 0; fi
+  if compose down; then release_after_down; return 0; fi
   warn "the compose provider could not reach the engine — taking the Kingo stack down directly instead (your other containers are untouched)."
   cli_teardown
+  release_after_down
   echo "Kingo stack stopped."
 }
 
@@ -405,6 +406,95 @@ engine_kingo_ports() { # $1: engine — host ports of its running kingo-* contai
     | grep -oE ':[0-9]+->' | grep -oE '[0-9]+' | sort -u || true
 }
 
+# ── gvproxy leak healing (macOS podman machine) ──────────────────────────────
+# gvproxy — the podman machine's host-side port forwarder — can keep a host
+# port LISTENing after its container is long gone (seen live 2026-08-29: 6333
+# and 6334 still busy after a clean 'down'). Restarting the machine clears it,
+# but that kills every OTHER container the user may run — not acceptable as
+# default advice. Instead we talk to gvproxy's own forwarder API and drop
+# exactly the orphaned forwards. A forward is PROVABLY orphaned when gvproxy
+# still lists it while no running podman container publishes that host port —
+# removing it can break nothing (it forwards to nowhere). Every step degrades
+# silently (not macOS, no gvproxy, no curl, `podman ps` unreachable, API
+# answers differently → do nothing): callers fall through to the normal
+# messages, they never depend on this working.
+
+gvproxy_forwarder_socket() { # prints a host-side API socket path, or nothing
+  [ "$(uname -s)" = Darwin ] || return 0
+  command -v curl >/dev/null 2>&1 || return 0
+  local cmdline cand
+  cmdline="$(ps ax -o command= 2>/dev/null | grep -m1 '[g]vproxy' || true)"
+  [ -n "$cmdline" ] || return 0
+  # Candidates = every unix-socket-looking argument of the gvproxy process;
+  # probe each until one speaks the forwarder API (vfkit/podman sockets won't).
+  for cand in $(printf '%s\n' "$cmdline" | grep -oE '(unix://)?/[^ ]+\.sock' | sed 's#^unix://##' | sort -u); do
+    [ -S "$cand" ] || continue
+    if curl -sf --max-time 2 --unix-socket "$cand" http://localhost/services/forwarder/all 2>/dev/null | grep -q '"local"'; then
+      printf '%s\n' "$cand"; return 0
+    fi
+  done
+  return 0
+}
+
+# The API is also always reachable from INSIDE the machine at the gateway IP
+# (that is how dynamic port publishing works) — used when no host socket found.
+gvproxy_fwd_all() { # prints the JSON list of active forwards, or nothing
+  local sock
+  sock="$(gvproxy_forwarder_socket)"
+  if [ -n "$sock" ]; then
+    curl -sf --max-time 3 --unix-socket "$sock" http://localhost/services/forwarder/all 2>/dev/null && return 0
+  fi
+  podman machine ssh -- curl -sf --max-time 3 http://192.168.127.1/services/forwarder/all 2>/dev/null || true
+}
+
+gvproxy_fwd_unexpose() { # $1: exact "local" string, e.g. 127.0.0.1:6333
+  local body sock
+  body="{\"local\":\"$1\",\"protocol\":\"tcp\"}"
+  sock="$(gvproxy_forwarder_socket)"
+  if [ -n "$sock" ]; then
+    curl -sf --max-time 3 --unix-socket "$sock" -X POST -d "$body" http://localhost/services/forwarder/unexpose >/dev/null 2>&1 && return 0
+  fi
+  podman machine ssh -- curl -sf --max-time 3 -X POST -d "'$body'" http://192.168.127.1/services/forwarder/unexpose >/dev/null 2>&1
+}
+
+release_leaked_forwards() { # $@: host ports — frees provably-orphaned ones, prints them
+  [ "$(uname -s)" = Darwin ] || return 0
+  command -v podman >/dev/null 2>&1 || return 0
+  command -v curl   >/dev/null 2>&1 || return 0
+  ps ax -o command= 2>/dev/null | grep -q '[g]vproxy' || return 0
+  local live all port l
+  # If podman can't even list containers we cannot PROVE a forward is orphaned
+  # — touch nothing (dropping a live forward would break a running service).
+  live="$(podman ps --format '{{.Ports}}' 2>/dev/null)" || return 0
+  live=" $(printf '%s\n' "$live" | grep -oE ':[0-9]+->' | grep -oE '[0-9]+' | sort -u | tr '\n' ' ' || true) "
+  all="$(gvproxy_fwd_all || true)"
+  printf '%s' "$all" | grep -q '"local"' || return 0
+  for port in "$@"; do
+    case "$live" in *" $port "*) continue ;; esac  # a live container owns it — hands off
+    for l in $(printf '%s\n' "$all" | grep -oE '"local":"[^"]*"' | sed 's/"local":"//; s/"$//'); do
+      case "$l" in
+        *:"$port") gvproxy_fwd_unexpose "$l" && printf '%s\n' "$port" ;;
+      esac
+    done
+  done
+  return 0
+}
+
+# After a teardown: verify the engine really let go of our ports, free what it
+# provably leaked, so the NEXT 'up' doesn't refuse with a phantom collision.
+release_after_down() {
+  local entry name suffix port rest busy="" freed
+  for entry in "${SERVICE_TABLE[@]}"; do
+    IFS='|' read -r name suffix port rest <<<"$entry"
+    if port_in_use "$port"; then busy="$busy $port"; fi
+  done
+  [ -n "$busy" ] || return 0
+  # shellcheck disable=SC2086
+  freed="$(release_leaked_forwards $busy | sort -u | tr '\n' ' ')"
+  [ -n "${freed% }" ] || return 0
+  echo "(also freed leaked port forwards the engine had not let go of: ${freed})"
+}
+
 # Attribute every busy port: held by our own stack under $ENGINE (fine), by
 # the Kingo stack under the OTHER engine (refuse — remapping or double-booting
 # would be exactly wrong), or by foreign software (fixports moves those).
@@ -479,11 +569,29 @@ preflight_ports() {
     all_busy_hint
     die "not starting a second copy"
   fi
+  # Self-heal before complaining: these listeners are sometimes forwards a
+  # previous 'down' leaked (see release_leaked_forwards). Only provably-
+  # orphaned ones are dropped; real software is never touched.
+  # shellcheck disable=SC2086
+  if [ -n "$(release_leaked_forwards $FOREIGN_PORTS)" ]; then
+    count_busy_ports
+    if [ "$OTHER_ENGINE_N" = 0 ] && [ "$FOREIGN_N" = 0 ]; then
+      echo "(freed port forwards a previous 'down' had leaked — continuing)"
+      return 0
+    fi
+  fi
   echo "Other software on this machine is already using ports Kingo needs:"
   printf '%s' "$FOREIGN_LIST"
   echo
   echo "Easy fix: run  ./kingo fixports  — it moves Kingo to free ports"
   echo "automatically (your other software is untouched) — then run './kingo up' again."
+  echo
+  echo "(Seeing this right after './kingo down', and you started nothing new? Then"
+  echo "the engine itself may still be holding the ports. Restarting the engine"
+  echo "clears such leftovers — but NOTE: that stops ALL your containers, not just"
+  echo "Kingo's. Mac: podman machine stop && podman machine start / Windows: run"
+  echo "'wsl --shutdown' in Command Prompt, reopen Ubuntu / Docker Desktop: quit"
+  echo "and reopen it. Then run './kingo up' again.)"
   die "ports busy — see above"
 }
 
