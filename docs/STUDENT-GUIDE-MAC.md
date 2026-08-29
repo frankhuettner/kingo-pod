@@ -4,6 +4,11 @@ Everything the class uses (Langflow, n8n, JupyterLab, Metabase, a database, …)
 runs in containers on your own Mac. **One script sets everything up**; the
 script checks itself and tells you if something needs fixing.
 
+> **Jump to:** [Setup](#step-1--install-homebrew) ·
+> [Your services](#step-4--open-your-services) ·
+> [Everyday use](#everyday-use) ·
+> [If something breaks](#if-something-breaks) · [FAQ](#faq)
+
 ## Before you start
 
 - An **Apple-Silicon Mac** (M1 or newer — any Mac from 2021 on).
@@ -200,11 +205,20 @@ real API key into an n8n workflow you share or export.**
 volumes on your Mac and survive `./kingo down` and reboots. Only
 `./kingo reset` deletes them (it asks first).
 
-**Can I use extra Python packages (say, statsmodels) in Langflow?** The
-class set is already built in — `import statsmodels` just works in Python
-components. Need one more? `./kingo langflow pip install <package>` installs
-it on the spot. It lasts until the next `./kingo down` + `up` — after that,
-run the install again (or ask the instructor to add it for everyone).
+**Can I use extra Python packages (say, statsmodels)?**
+
+- **JupyterLab** (`:8888`) already ships the data-science standards —
+  pandas, statsmodels, scikit-learn, seaborn, and friends. For anything
+  else, run `%pip install <package>` in a notebook cell (repeat it if the
+  stack was restarted since).
+- **Langflow**: the class set (statsmodels, …) is built in — `import
+  statsmodels` just works in Python components. Need one more?
+  `./kingo langflow pip install <package>` installs it on the spot; it lasts
+  until the next `./kingo down` + `up`, so run it again after that (or ask
+  the instructor to add it for everyone).
+- **JupyterHub** (`:8000`) starts a minimal Python *without* the data
+  packages — use `%pip install` there too, or simply do data work in
+  JupyterLab.
 
 ## How it all fits together
 

@@ -7,6 +7,11 @@ copy-paste commands in an Ubuntu terminal. You do **not** need to be a Linux
 expert, and the setup script checks itself and tells you if something needs
 fixing.
 
+> **Jump to:** [Setup](#step-1--turn-on-wsl2--ubuntu) ·
+> [Your services](#step-5--open-your-services) ·
+> [Everyday use](#everyday-use) ·
+> [If something breaks](#if-something-breaks) · [FAQ](#faq)
+
 ## Before you start
 
 - **Windows 10 or 11**, with **8 GB RAM** (16 GB recommended) and about
@@ -228,11 +233,20 @@ workflow you share or export.**
 volumes inside WSL2 and survive `./kingo down` and reboots. Only
 `./kingo reset` deletes them (it asks first).
 
-**Can I use extra Python packages (say, statsmodels) in Langflow?** The
-class set is already built in — `import statsmodels` just works in Python
-components. Need one more? `./kingo langflow pip install <package>` installs
-it on the spot. It lasts until the next `./kingo down` + `up` — after that,
-run the install again (or ask the instructor to add it for everyone).
+**Can I use extra Python packages (say, statsmodels)?**
+
+- **JupyterLab** (`:8888`) already ships the data-science standards —
+  pandas, statsmodels, scikit-learn, seaborn, and friends. For anything
+  else, run `%pip install <package>` in a notebook cell (repeat it if the
+  stack was restarted since).
+- **Langflow**: the class set (statsmodels, …) is built in — `import
+  statsmodels` just works in Python components. Need one more?
+  `./kingo langflow pip install <package>` installs it on the spot; it lasts
+  until the next `./kingo down` + `up`, so run it again after that (or ask
+  the instructor to add it for everyone).
+- **JupyterHub** (`:8000`) starts a minimal Python *without* the data
+  packages — use `%pip install` there too, or simply do data work in
+  JupyterLab.
 
 **Where are my Windows files inside Ubuntu?** Your Windows drives are mounted
 under `/mnt` — e.g. `C:\Users\you\Documents` is `/mnt/c/Users/you/Documents`.
