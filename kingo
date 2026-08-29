@@ -729,6 +729,67 @@ host_docker_arch() {
   esac
 }
 
+# docker-archive — what `save` writes, and the only format a student's
+# `docker load` accepts — CANNOT carry zstd-compressed layers. n8n publishes
+# zstd for every 2.x tag on BOTH architectures, so `save` died a third of the
+# way in and left a TRUNCATED tar that still looked like a finished bundle.
+# Converting to gzip/v2s2 leaves the image ID untouched (it is computed from
+# the UNcompressed diffIDs), so nothing else in the stack notices. Neither
+# `podman save` nor a direct `skopeo copy --format v2s2` can do it — the only
+# route is out through the `dir` transport, recompressing on the way.
+normalize_for_docker_archive() { # $@: images — rewrites the zstd ones in place
+  local img id need="" tmp
+  for img in "$@"; do
+    id="$($ENGINE image inspect "$img" --format '{{.Id}}' 2>/dev/null || true)"
+    [ -n "$id" ] || continue
+    command -v skopeo >/dev/null 2>&1 || continue
+    skopeo inspect --raw "containers-storage:@$id" 2>/dev/null \
+      | grep -q 'tar+zstd' && need="$need $img"
+  done
+  [ -n "$need" ] || return 0
+  if ! command -v skopeo >/dev/null 2>&1; then
+    die "these images use zstd layers, which cannot go into a USB bundle:$need
+   Converting them needs skopeo:  brew install skopeo   (Mac)
+                                  sudo apt install -y skopeo   (Linux/WSL)"
+  fi
+  tmp="$(mktemp -d)"
+  for img in $need; do
+    echo "== converting $img to gzip (zstd cannot go into a bundle)"
+    id="$($ENGINE image inspect "$img" --format '{{.Id}}')"
+    rm -rf "$tmp/layers"
+    skopeo copy --dest-compress --dest-compress-format gzip \
+      "containers-storage:@$id" "dir:$tmp/layers" >/dev/null \
+      || { rm -rf "$tmp"; die "could not decompress $img for bundling"; }
+    skopeo copy --format v2s2 "dir:$tmp/layers" "containers-storage:$img" >/dev/null \
+      || { rm -rf "$tmp"; die "could not re-compress $img for bundling"; }
+  done
+  rm -rf "$tmp"
+}
+
+# Every image the bundle MUST contain, as it appears in the tar's manifest.
+# podman writes short names fully qualified (docker.io/library/postgres:16),
+# so compare on a normalised form or a complete bundle looks incomplete.
+norm_image_name() { sed -e 's#^docker\.io/##' -e 's#^library/##' -e 's#^localhost/##'; }
+
+# The failure this guards against was silent: `save` stopped at the first
+# unsupported image, every later one was missing, and the command still
+# printed "Bundle written". Never report success without checking.
+verify_bundle() { # $1: tar  $2..: images that must be in it
+  local tar="$1" img got missing=""
+  shift
+  got="$(tar -xOf "$tar" manifest.json 2>/dev/null \
+    | grep -oE '"RepoTags":\[[^]]*\]' | tr ',' '\n' \
+    | grep -oE '[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+' | norm_image_name | sort -u)"
+  [ -n "$got" ] || die "$tar holds no readable image manifest — the bundle is unusable"
+  for img in "$@"; do
+    printf '%s\n' "$got" | grep -qxF "$(printf '%s' "$img" | norm_image_name)" \
+      || missing="$missing
+  - $img"
+  done
+  [ -z "$missing" ] || die "the bundle is INCOMPLETE — these images did not make it in:$missing
+   Do not put this tar on a USB stick; it would fail at 'kingo up'."
+}
+
 cmd_bundle() {
   select_engine; ensure_ready
   local out="${1:-kingo-images-$(host_docker_arch).tar}" imgs free_kb
@@ -741,6 +802,12 @@ cmd_bundle() {
   cmd_pull
   compose build
   imgs="$(bundle_images)"
+  # shellcheck disable=SC2086
+  normalize_for_docker_archive $imgs
+  # `save` REFUSES to write over an existing archive ("docker-archive doesn't
+  # support modifying existing images") — a misleading message for what is
+  # just a leftover file, so clear it rather than fail on a re-run.
+  rm -f "$out"
   echo "Writing $out (~13 GB — this takes a few minutes) ..."
   case "$ENGINE" in
     # podman needs -m for a multi-image (docker-compatible) archive.
@@ -749,8 +816,10 @@ cmd_bundle() {
     # shellcheck disable=SC2086
     *)      docker save -o "$out" $imgs ;;
   esac
+  # shellcheck disable=SC2086
+  verify_bundle "$out" $imgs
   echo
-  echo "Bundle written: $out   (architecture: $(host_docker_arch))"
+  echo "Bundle written: $out   (architecture: $(host_docker_arch), $(du -h "$out" | cut -f1), $(printf '%s\n' $imgs | wc -l | tr -d ' ') images)"
   echo
   echo "This bundle runs ONLY on $(host_docker_arch) machines"
   echo "  (arm64 = Apple-Silicon Macs;  amd64 = Windows PCs and Intel Macs)."
