@@ -554,9 +554,10 @@ cmd_pull() {
   select_engine; ensure_ready; neutral_auth
   local imgs img ref
   # All pullable images: everything in compose.yml except the locally-built
-  # jupyterhub tag (*:local), plus that build's BASE image from its Dockerfile.
+  # tags (*:local), plus those builds' BASE images from their Dockerfiles.
   imgs="$( { compose config --images 2>/dev/null | grep -v ':local$'; \
-             awk '/^FROM/{print $2; exit}' jupyterhub/Dockerfile; } || true)"
+             awk '/^FROM/{print $2; exit}' jupyterhub/Dockerfile; \
+             awk '/^FROM/{print $2; exit}' langflow/Dockerfile; } || true)"
   [ -n "$imgs" ] || die "could not read the image list from compose.yml"
   for img in $imgs; do
     case "$img" in
@@ -583,10 +584,12 @@ cmd_pull() {
 # The instructor runs `kingo bundle` at home and copies kingo-images-<arch>.tar
 # to USB sticks; a student runs `kingo load <path-to-tar>` and `kingo up` then
 # starts without downloading anything. The bundle includes the locally-BUILT
-# jupyterhub image (not just its base), so the build needs no network either.
+# images (jupyterhub, langflow — not just their bases), so the builds need no
+# network either.
 bundle_images() { # every image the stack needs, one per line
   { compose config --images 2>/dev/null; \
-    awk '/^FROM/{print $2; exit}' jupyterhub/Dockerfile; } || true
+    awk '/^FROM/{print $2; exit}' jupyterhub/Dockerfile; \
+    awk '/^FROM/{print $2; exit}' langflow/Dockerfile; } || true
 }
 
 # Docker-style architecture of THIS machine (amd64 / arm64). A bundle is
@@ -610,7 +613,7 @@ cmd_bundle() {
     ''|*[!0-9]*) : ;;
     *) [ "$free_kb" -lt 15000000 ] && warn "less than ~15 GB free where $out will be written — the bundle may not fit" ;;
   esac
-  echo "Making sure every image is present and the local jupyterhub build exists ..."
+  echo "Making sure every image is present and the local builds exist ..."
   cmd_pull
   compose build
   imgs="$(bundle_images)"
@@ -645,10 +648,11 @@ cmd_load() {
   [ -f "$in" ] || die "bundle file not found: $in   (usage: ./kingo load /path/to/kingo-images-<arch>.tar — on Windows/WSL a USB stick is under /mnt/<letter>/, on Mac under /Volumes/)"
   echo "Loading images from $in (takes a few minutes) ..."
   $ENGINE load -i "$in"
-  # A bundle written by podman stores the local build as
-  # localhost/kingo-jupyterhub:local — docker would not match compose's
-  # kingo-jupyterhub:local and would try to rebuild (needs network). Retag.
+  # A bundle written by podman stores the local builds as
+  # localhost/kingo-*:local — docker would not match compose's kingo-*:local
+  # and would try to rebuild (needs network). Retag both.
   $ENGINE tag localhost/kingo-jupyterhub:local kingo-jupyterhub:local 2>/dev/null || true
+  $ENGINE tag localhost/kingo-langflow:local kingo-langflow:local 2>/dev/null || true
   # Bundles are single-arch: loading an amd64 stick on an arm64 machine (or the
   # reverse) "succeeds" here but every service then dies with an exec-format
   # error at `up`. Catch the wrong-stick case now, with a message that names the
@@ -663,6 +667,36 @@ cmd_load() {
    (arm64 = Apple-Silicon Macs;  amd64 = Windows PCs and Intel Macs.)"
   fi
   echo "Images loaded. Now run:  ./kingo up   (no download needed)"
+}
+
+# ── langflow: manage Python packages inside the Langflow container ───────────
+# Thin passthrough to uv (baked into the locally-built image) running inside
+# kingo-langflow — real uv syntax, e.g.: ./kingo langflow pip install statsmodels
+# Packages the whole class needs belong in langflow/requirements.txt instead:
+# they are baked into the image (kingo update) and survive container recreation.
+cmd_langflow() {
+  select_engine
+  if [ $# -eq 0 ]; then
+    cat <<'EOF'
+usage: ./kingo langflow <uv command ...>     (runs uv inside the Langflow container)
+
+  ./kingo langflow pip install statsmodels      install a package
+  ./kingo langflow pip install -U statsmodels   upgrade it
+  ./kingo langflow pip uninstall statsmodels    remove it
+  ./kingo langflow pip list                     what is installed?
+
+Heads-up: packages installed this way disappear when the container is recreated
+(./kingo down + up, or ./kingo update) — just run the install again. Packages the
+whole class needs belong in langflow/requirements.txt: those are baked into the
+image and survive everything.
+EOF
+    return 0
+  fi
+  [ -n "$($ENGINE ps -q --filter name=kingo-langflow 2>/dev/null)" ] \
+    || die "the Langflow container is not running — start the stack first:  ./kingo up"
+  $ENGINE exec kingo-langflow sh -c 'command -v uv >/dev/null 2>&1' \
+    || die "this Langflow container has no uv yet (image predates the class-packages change) — run:  ./kingo update"
+  $ENGINE exec kingo-langflow uv "$@"
 }
 
 # ── doctor: preflight before setup ───────────────────────────────────────────
@@ -781,15 +815,38 @@ case "${1:-help}" in
   logs)              select_engine; shift; compose logs --tail=100 -f "$@" ;;
   restart)           select_engine; ensure_ready; shift; compose restart "$@" ;;
   pull)              cmd_pull ;;
+  langflow)          shift; cmd_langflow "$@" ;;
   bundle)            shift; cmd_bundle "${1:-}" ;;
   load)              shift; cmd_load "${1:-}" ;;
   update)            select_engine; ensure_ready
-                     # ZIP installs (the documented Mac path) have no .git —
-                     # say so instead of silently skipping the class files.
+                     # Newest class files first. git installs pull; ZIP
+                     # installs (the documented Mac path, no .git) fetch the
+                     # repo tarball and sync it over this folder. rsync
+                     # replaces files via rename, so overwriting the very
+                     # script that is running here is safe (bash keeps
+                     # reading its already-open old copy). Never fatal:
+                     # offline just means "updating images only".
                      if [ -d .git ]; then
-                       git pull --ff-only 2>/dev/null || warn "git pull failed (no network?) — updating images only"
+                       if ! git pull --ff-only 2>/dev/null; then
+                         if git status --porcelain 2>/dev/null | grep -qv '^??'; then
+                           warn "git pull could not update: files in this folder were changed locally — updating images only. To get the newest class files, undo the local edits (git checkout -- .) and re-run: ./kingo update"
+                         else
+                           warn "git pull failed (no network?) — updating images only"
+                         fi
+                       fi
+                     elif command -v rsync >/dev/null 2>&1; then
+                       echo "Fetching the newest class files (this folder came from a ZIP, no git) ..."
+                       _tmp="$(mktemp -d)"
+                       if curl -fsSL -m 120 https://github.com/frankhuettner/kingo-pod/archive/refs/heads/main.tar.gz \
+                            | tar xz -C "$_tmp" --strip-components=1 2>/dev/null; then
+                         rsync -a "$_tmp"/ ./
+                         echo "Class files updated."
+                       else
+                         warn "could not download the class files (no network?) — updating images only"
+                       fi
+                       rm -rf "$_tmp"
                      else
-                       warn "this folder was installed from a ZIP (no git) — updating images only. For new class files, download the ZIP again (see the student guide)."
+                       warn "this folder was installed from a ZIP (no git) and rsync is missing — updating images only. For new class files, download the ZIP again (see the student guide)."
                      fi
                      cmd_pull
                      compose build
@@ -819,12 +876,14 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo logs [svc]    follow logs (e.g. kingo logs langflow)
   kingo restart [svc] restart everything or one service
   kingo pull          download all images, one at a time with retries
+  kingo langflow ...  run uv inside the Langflow container to manage Python
+                      packages (e.g. kingo langflow pip install statsmodels)
   kingo bundle [file] save all images into one arch-stamped tar for USB sticks
                       (instructor; default kingo-images-<arch>.tar)
   kingo load [file]   load images from a USB bundle — 'kingo up' then
                       needs no download (classroom Wi-Fi fallback); refuses a
                       wrong-architecture bundle
-  kingo update        pull newer images, rebuild, restart
+  kingo update        get the newest class files + images, rebuild, restart
   kingo reset         wipe all data and start fresh (asks first)
 
   Engine is auto-detected (Podman preferred). Force one with:

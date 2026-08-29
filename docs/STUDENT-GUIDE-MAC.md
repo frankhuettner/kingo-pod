@@ -134,6 +134,7 @@ Step 3), then one command per job:
 | `./kingo status` | which services are up? |
 | `./kingo credentials` | my addresses + logins |
 | `./kingo doctor` | something's wrong? start here |
+| `./kingo update` | get the newest class files + images (run it when the instructor announces an update) |
 
 > **What if I just close the Terminal window?** Nothing breaks — the stack
 > keeps running in the background: your services stay reachable in the
@@ -188,6 +189,12 @@ real API key into an n8n workflow you share or export.**
 **Where is my data?** Databases, notebooks, and workflows live in container
 volumes on your Mac and survive `./kingo down` and reboots. Only
 `./kingo reset` deletes them (it asks first).
+
+**Can I use extra Python packages (say, statsmodels) in Langflow?** The
+class set is already built in — `import statsmodels` just works in Python
+components. Need one more? `./kingo langflow pip install <package>` installs
+it on the spot. It lasts until the next `./kingo down` + `up` — after that,
+run the install again (or ask the instructor to add it for everyone).
 
 ## How it all fits together
 

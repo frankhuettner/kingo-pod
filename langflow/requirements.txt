@@ -1,0 +1,5 @@
+# Python packages available inside Langflow's Python/custom components,
+# baked into the locally-built image (see Dockerfile). One package per line.
+# To add one for the whole class: add it here, commit, and have students run
+#   ./kingo update
+statsmodels

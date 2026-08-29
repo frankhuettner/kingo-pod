@@ -128,6 +128,18 @@ All setup scripts are **re-runnable**, and both handle the two most common
 `kingo update` (which does a `git pull`). Students are never told to edit the
 committed `.env`.
 
+## Python packages in Langflow
+
+Langflow is built locally (`langflow/Dockerfile`) on top of the upstream
+image, adding the packages in `langflow/requirements.txt` (statsmodels, …)
+plus `uv`. To give the whole class a new package: add one line to
+`langflow/requirements.txt`, commit + push, and announce **"run
+`./kingo update`"** — that one command works for every install kind
+(git clones pull; Mac ZIP installs fetch the repo tarball automatically)
+and rebuilds the image. A student who needs something just for themselves:
+`./kingo langflow pip install <pkg>` (ephemeral — gone after `down`+`up`,
+which is fine for one-offs).
+
 ## Credentials (public by design)
 
 All logins are fixed, simple, and committed to the repo. This is **not** a leak:

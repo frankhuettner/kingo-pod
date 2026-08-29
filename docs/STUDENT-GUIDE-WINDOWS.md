@@ -167,6 +167,7 @@ then one command per job:
 | `./kingo status` | which services are up? |
 | `./kingo credentials` | my addresses + logins |
 | `./kingo doctor` | something's wrong? start here |
+| `./kingo update` | get the newest class files + images (run it when the instructor announces an update) |
 
 > **What if I just close the Ubuntu window?** Nothing breaks — the stack
 > keeps running in the background: your services stay reachable in the
@@ -226,6 +227,12 @@ workflow you share or export.**
 **Where is my data?** Databases, notebooks, and workflows live in container
 volumes inside WSL2 and survive `./kingo down` and reboots. Only
 `./kingo reset` deletes them (it asks first).
+
+**Can I use extra Python packages (say, statsmodels) in Langflow?** The
+class set is already built in — `import statsmodels` just works in Python
+components. Need one more? `./kingo langflow pip install <package>` installs
+it on the spot. It lasts until the next `./kingo down` + `up` — after that,
+run the install again (or ask the instructor to add it for everyone).
 
 **Where are my Windows files inside Ubuntu?** Your Windows drives are mounted
 under `/mnt` — e.g. `C:\Users\you\Documents` is `/mnt/c/Users/you/Documents`.

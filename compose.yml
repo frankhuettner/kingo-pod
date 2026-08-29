@@ -99,7 +99,11 @@ services:
       - jupyterlab
 
   langflow:
-    image: langflowai/langflow:1.8.0
+    # Built locally (langflow/Dockerfile): upstream Langflow + the class's
+    # Python packages (langflow/requirements.txt) + uv for `kingo langflow`.
+    # Same pattern as jupyterhub — pull/bundle/load handle both *:local builds.
+    build: ./langflow
+    image: kingo-langflow:local
     container_name: kingo-langflow
     restart: unless-stopped
     # Run as root: the image's default non-root user cannot write the fresh

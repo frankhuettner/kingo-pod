@@ -23,6 +23,18 @@ It was ported from the old `kingo-vm` repo.
   checks the hub can actually launch a Lab. (plan §9.3)
 - **JupyterLab (:8888) stays** even though JupyterHub exists — the Jupyter MCP
   server points at it. (plan §9.5)
+- **Langflow is ALSO built locally** (`langflow/Dockerfile`, tag
+  `kingo-langflow:local`): upstream Langflow + the class's Python packages
+  (`langflow/requirements.txt`, e.g. statsmodels) + `uv` for `kingo langflow`.
+  Anything that special-cases the jupyterhub local build (pull's base-image
+  list, bundle, load's retag) must handle BOTH `*:local` images. Student
+  installs via `kingo langflow pip install` are ephemeral by design (lost on
+  container recreation) — class-wide packages go in requirements.txt instead.
+- **`kingo update` must reach ZIP installs too** (the documented Mac path has
+  no `.git`): it fetches the repo tarball and rsyncs it over the folder —
+  rsync's rename-replace makes overwriting the running script safe. Never
+  fatal offline (degrades to images-only). One command updates EVERY install
+  kind; don't tell ZIP students to re-download by hand.
 - **Metabase pre-setup is idempotent** via the setup-token check and non-fatal
   on failure; it runs on every `kingo up`. (plan §9.4)
 - **Credentials are public by design** and committed (`.env`); they are safe
@@ -67,6 +79,8 @@ It was ported from the old `kingo-vm` repo.
 - `kingo` (bash) — the ONE CLI, used on Mac, Linux, and Windows-in-WSL2, and
   CI-tested on Linux with both engines.
 - `jupyterhub/`, `cloudbeaver/`, `postgres-init/` — service config, ported as-is.
+- `langflow/` — Dockerfile + requirements.txt for the local Langflow build
+  (class Python packages + uv).
 - `setup/setup-mac.sh` (brew podman + machine; Homebrew itself is a guide
   prerequisite — the script deliberately refuses to install it, Frank's call),
   `setup/setup-linux.sh` (apt+podman, also the Windows/WSL path) — both
