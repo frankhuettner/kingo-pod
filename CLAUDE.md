@@ -54,10 +54,21 @@ It was ported from the old `kingo-vm` repo.
   ports are busy at once, doctor/fixports/up must refuse and say "the stack is
   probably already running under the other engine" — remapping would be
   exactly wrong then (happens for real when both engines are installed).
+- **Port attribution must expand podman's port RANGES**: podman collapses
+  adjacent published ports into ONE range mapping
+  (`127.0.0.1:6333-6334->6333-6334/tcp`) — Qdrant's 6333+6334 is exactly
+  that. ALL parsing of `ps --format '{{.Ports}}'` goes through
+  `published_host_ports`; never reintroduce a bare `:[0-9]+->` grep. A missed
+  port makes our OWN running service look foreign: `fixports` then moved
+  Qdrant on every setup re-run, `status` said DOWN on a healthy Qdrant, and
+  `up` refused on a running stack (issue #1 / PR #2). The healing guard below
+  shares the same parser so it can never unexpose a live container's forward.
 - **Leaked engine forwards are healed surgically, never by engine restart**:
-  on macOS, gvproxy (the podman machine's port forwarder) can keep a host port
-  LISTENing after `down` removed its container (seen live 2026-08-29:
-  6333/6334). `kingo down` and the `up` preflight drop such forwards via
+  on macOS, gvproxy (the podman machine's port forwarder) can keep a host
+  port LISTENing after `down` removed its container. (The 2026-08-29 sighting
+  of busy 6333/6334 that motivated this turned out to be the range-attribution
+  bug above — the stack was in fact running; the healing stays as guarded
+  defense-in-depth.) `kingo down` and the `up` preflight drop such forwards via
   gvproxy's forwarder API (host socket, else the in-machine gateway endpoint)
   — but ONLY provably-orphaned ones: gvproxy lists the forward AND no running
   podman container publishes that port; if `podman ps` fails, touch nothing
