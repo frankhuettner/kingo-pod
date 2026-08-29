@@ -400,10 +400,23 @@ port_in_use() {
   return 1
 }
 
+# Host ports out of `ps --format '{{.Ports}}'` on stdin, one per line.
+# Podman collapses ADJACENT publishes into ONE RANGE mapping
+# (127.0.0.1:6333-6334->6333-6334/tcp) — Qdrant is the only service with two
+# neighbouring ports, so it was the only one the old ':[0-9]+->' pattern
+# dropped. A missed port makes our OWN port look foreign, which is why this
+# lives in one place now: both callers below MUST agree on what is published.
+published_host_ports() {
+  grep -oE ':[0-9]+(-[0-9]+)?->' | sed -e 's/^://' -e 's/->$//' \
+    | while IFS=- read -r lo hi; do
+        if [ -n "$hi" ]; then seq "$lo" "$hi"; else echo "$lo"; fi
+      done | sort -u
+}
+
 engine_kingo_ports() { # $1: engine — host ports of its running kingo-* containers
   command -v "$1" >/dev/null 2>&1 || return 0
   "$1" ps --filter name=kingo- --format '{{.Ports}}' 2>/dev/null \
-    | grep -oE ':[0-9]+->' | grep -oE '[0-9]+' | sort -u || true
+    | published_host_ports || true
 }
 
 # ── gvproxy leak healing (macOS podman machine) ──────────────────────────────
@@ -466,7 +479,10 @@ release_leaked_forwards() { # $@: host ports — frees provably-orphaned ones, p
   # If podman can't even list containers we cannot PROVE a forward is orphaned
   # — touch nothing (dropping a live forward would break a running service).
   live="$(podman ps --format '{{.Ports}}' 2>/dev/null)" || return 0
-  live=" $(printf '%s\n' "$live" | grep -oE ':[0-9]+->' | grep -oE '[0-9]+' | sort -u | tr '\n' ' ' || true) "
+  # NB: deliberately unfiltered `podman ps` — ANY running container owning the
+  # port means hands off, not just kingo's. Same parser as the attribution
+  # above, so a range-published port can never look unpublished here.
+  live=" $(printf '%s\n' "$live" | published_host_ports | tr '\n' ' ' || true) "
   all="$(gvproxy_fwd_all || true)"
   printf '%s' "$all" | grep -q '"local"' || return 0
   for port in "$@"; do
