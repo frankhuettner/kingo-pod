@@ -14,6 +14,24 @@ cd "$REPO_DIR"
 
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
+# ── Self-update: run the LATEST setup logic ──────────────────────────────────
+# A student who cloned an older, buggier version and re-runs must not keep
+# hitting the same fixed bug. Pull the newest commit and re-exec ONCE (guarded
+# against a loop), but NEVER block on it: offline runs, a missing git, a
+# ZIP-era folder (no .git), or any local divergence just proceed with what is
+# already on disk. macOS ships no `timeout`; the lowSpeed options bound a
+# stalled network instead.
+if [ -z "${KINGO_NO_SELFUPDATE:-}" ] && [ -d .git ] && command -v git >/dev/null 2>&1; then
+  _before="$(git rev-parse HEAD 2>/dev/null || true)"
+  if git -c http.lowSpeedLimit=1 -c http.lowSpeedTime=15 pull --ff-only >/dev/null 2>&1; then
+    _after="$(git rev-parse HEAD 2>/dev/null || true)"
+    if [ -n "$_after" ] && [ "$_before" != "$_after" ]; then
+      say "Updated to the latest version — re-running setup ..."
+      KINGO_NO_SELFUPDATE=1 exec bash "$0" "$@"
+    fi
+  fi
+fi
+
 # Pin the chosen engine in gitignored .env.local, overwriting any stale pin
 # left by an earlier setup run on the other engine.
 pin_engine() {

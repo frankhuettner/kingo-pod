@@ -30,11 +30,14 @@ It was ported from the old `kingo-vm` repo.
   list, bundle, load's retag) must handle BOTH `*:local` images. Student
   installs via `kingo langflow pip install` are ephemeral by design (lost on
   container recreation) — class-wide packages go in requirements.txt instead.
-- **`kingo update` must reach ZIP installs too** (the documented Mac path has
-  no `.git`): it fetches the repo tarball and rsyncs it over the folder —
+- **`kingo update` must reach ZIP-era installs too** (Mac installs from
+  before 2026-08-29 came from a ZIP download — no `.git`; since then the Mac
+  guide uses the same idempotent clone-or-pull one-liner as Windows): for a
+  no-git folder it fetches the repo tarball and rsyncs it over the folder —
   rsync's rename-replace makes overwriting the running script safe. Never
   fatal offline (degrades to images-only). One command updates EVERY install
-  kind; don't tell ZIP students to re-download by hand.
+  kind; don't tell ZIP-era students to re-download by hand, and don't remove
+  the tarball fallback while any of those folders may still exist.
 - **Metabase pre-setup is idempotent** via the setup-token check and non-fatal
   on failure; it runs on every `kingo up`. (plan §9.4)
 - **Credentials are public by design** and committed (`.env`); they are safe
@@ -84,7 +87,10 @@ It was ported from the old `kingo-vm` repo.
 - `setup/setup-mac.sh` (brew podman + machine; Homebrew itself is a guide
   prerequisite — the script deliberately refuses to install it, Frank's call),
   `setup/setup-linux.sh` (apt+podman, also the Windows/WSL path) — both
-  re-runnable. There is deliberately NO
+  re-runnable AND self-updating (git pull + re-exec once, guarded by
+  KINGO_NO_SELFUPDATE; mac has no `timeout`, so it bounds stalls via git's
+  lowSpeed options). All guides install via the same idempotent clone-or-pull
+  one-liner. There is deliberately NO
   Windows setup script: students enable WSL2 + Ubuntu by following the video
   tutorial in the guide (Frank's call — a .ps1 was tried and dropped as too
   complicated), then run setup-linux.sh inside Ubuntu.

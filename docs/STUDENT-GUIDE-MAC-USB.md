@@ -17,14 +17,7 @@ Setting up at home with good internet instead? Use the
   `kingo-images-arm64.tar` is the one for your Mac (the other, `-amd64`, is
   for Windows PCs).
 
-## Step 1 — Get the files
-
-1. Open the project on GitHub and click the green **Code** button →
-   **Download ZIP**.
-2. Double-click the ZIP to unzip it. You get a folder called **`kingo-pod-main`**.
-3. Move that folder somewhere easy, e.g. your **Home** folder or **Documents**.
-
-## Step 2 — Install Homebrew (do this while you wait for the stick)
+## Step 1 — Install Homebrew (do this while you wait for the stick)
 
 Homebrew is the Mac's standard software installer; the setup script uses it
 to install the container engine. **Two groups skip this step**: if typing
@@ -42,11 +35,29 @@ Everyone else:
 3. If the installer ends by printing **"Next steps"** with commands to run,
    copy, paste, and run those too (they put `brew` on your PATH).
 
+## Step 2 — Get the class folder
+
+Open a **new** Terminal window (⌘ N — so it picks up Homebrew), copy this
+command with its **copy button** (one long line), paste it, and press
+**Enter** — it downloads the class folder (a few MB, this is not the big
+download) into your Home folder:
+
+```bash
+cd ~ && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null || true; } && cd ~/kingo-pod && git pull --ff-only
+```
+
+> **A window pops up asking to install the "Command Line Developer Tools"?**
+> That can happen if you skipped Homebrew (Docker Desktop users). Click
+> **Install**, wait for it to finish, then run the command above again.
+
 ## Step 3 — Copy the images from the stick
 
 1. Plug in the USB stick and open it in **Finder**.
-2. **Drag `kingo-images-arm64.tar` into your `kingo-pod-main` folder.** (That
-   is the Mac file — ignore `kingo-images-amd64.tar`, which is for Windows.)
+2. In a second Finder window, open your **Home** folder (Finder menu:
+   **Go → Home**) — the `kingo-pod` folder from Step 2 is there.
+3. **Drag `kingo-images-arm64.tar` from the stick into the `kingo-pod`
+   folder.** (That is the Mac file — ignore `kingo-images-amd64.tar`, which
+   is for Windows.)
 
 The copy takes ~5–10 minutes and is the **only** part that needs the stick —
 hand it to the next student as soon as the copy is done. **You do not need to
@@ -56,14 +67,11 @@ properly,"* that is harmless here — nothing was being written to it.)
 
 ## Step 4 — Run the setup script
 
-1. Open a **new** Terminal window (⌘ N — so it picks up Homebrew).
-2. Type `cd ` (with a space after it), **drag the `kingo-pod-main` folder**
-   from Finder onto the Terminal window, and press **Enter**.
-3. Type this and press **Enter**:
+Copy this into the Terminal window and press **Enter**:
 
-   ```
-   bash setup/setup-mac.sh
-   ```
+```bash
+cd ~/kingo-pod && bash setup/setup-mac.sh
+```
 
 The script finds the copied `kingo-images-arm64.tar` by itself: it picks a
 container engine, checks your ports, **loads the images from the file
@@ -79,16 +87,16 @@ table of addresses and logins. Reprint it any time with `./kingo credentials`.
 Now delete the copied image file — it has done its job, and this frees 13 GB:
 
 ```
-rm kingo-images-*.tar
+rm ~/kingo-pod/kingo-images-*.tar
 ```
 
 Everything else — the service addresses and logins, everyday commands
 (`./kingo up` / `./kingo down`), troubleshooting, and the FAQ — is in the
-[regular Mac guide](STUDENT-GUIDE-MAC.md) from **Step 5 ("Open your
+[regular Mac guide](STUDENT-GUIDE-MAC.md) from **Step 4 ("Open your
 services")** on.
 
 > **Tight on disk space?** Skip the copy and load straight from the stick: in
-> Step 4, type `bash setup/setup-mac.sh ` (with a space at the end), **drag
-> the `kingo-images-arm64.tar` file from the stick** onto the Terminal window, and
-> press Enter. The stick must stay plugged in for the whole setup, and a
-> re-run needs it again.
+> Step 4, type `cd ~/kingo-pod && bash setup/setup-mac.sh ` (with a space at
+> the end), **drag the `kingo-images-arm64.tar` file from the stick** onto the
+> Terminal window, and press Enter. The stick must stay plugged in for the
+> whole setup, and a re-run needs it again.

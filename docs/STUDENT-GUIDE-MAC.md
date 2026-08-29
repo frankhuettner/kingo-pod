@@ -15,23 +15,16 @@ script checks itself and tells you if something needs fixing.
   **15–45 minutes** depending on your internet, mostly unattended.
 - **Slow or no internet at home?** Your instructor can bring the images on a
   **USB stick** to class — then follow the
-  [Mac USB guide](STUDENT-GUIDE-MAC-USB.md) instead of Steps 2–3 below.
+  [Mac USB guide](STUDENT-GUIDE-MAC-USB.md) instead of Step 2 below.
 
 > **Already have Docker Desktop?** (e.g. from another course) — perfect, keep
-> it. Just make sure Docker Desktop is **running** before Step 3, and you can
-> skip Step 2 (Homebrew). The setup script detects Docker and uses it, and
+> it. Just make sure Docker Desktop is **running** before Step 2, and you can
+> skip Step 1 (Homebrew). The setup script detects Docker and uses it, and
 > installs nothing new. Your existing containers, images, and settings are not
 > touched. Everyone else gets **Podman** installed instead — same stack, same
 > commands, no difference in class. (Curious why Podman? See the [FAQ](#faq).)
 
-## Step 1 — Get the files
-
-1. Open the project on GitHub and click the green **Code** button →
-   **Download ZIP**.
-2. Double-click the ZIP to unzip it. You get a folder called **`kingo-pod-main`**.
-3. Move that folder somewhere easy, e.g. your **Home** folder or **Documents**.
-
-## Step 2 — Install Homebrew
+## Step 1 — Install Homebrew
 
 Homebrew is the Mac's standard software installer; the setup script uses it
 to install the container engine. **Two groups skip this step**: if typing
@@ -49,16 +42,24 @@ Everyone else:
 3. If the installer ends by printing **"Next steps"** with commands to run,
    copy, paste, and run those too (they put `brew` on your PATH).
 
-## Step 3 — Run the setup script
+## Step 2 — Install and start the stack
 
-1. Open a **new** Terminal window (⌘ N — so it picks up Homebrew).
-2. Type `cd ` (with a space after it), then **drag the `kingo-pod-main`
-   folder** from Finder onto the Terminal window, and press **Enter**.
-3. Type this and press **Enter**:
+One command gets the class folder and runs the setup script. Open a **new**
+Terminal window (⌘ N — so it picks up Homebrew), copy this command with its
+**copy button** (it is one long line), paste it, and press **Enter**:
 
-   ```
-   bash setup/setup-mac.sh
-   ```
+```bash
+cd ~ && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null || true; } && cd ~/kingo-pod && git pull --ff-only && bash setup/setup-mac.sh
+```
+
+> **A window pops up asking to install the "Command Line Developer Tools"?**
+> That can happen if you skipped Homebrew (Docker Desktop users). Click
+> **Install**, wait for it to finish, then run the command above again.
+
+> **Set up with the older ZIP instructions before?** Just run the command
+> above — it creates a fresh `kingo-pod` folder in your Home folder and keeps
+> all your work (your data lives in the container engine, not in the folder).
+> Afterwards, delete the old `kingo-pod-main` folder.
 
 The script does four things, in order, and says so as it goes:
 
@@ -70,18 +71,20 @@ The script does four things, in order, and says so as it goes:
 3. **Downloads and starts everything** (~10 GB on the first run — be patient).
 4. **Verifies it** and prints your personal table of addresses and logins.
 
-**You only do this once.** If it stops partway (Wi-Fi hiccup, closed laptop),
-just run the same command again — it is safe to re-run and skips what's done.
+**You normally do this once** — but the same line is safe to run again any
+time, from anywhere: it updates you to the newest class version and skips
+everything already done. If it stops partway (Wi-Fi hiccup, closed laptop),
+just run it again.
 
 > **Got the instructor's USB stick?** Use the
 > [Mac USB guide](STUDENT-GUIDE-MAC-USB.md) instead — same result, but the
 > 10 GB of images come from the stick.
 
-## Step 4 — Did it work?
+## Step 3 — Did it work?
 
 You know you're done when the script prints **`SMOKE OK`** followed by a table
 of web addresses. **That printed table is the truth for *your* Mac** — if the
-script moved a port in Step 3, your address differs from the default table
+script moved a port in Step 2, your address differs from the default table
 below. You can reprint your table any time:
 
 ```
@@ -91,9 +94,9 @@ below. You can reprint your table any time:
 If the script ended with an ERROR instead, go to
 [If something breaks](#if-something-breaks).
 
-## Step 5 — Open your services
+## Step 4 — Open your services
 
-Default addresses (yours may differ — see Step 4). Open them in Safari or Chrome:
+Default addresses (yours may differ — see Step 3). Open them in Safari or Chrome:
 
 | Service | Address | Login |
 |---|---|---|
@@ -124,8 +127,13 @@ it anytime with `opencode auth login`.
 
 ## Everyday use
 
-Open Terminal in the `kingo-pod-main` folder (the `cd` + drag trick from
-Step 3), then one command per job:
+Open Terminal and go to the class folder:
+
+```
+cd ~/kingo-pod
+```
+
+then one command per job:
 
 | Command | What it does |
 |---|---|
@@ -155,7 +163,9 @@ what to do:
 
 | What you see | What to do |
 |---|---|
-| `ERROR: Homebrew is not installed` | Do [Step 2](#step-2--install-homebrew), then re-run the setup script in a **new** Terminal window. |
+| `ERROR: Homebrew is not installed` | Do [Step 1](#step-1--install-homebrew), then re-run the Step 2 command in a **new** Terminal window. |
+| A dialog asks to install the **Command Line Developer Tools** | Click **Install**, wait for it to finish, then run the Step 2 command again. |
+| Terminal says `./kingo: No such file or directory` | You're in the wrong folder. Run `cd ~/kingo-pod` first. |
 | `Other software on this machine is already using ports Kingo needs` | Run `./kingo fixports`, then `./kingo up`. Kingo moves itself to free ports — your other software is untouched. Your addresses change; `./kingo credentials` shows the new ones. |
 | `The Kingo stack is ALREADY RUNNING under your other engine` | Nothing is broken — the stack is up under your other container engine. Follow the two commands the message prints. |
 | `ALL of Kingo's ports are busy` | The stack is most likely **already running** (possibly under your other engine). Run `./kingo status` — if services show `up`, you're done, nothing is wrong. |

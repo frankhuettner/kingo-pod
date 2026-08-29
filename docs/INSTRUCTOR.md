@@ -63,8 +63,9 @@ stick students at: [`STUDENT-GUIDE-MAC-USB.md`](STUDENT-GUIDE-MAC-USB.md) and
   the USB guide repeats those steps): plug the stick in *before* opening
   Ubuntu, then the guide's paste block: clone, `cp` the tar from
   `/mnt/<letter>/`, pass the stick on, `bash setup/setup-linux.sh`.
-- **Mac**: drag the tar from the stick into the `kingo-pod-main` folder in
-  Finder, pass the stick on, then `bash setup/setup-mac.sh`.
+- **Mac**: the guide's clone one-liner creates `~/kingo-pod`; drag the tar
+  from the stick into that folder in Finder, pass the stick on, then
+  `cd ~/kingo-pod && bash setup/setup-mac.sh`.
 - **Already set up, only images missing**:
   `./kingo load /path/to/kingo-images-<arch>.tar && ./kingo up` does it
   directly (`load` with no path auto-finds this machine's arch tar).
@@ -90,9 +91,14 @@ class regardless of engine.
   NOT done by the script (the installer wants a password and pipes a script
   from the internet; that belongs in the student's own hands, visible and
   attributable). The script refuses with instructions if brew is missing and
-  no Docker is running. Then `bash setup/setup-mac.sh` — installs Podman +
-  the docker-compose provider via brew, creates a Podman machine
-  (4 CPU / 5 GB / 40 GB), then brings the stack up and smoke-tests it.
+  no Docker is running. Then the guide's one-liner (idempotent clone-or-pull
+  into `~/kingo-pod` + `bash setup/setup-mac.sh` — the same line is install,
+  repair, and update; the script also self-updates on re-runs). Setup
+  installs Podman + the docker-compose provider via brew, creates a Podman
+  machine (4 CPU / 5 GB / 40 GB), then brings the stack up and smoke-tests
+  it. (Installs from before 2026-08-29 used a ZIP download instead — no
+  `.git`; `kingo update` covers those via a repo-tarball fetch, and the guide
+  tells them how to migrate to the clone.)
 - **Windows**: no script — students enable WSL2 + Ubuntu by following the
   4-minute video tutorial in the guide (Windows features → Virtual Machine
   Platform + WSL, reboot, Ubuntu from the Microsoft Store), then run
@@ -135,8 +141,8 @@ image, adding the packages in `langflow/requirements.txt` (statsmodels, …)
 plus `uv`. To give the whole class a new package: add one line to
 `langflow/requirements.txt`, commit + push, and announce **"run
 `./kingo update`"** — that one command works for every install kind
-(git clones pull; Mac ZIP installs fetch the repo tarball automatically)
-and rebuilds the image. A student who needs something just for themselves:
+(git installs pull; leftover ZIP-era Mac folders fetch the repo tarball
+automatically) and rebuilds the image. A student who needs something just for themselves:
 `./kingo langflow pip install <pkg>` (ephemeral — gone after `down`+`up`,
 which is fine for one-offs).
 
