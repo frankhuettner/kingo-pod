@@ -9,8 +9,22 @@ fixing.
 
 > **Jump to:** [Setup](#step-1--turn-on-wsl2--ubuntu) ·
 > [Your services](#step-5--open-your-services) ·
+> [Update](#keeping-up-to-date) ·
 > [Everyday use](#everyday-use) ·
 > [If something breaks](#if-something-breaks) · [FAQ](#faq)
+
+## Keeping up to date
+
+> **Already installed? This one line brings you up to date** — newest class
+> files, images and rebuilt containers, safe to run any time, from any folder
+> (in **Ubuntu**, not PowerShell):
+>
+> ```bash
+> cd ~/kingo-pod && ./kingo update
+> ```
+>
+> Run it whenever your instructor says so. It works for every install, however
+> old — nothing else needs to be re-downloaded by hand.
 
 ## Before you start
 

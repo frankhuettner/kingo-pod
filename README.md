@@ -7,6 +7,17 @@ Nine services in one `compose.yml`: Langflow, n8n, PostgreSQL, Qdrant,
 JupyterHub, JupyterLab, a Jupyter MCP server, Metabase, and CloudBeaver.
 KNIME and OpenCode install natively alongside it.
 
+## 🔄 Already installed? Update with one line
+
+```
+cd ~/kingo-pod && ./kingo update
+```
+
+Newest class files, images, rebuilt containers — safe to run any time, from
+any folder, on Mac and on Windows (inside **Ubuntu**). It updates **every**
+kind of install, including folders that came from an old ZIP download. Your
+data, flows and notebooks stay.
+
 ## 🚀 Students: pick your guide
 
 Two questions decide it — **which laptop**, and **where do the ~10 GB of

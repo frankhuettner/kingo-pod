@@ -6,8 +6,21 @@ script checks itself and tells you if something needs fixing.
 
 > **Jump to:** [Setup](#step-1--install-homebrew) ·
 > [Your services](#step-4--open-your-services) ·
+> [Update](#keeping-up-to-date) ·
 > [Everyday use](#everyday-use) ·
 > [If something breaks](#if-something-breaks) · [FAQ](#faq)
+
+## Keeping up to date
+
+> **Already installed? This one line brings you up to date** — newest class
+> files, images and rebuilt containers, safe to run any time, from any folder:
+>
+> ```
+> cd ~/kingo-pod && ./kingo update
+> ```
+>
+> Run it whenever your instructor says so. It works for every install, however
+> old — nothing else needs to be re-downloaded by hand.
 
 ## Before you start
 
