@@ -30,3 +30,8 @@ kingo-images*.tar.part
 # Note written by `kingo load`: which USB bundle this machine installed from
 # (per-machine fact, like .env.local — never committed).
 .kingo-install-source
+
+# Files students drop into the shared folder (mounted into Langflow at
+# /app/shared) — the folder itself is tracked via .gitkeep, its contents are not.
+shared/*
+!shared/.gitkeep

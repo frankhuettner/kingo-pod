@@ -219,6 +219,14 @@ real API key into an n8n workflow you share or export.**
 volumes on your Mac and survive `./kingo down` and reboots. Only
 `./kingo reset` deletes them (it asks first).
 
+**How do I get my own files into Langflow?**
+
+Put them in the **`shared` folder inside `kingo-pod`** (`~/kingo-pod/shared`).
+Langflow sees the same folder as **`/app/shared`** — so a file you drop in as
+`~/kingo-pod/shared/sales.csv` is `/app/shared/sales.csv` in a Langflow
+component, and anything Langflow writes there appears on your Mac. The folder
+is created for you; if it isn't there yet, run `./kingo update` once.
+
 **Can I use extra Python packages (say, statsmodels)?**
 
 - **JupyterLab** (`:8888`) already ships the data-science standards —

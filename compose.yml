@@ -122,6 +122,13 @@ services:
       - "127.0.0.1:${KINGO_PORT_LANGFLOW:-7860}:7860"
     volumes:
       - langflow-data:/app/data
+      # A folder students can reach from BOTH sides: ~/kingo-pod/shared on the
+      # laptop is /app/shared in Langflow (drop a CSV in, pick results up).
+      # Deliberately NOT /app/data — that is Langflow's own config dir, and
+      # overlaying it costs the secret key. The engine creates the host folder
+      # if it is missing; KINGO_SHARED_DIR in .env.local can point it
+      # elsewhere without touching this committed file.
+      - ${KINGO_SHARED_DIR:-./shared}:/app/shared
     depends_on:
       postgres:
         condition: service_healthy
