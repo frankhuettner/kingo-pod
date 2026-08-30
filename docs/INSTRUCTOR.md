@@ -50,10 +50,12 @@ reads 13 GB from it, so one stick serializes the room. The USB guides therefore 
 then install**: the student copies the tar into their `kingo-pod` folder
 (~5–10 min, the only step that needs the stick), hands the stick on, and the
 setup script picks the copy up automatically — installs overlap instead of
-queueing, and a failed setup re-runs without the stick. The guides tell
-students to delete the copy after `SMOKE OK` (it costs 13 GB of disk until
-then; loading directly from the stick stays documented as the fallback for
-disk-tight laptops).
+queueing, and a failed setup re-runs without the stick. The setup script deletes its own copy once `SMOKE OK` passes — the images are
+in the engine by then, and a 13 GB leftover on a laptop that needs ~20 GB free
+is exactly what students forget to clean up. It removes ONLY a copy it made
+itself: a tar the student dragged in stays theirs (the guides say how to
+delete it), and a file on your stick is never touched. Loading directly from
+the stick stays documented as the fallback for disk-tight laptops.
 
 **Commit the checksum after every build.** `kingo bundle` writes the tar's
 SHA-256 into `bundles.sha256`; commit and push that file. `kingo load` (and

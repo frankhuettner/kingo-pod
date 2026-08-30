@@ -151,7 +151,10 @@ table of addresses and logins. Reprint it any time with `./kingo credentials`.
 Open the services in your normal **Windows** browser — WSL2 forwards
 `localhost` automatically.
 
-Now delete the copied image file — it has done its job, and this frees 13 GB:
+The 13 GB image file is already gone: the script deletes the copy it made
+once the smoke test passes — the images live in the container engine now. Only
+if you copied a file into the folder **yourself** is one still there; this
+removes it:
 
 ```bash
 rm ~/kingo-pod/kingo-images-*.tar

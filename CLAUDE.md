@@ -102,6 +102,13 @@ It was ported from the old `kingo-vm` repo.
   (measured 2026-08-29) is all-gzip and bundles 11/11 fine without it, so a
   hard requirement would be wrong — and PR #4's claim that an arm64 bundle
   "cannot ever have worked" does not hold. (issue #3 / PR #4)
+- **Setup deletes only the bundle IT copied**: after `smoke` passes, the
+  setup scripts remove the 13 GB tar they copied off the stick (tracked in
+  `COPIED_BUNDLE`) — students left it lying around on laptops that need ~20 GB
+  free. A tar the student or instructor put in the folder is NOT ours (only a
+  hint is printed), and a file on the stick itself is never touched: an
+  instructor's `setup-*.sh /path/to/stick/tar` must come back with the stick
+  intact.
 - **The USB stick is found FOR the student, never typed by them**: WSL2
   auto-mounts only removable drives that were present when it started, so a
   student who plugs the stick in when the guide says to — the normal

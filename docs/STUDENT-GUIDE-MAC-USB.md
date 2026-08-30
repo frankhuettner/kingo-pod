@@ -65,9 +65,11 @@ cd ~ && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null |
 > stick. If the copy is damaged, incomplete, or not the class file, the script
 > stops and says so instead of loading it.
 
-> **Prefer not to drag files?** You can skip this step entirely: leave the
-> stick plugged in and go to Step 4 — the setup script finds it by itself and
-> copies the file for you. Dragging is just the version you can watch happen.
+> **Simpler: skip this step.** Leave the stick plugged in and go straight to
+> Step 4 — the setup script finds it by itself, copies the file, and **deletes
+> that copy again** once everything works, so you never spend 13 GB of disk on
+> it. Dragging is just the version you can watch happen; then the file is
+> yours and you delete it in Step 5.
 
 The copy takes ~5–10 minutes and is the **only** part that needs the stick —
 hand it to the next student as soon as the copy is done. **You do not need to
@@ -94,7 +96,10 @@ the stick again.
 You're done when the script prints **`SMOKE OK`** followed by your personal
 table of addresses and logins. Reprint it any time with `./kingo credentials`.
 
-Now delete the copied image file — it has done its job, and this frees 13 GB:
+The 13 GB image file is already gone: the script deletes the copy it made
+once the smoke test passes — the images live in the container engine now. Only
+if you copied a file into the folder **yourself** is one still there; this
+removes it:
 
 ```
 rm ~/kingo-pod/kingo-images-*.tar
