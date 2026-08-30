@@ -838,6 +838,12 @@ find_bundle_on_media() {
 wsl_mount_windows_drives() { # mount what Windows has but Ubuntu does not
   is_wsl || return 1
   command -v sudo >/dev/null 2>&1 || return 1
+  # NEVER prompt for a password here. Most students install from the internet
+  # and have no stick at all — stopping THEM at a password question, asked
+  # while looking for hardware they do not own, would be far worse than the
+  # problem this solves. Inside the setup scripts sudo was just used for apt,
+  # so the cached timestamp makes this succeed exactly when it matters.
+  sudo -n true >/dev/null 2>&1 || return 1
   local letters l m upper mounted=0
   # Ask Windows which drives exist; fall back to the usual stick letters when
   # interop is off. tr strips CRs and normalises to lowercase.
@@ -848,9 +854,13 @@ wsl_mount_windows_drives() { # mount what Windows has but Ubuntu does not
     m="/mnt/$l"
     # Already mounted and readable? Leave it alone — never remount /mnt/c.
     [ -d "$m" ] && [ -n "$(ls -A "$m" 2>/dev/null)" ] && continue
-    sudo mkdir -p "$m" >/dev/null 2>&1 || continue
+    sudo -n mkdir -p "$m" >/dev/null 2>&1 || continue
     upper="$(printf '%s' "$l" | tr '[:lower:]' '[:upper:]')"
-    sudo mount -t drvfs "$upper:" "$m" >/dev/null 2>&1 && mounted=1
+    if sudo -n mount -t drvfs "$upper:" "$m" >/dev/null 2>&1; then
+      mounted=1
+    else
+      sudo -n rmdir "$m" >/dev/null 2>&1 || true   # letter does not exist — leave no stray dir
+    fi
   done
   [ "$mounted" = 1 ]
 }
@@ -863,12 +873,9 @@ discover_bundle() {
   [ -n "$p" ] && { printf '%s\n' "${p#./}"; return 0; }
   p="$(find_bundle_on_media || true)"
   [ -n "$p" ] && { printf '%s\n' "$p"; return 0; }
-  if is_wsl; then
-    echo "Your USB stick is not visible in Ubuntu yet — mounting it (Ubuntu may ask for your password) ..." >&2
-    if wsl_mount_windows_drives; then
-      p="$(find_bundle_on_media || true)"
-      [ -n "$p" ] && { printf '%s\n' "$p"; return 0; }
-    fi
+  if is_wsl && wsl_mount_windows_drives; then
+    p="$(find_bundle_on_media || true)"
+    [ -n "$p" ] && { printf '%s\n' "$p"; return 0; }
   fi
   return 1
 }
@@ -1034,13 +1041,20 @@ cmd_bundle() {
 
 cmd_load() {
   select_engine; ensure_ready
-  local in="${1:-}"
+  local in="${1:-}" _hint
   [ -n "$in" ] || in="$(discover_bundle || true)"
-  [ -n "$in" ] || die "no USB bundle found — not in this folder, and no stick with one on it.
-   Is the stick plugged in? Then try again (that is all it takes).
-   If it still is not found, see docs/STUDENT-GUIDE-WINDOWS-USB.md
-   ('If the stick isn't found'), or name the file yourself:
+  if [ -z "$in" ]; then
+    _hint=""
+    is_wsl && _hint="
+   On Windows the stick sometimes needs mounting first (replace e/E: with its
+   drive letter, which Explorer shows):
+     sudo mkdir -p /mnt/e && sudo mount -t drvfs E: /mnt/e
+   then run this command again."
+    die "no USB bundle found — not in this folder, and not on any plugged-in stick.
+   Is the stick plugged in? Then just run this again — that is usually all it takes.$_hint
+   You can also name the file yourself:
      ./kingo load /path/to/kingo-images-$(host_docker_arch).tar"
+  fi
   [ -f "$in" ] || die "bundle file not found: $in   (usage: ./kingo load /path/to/kingo-images-<arch>.tar — on Windows/WSL a USB stick is under /mnt/<letter>/, on Mac under /Volumes/)"
   verify_bundle_checksum "$in"
   echo "Loading images from $in (takes a few minutes) ..."

@@ -132,7 +132,9 @@ fi
 # Ubuntu started). Copy it here so the stick can be passed on right away and a
 # re-run never needs it again; if the copy does not fit, load off the stick.
 if [ -z "$BUNDLE" ]; then
+  say "Checking whether an instructor's USB stick is plugged in (a few seconds) ..."
   STICK="$(./kingo findbundle 2>/dev/null || true)"
+  [ -n "$STICK" ] || say "No stick found — the images will be downloaded instead."
   if [ -n "$STICK" ]; then
     say "Found the class images on a USB stick ($STICK)."
     say "Copying them to this folder (5-10 minutes) so you can pass the stick on ..."

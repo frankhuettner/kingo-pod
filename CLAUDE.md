@@ -112,7 +112,13 @@ It was ported from the old `kingo-vm` repo.
   fallback) — and both setup scripts use it before falling back to a download.
   Never remount a drive that is already mounted and non-empty (that would hit
   `/mnt/c`), and keep the copy-then-pass-the-stick-on flow: the script says
-  "UNPLUG THE STICK NOW" so one stick can serve a whole room.
+  "UNPLUG THE STICK NOW" so one stick can serve a whole room. The mount uses
+  `sudo -n` and NEVER prompts: most students install from the internet with no
+  stick at all, and stopping them at a password question asked while looking
+  for hardware they do not own would be worse than the problem being solved
+  (inside the setup scripts apt has just used sudo, so the cached timestamp
+  makes it succeed exactly where it matters). `kingo load` names the manual
+  mount command when it finds nothing on WSL.
 - **A bundle's checksum travels by git, never on the stick**: the blobs inside
   a bundle are content-addressed (each layer file is named after its own
   sha256), so a tampered layer cannot load — but a whole tar swapped for a
