@@ -1007,10 +1007,22 @@ cmd_bundle() {
     ''|*[!0-9]*) : ;;
     *) [ "$free_kb" -lt $((15000000 + keep_kb)) ] && warn "less than ~15 GB free where $out will be written (plus room for the $out already there, which is kept until the new one is verified) — the bundle may not fit" ;;
   esac
-  echo "Making sure every image is present and the local builds exist ..."
-  cmd_pull
-  compose build
-  imgs="$(bundle_images)"
+  # CI hook (issue #5): bundle an explicit short image list instead of the
+  # whole stack. A 14 GB bundle does not fit on a GitHub runner, but the
+  # zstd-conversion / verify / load chain MUST be exercised on every push —
+  # that chain shipped a truncated tar to a USB stick once. Unset for
+  # students, and then this branch does not exist as far as they are
+  # concerned: the path below is byte-for-byte what it always was.
+  if [ -n "${KINGO_BUNDLE_IMAGES:-}" ]; then
+    # shellcheck disable=SC2086
+    imgs="$(printf '%s\n' ${KINGO_BUNDLE_IMAGES})"
+    echo "KINGO_BUNDLE_IMAGES is set — bundling only: $(printf '%s ' $imgs)"
+  else
+    echo "Making sure every image is present and the local builds exist ..."
+    cmd_pull
+    compose build
+    imgs="$(bundle_images)"
+  fi
   # shellcheck disable=SC2086
   normalize_for_docker_archive $imgs
   # Write to a .part file and only move it into place once it verifies.

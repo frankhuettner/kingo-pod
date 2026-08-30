@@ -43,9 +43,9 @@ jobs:
     runs-on: ubuntu-latest
     # The GitHub default is 360 min — a hang should fail fast with diagnostics
     # instead. Step-level timeouts below are tighter still; this must stay
-    # ABOVE their sum (40+30+25 + setup), or a slow-but-legit run gets killed
-    # as a cancellation, which would skip the diagnostics step.
-    timeout-minutes: 110
+    # ABOVE their sum (40+30+25+15 + setup), or a slow-but-legit run gets
+    # killed as a cancellation, which would skip the diagnostics step.
+    timeout-minutes: 130
     strategy:
       fail-fast: false
       matrix:
@@ -89,7 +89,10 @@ jobs:
                       /usr/local/lib/systemd/system/podman-restart.service /usr/local/lib/systemd/system/podman-auto-update.*
           sudo systemctl daemon-reload
           sudo apt-get update
-          sudo apt-get install -y podman uidmap
+          # skopeo: `kingo bundle` needs it to convert zstd layers (n8n ships
+          # them) into something docker-archive can carry — the instructor's
+          # machine needs it for the same reason.
+          sudo apt-get install -y podman uidmap skopeo
           tag=$(curl -fsSL https://api.github.com/repos/docker/compose/releases/latest \
                 | grep -o '"tag_name":[^,]*' | cut -d'"' -f4)
           sudo curl -fsSL "https://github.com/docker/compose/releases/download/${tag}/docker-compose-linux-x86_64" \
@@ -140,6 +143,37 @@ jobs:
           ./kingo down
           ./kingo up
           ./kingo smoke
+
+      - name: Offline USB path — bundle, verify, wipe, load back
+        timeout-minutes: 15
+        # Issue #5: bundle/load were the only student-facing commands no
+        # machine ever ran, and that is exactly how a bundle holding 3 of 11
+        # images reached a USB stick while reporting success. A full 14 GB
+        # bundle does not fit a runner, so bundle TWO images — postgres and
+        # n8n, the one with the zstd layers that broke `save`. Same code path,
+        # 60 seconds, and it fails on the bug that shipped.
+        run: |
+          set -euo pipefail
+          ./kingo down
+          KINGO_BUNDLE_IMAGES="postgres:16 n8nio/n8n:2.35.5" ./kingo bundle ci-bundle.tar
+          n=$(tar -xOf ci-bundle.tar manifest.json | grep -c '"RepoTags"')
+          [ "$n" = 2 ] || { echo "bundle holds $n images, expected 2"; exit 1; }
+          # Wipe them, so `load` has to do real work — without this the load is
+          # a no-op and proves nothing (the trap issue #5 names).
+          ${{ matrix.engine }} rmi -f postgres:16 n8nio/n8n:2.35.5
+          ./kingo load ci-bundle.tar
+          ${{ matrix.engine }} image inspect postgres:16 >/dev/null
+          ${{ matrix.engine }} image inspect n8nio/n8n:2.35.5 >/dev/null
+          echo "load restored both images"
+          # A tampered/truncated bundle must be REFUSED, not loaded: the
+          # checksum in bundles.sha256 is the only thing standing between a
+          # student and a stick that is not the class file.
+          printf 'x' >> ci-bundle.tar
+          if ./kingo load ci-bundle.tar; then
+            echo "FAIL: a modified bundle was accepted"; exit 1
+          fi
+          echo "modified bundle correctly refused"
+          rm -f ci-bundle.tar
 
       - name: Diagnostics on failure
         # also on cancelled(): a job-level timeout cancels rather than fails,
