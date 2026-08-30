@@ -227,6 +227,11 @@ Langflow sees the same folder as **`/app/shared`** — so a file you drop in as
 component, and anything Langflow writes there appears on your Mac. The folder
 is created for you; if it isn't there yet, run `./kingo update` once.
 
+> **Using Docker Desktop?** Files that *Langflow itself* writes into the
+> folder can end up owned by the system rather than by you — deleting those
+> from Finder or Terminal may then need `sudo rm`. Files **you** put in are
+> never affected. With Podman (the default) this does not happen.
+
 **Can I use extra Python packages (say, statsmodels)?**
 
 - **JupyterLab** (`:8888`) already ships the data-science standards —
