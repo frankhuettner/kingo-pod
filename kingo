@@ -739,19 +739,27 @@ host_docker_arch() {
 # route is out through the `dir` transport, recompressing on the way.
 normalize_for_docker_archive() { # $@: images — rewrites the zstd ones in place
   local img id need="" tmp
+  # DETECTING zstd needs skopeo just as much as converting does, so without it
+  # we can only say so and let verify_bundle be the backstop. (Do not "fix"
+  # this by dying here when skopeo is missing: a store whose images are all
+  # gzip bundles perfectly well without it — measured on the arm64 Mac,
+  # 2026-08-29, 11/11 images, no skopeo installed.) Under Docker the
+  # containers-storage probe finds nothing either; verify_bundle covers that.
+  if ! command -v skopeo >/dev/null 2>&1; then
+    warn "skopeo is not installed, so images using zstd layers (which a bundle cannot carry) cannot be detected or converted.
+   Nothing is wrong yet — the check after writing will catch it. If the bundle
+   comes out incomplete, install skopeo and re-run:
+     Mac:        brew install skopeo
+     Linux/WSL:  sudo apt install -y skopeo"
+    return 0
+  fi
   for img in "$@"; do
     id="$($ENGINE image inspect "$img" --format '{{.Id}}' 2>/dev/null || true)"
     [ -n "$id" ] || continue
-    command -v skopeo >/dev/null 2>&1 || continue
     skopeo inspect --raw "containers-storage:@$id" 2>/dev/null \
       | grep -q 'tar+zstd' && need="$need $img"
   done
   [ -n "$need" ] || return 0
-  if ! command -v skopeo >/dev/null 2>&1; then
-    die "these images use zstd layers, which cannot go into a USB bundle:$need
-   Converting them needs skopeo:  brew install skopeo   (Mac)
-                                  sudo apt install -y skopeo   (Linux/WSL)"
-  fi
   tmp="$(mktemp -d)"
   for img in $need; do
     echo "== converting $img to gzip (zstd cannot go into a bundle)"
@@ -787,16 +795,27 @@ verify_bundle() { # $1: tar  $2..: images that must be in it
   - $img"
   done
   [ -z "$missing" ] || die "the bundle is INCOMPLETE — these images did not make it in:$missing
-   Do not put this tar on a USB stick; it would fail at 'kingo up'."
+   Do not put this tar on a USB stick; it would fail at 'kingo up'.
+   Most likely cause: layers 'save' cannot carry (zstd). Install skopeo
+   (Mac: brew install skopeo / Linux+WSL: sudo apt install -y skopeo) and
+   re-run — bundle then converts them automatically.
+   The unusable file is $tar; delete it to free the space."
 }
 
 cmd_bundle() {
   select_engine; ensure_ready
   local out="${1:-kingo-images-$(host_docker_arch).tar}" imgs free_kb
   free_kb=$(df -Pk "$(dirname "$out")" 2>/dev/null | awk 'NR==2{print $4}' || true)
+  # The previous bundle stays on disk until the new one verifies (below), so
+  # when one is there BOTH have to fit.
+  local keep_kb=0
+  if [ -f "$out" ]; then
+    keep_kb="$(du -k "$out" 2>/dev/null | awk 'NR==1{print $1}')"
+    case "$keep_kb" in ''|*[!0-9]*) keep_kb=0 ;; esac
+  fi
   case "$free_kb" in
     ''|*[!0-9]*) : ;;
-    *) [ "$free_kb" -lt 15000000 ] && warn "less than ~15 GB free where $out will be written — the bundle may not fit" ;;
+    *) [ "$free_kb" -lt $((15000000 + keep_kb)) ] && warn "less than ~15 GB free where $out will be written (plus room for the $out already there, which is kept until the new one is verified) — the bundle may not fit" ;;
   esac
   echo "Making sure every image is present and the local builds exist ..."
   cmd_pull
@@ -804,20 +823,24 @@ cmd_bundle() {
   imgs="$(bundle_images)"
   # shellcheck disable=SC2086
   normalize_for_docker_archive $imgs
+  # Write to a .part file and only move it into place once it verifies.
   # `save` REFUSES to write over an existing archive ("docker-archive doesn't
-  # support modifying existing images") — a misleading message for what is
-  # just a leftover file, so clear it rather than fail on a re-run.
-  rm -f "$out"
+  # support modifying existing images" — a misleading message for what is just
+  # a leftover file), but deleting the old bundle up front would destroy a GOOD
+  # stick tar every time a re-run fails halfway.
+  local part="$out.part"
+  rm -f "$part"
   echo "Writing $out (~13 GB — this takes a few minutes) ..."
   case "$ENGINE" in
     # podman needs -m for a multi-image (docker-compatible) archive.
     # shellcheck disable=SC2086
-    podman) podman save -m -o "$out" $imgs ;;
+    podman) podman save -m -o "$part" $imgs ;;
     # shellcheck disable=SC2086
-    *)      docker save -o "$out" $imgs ;;
+    *)      docker save -o "$part" $imgs ;;
   esac
   # shellcheck disable=SC2086
-  verify_bundle "$out" $imgs
+  verify_bundle "$part" $imgs
+  mv -f "$part" "$out"
   echo
   echo "Bundle written: $out   (architecture: $(host_docker_arch), $(du -h "$out" | cut -f1), $(printf '%s\n' $imgs | wc -l | tr -d ' ') images)"
   echo
@@ -841,11 +864,16 @@ cmd_load() {
   [ -f "$in" ] || die "bundle file not found: $in   (usage: ./kingo load /path/to/kingo-images-<arch>.tar — on Windows/WSL a USB stick is under /mnt/<letter>/, on Mac under /Volumes/)"
   echo "Loading images from $in (takes a few minutes) ..."
   $ENGINE load -i "$in"
-  # A bundle written by podman stores the local builds as
-  # localhost/kingo-*:local — docker would not match compose's kingo-*:local
-  # and would try to rebuild (needs network). Retag both.
-  $ENGINE tag localhost/kingo-jupyterhub:local kingo-jupyterhub:local 2>/dev/null || true
-  $ENGINE tag localhost/kingo-langflow:local kingo-langflow:local 2>/dev/null || true
+  # The bundle stores the local builds fully qualified — docker.io/library/…
+  # since the builds go through docker-compose (podman build would have said
+  # localhost/…). Either way compose looks for the bare kingo-*:local, so make
+  # sure that name exists. Short-name resolution usually covers this already;
+  # the guard costs nothing and must name what bundles really carry (issue #5).
+  local _n
+  for _n in kingo-jupyterhub kingo-langflow; do
+    $ENGINE tag "docker.io/library/$_n:local" "$_n:local" 2>/dev/null \
+      || $ENGINE tag "localhost/$_n:local" "$_n:local" 2>/dev/null || true
+  done
   # Bundles are single-arch: loading an amd64 stick on an arm64 machine (or the
   # reverse) "succeeds" here but every service then dies with an exec-format
   # error at `up`. Catch the wrong-stick case now, with a message that names the

@@ -88,6 +88,20 @@ It was ported from the old `kingo-vm` repo.
   up/down menu executes in sequence). Every runnable block is ONE
   `&&`-chained line with its own copy button; command *menus* are markdown
   tables. ASCII diagrams are exempt.
+- **A bundle is only "written" once it VERIFIES**: `docker-archive` cannot
+  carry zstd layers (n8n 2.x ships them), and `save` then stops at that image
+  while still exiting 0 — every later image is silently missing. The image
+  order from `compose config --images` is random, so 0–8 of 11 images survive
+  and the FILE SIZE proves nothing; only the manifest's image count does.
+  `cmd_bundle` therefore converts zstd images via skopeo (round-trip through
+  the `dir` transport; image IDs are unchanged), writes to `$out.part`, checks
+  the written tar against the expected image list, and only then moves it into
+  place. Never delete the previous bundle up front — an instructor's good
+  stick tar must survive a failed re-run. Detection needs skopeo as much as
+  conversion does, so a missing skopeo only WARNS: the arm64 Mac store
+  (measured 2026-08-29) is all-gzip and bundles 11/11 fine without it, so a
+  hard requirement would be wrong — and PR #4's claim that an arm64 bundle
+  "cannot ever have worked" does not hold. (issue #3 / PR #4)
 - **USB bundles are single-architecture and arch-stamped**
   (`kingo-images-<arch>.tar`): `save` writes only the host's local image blobs,
   so an arm64 tar exec-format-crashes at `up` on an amd64 laptop. `kingo bundle`
