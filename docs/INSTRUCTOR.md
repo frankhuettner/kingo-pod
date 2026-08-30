@@ -175,6 +175,24 @@ automatically) and rebuilds the image. A student who needs something just for th
 `./kingo langflow pip install <pkg>` (ephemeral — gone after `down`+`up`,
 which is fine for one-offs).
 
+## Did this laptop install from the stick, or from the Wi-Fi?
+
+Worth knowing in a full room, and invisible afterwards otherwise: image IDs
+are identical either way, and `podman images`' "CREATED" is the upstream build
+date, not when the image landed. So `kingo load` writes a note
+(`.kingo-install-source`, gitignored) and `./kingo doctor` reads it back:
+
+```
+  [ok] images came from a USB bundle: /mnt/e/kingo-images-amd64.tar
+       loaded 2026-08-30 14:20:11+0900 — checksum verified against bundles.sha256
+```
+
+A machine that downloaded says so instead ("images came from the internet"),
+and a stick whose checksum could not be confirmed shows `[??]`, not `[ok]`.
+Live during a run, the same thing is visible as `Found the class images on a
+USB stick …` / `Copy done — you can UNPLUG THE STICK NOW` / `Checksum OK`, and
+`kingo pull` afterwards finishing in seconds instead of minutes.
+
 ## Credentials (public by design)
 
 All logins are fixed, simple, and committed to the repo. This is **not** a leak:

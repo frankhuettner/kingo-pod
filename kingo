@@ -910,18 +910,26 @@ record_bundle_sum() { # $1: bundle just written — updates only ITS line
   echo "it, and students receive it over HTTPS (git), not from the stick itself."
 }
 
+# Set by verify_bundle_checksum so record_install_source can report WHAT was
+# checked without hashing 13 GB a second time.
+BUNDLE_SUM_VALUE=""
+BUNDLE_SUM_STATUS="not checked"
+
 verify_bundle_checksum() { # $1: bundle about to be loaded
   local base want got
   base="$(basename "$1")"
+  BUNDLE_SUM_STATUS="not verified (this repo has no $BUNDLE_SUMS — run ./kingo update)"
   [ -f "$BUNDLE_SUMS" ] || return 0
   want="$(awk -v n="$base" '$2 == n {print $1; exit}' "$BUNDLE_SUMS" 2>/dev/null || true)"
   if [ -z "$want" ]; then
+    BUNDLE_SUM_STATUS="not verified (no entry for $base in $BUNDLE_SUMS)"
     warn "$BUNDLE_SUMS has no entry for $base — loading it unchecked."
     return 0
   fi
   echo "Checking the bundle against the checksum from the class repo (~1 minute) ..."
   got="$(file_sha256 "$1")"
   if [ -z "$got" ]; then
+    BUNDLE_SUM_STATUS="not verified (no sha256 tool on this machine)"
     warn "no sha256 tool on this machine — skipping the checksum check"
     return 0
   fi
@@ -934,7 +942,43 @@ verify_bundle_checksum() { # $1: bundle about to be loaded
       first — that fetches the new checksum — and try again.
    2) Otherwise copy the tar from the stick again, and tell your instructor.
    You can always install without the stick instead:  ./kingo pull"
+  BUNDLE_SUM_VALUE="$got"
+  BUNDLE_SUM_STATUS="verified against $BUNDLE_SUMS"
   echo "Checksum OK — this is the class bundle."
+}
+
+# ── Where did this machine's images come from? ───────────────────────────────
+# In a room of 30 laptops it matters whether one installed off the stick or
+# quietly pulled 10 GB over the class Wi-Fi — and after the fact nothing in
+# the engine tells you: image IDs are identical either way, and podman's
+# "CREATED" is the upstream build date. So `load` leaves a note, and `doctor`
+# reads it back. Gitignored (per-machine fact, like .env.local).
+INSTALL_SOURCE_FILE=.kingo-install-source
+
+record_install_source() { # $1: bundle that was loaded
+  { echo "loaded_at=$(date '+%Y-%m-%d %H:%M:%S%z' 2>/dev/null || date)"
+    echo "bundle=$1"
+    echo "arch=$(host_docker_arch)"
+    echo "sha256=${BUNDLE_SUM_VALUE:-unknown}"
+    echo "checksum=${BUNDLE_SUM_STATUS:-not checked}"
+  } > "$INSTALL_SOURCE_FILE" 2>/dev/null || true
+}
+
+show_install_source() { # one doctor line: stick or internet?
+  local at bundle ck
+  if [ ! -f "$INSTALL_SOURCE_FILE" ]; then
+    echo "  [ok] images came from the internet (no USB bundle was loaded on this machine)."
+    return 0
+  fi
+  at="$(awk -F= '/^loaded_at=/{sub(/^loaded_at=/,""); print; exit}' "$INSTALL_SOURCE_FILE" 2>/dev/null || true)"
+  bundle="$(awk -F= '/^bundle=/{sub(/^bundle=/,""); print; exit}' "$INSTALL_SOURCE_FILE" 2>/dev/null || true)"
+  ck="$(awk -F= '/^checksum=/{sub(/^checksum=/,""); print; exit}' "$INSTALL_SOURCE_FILE" 2>/dev/null || true)"
+  # An unverified bundle is not an [ok] — it is the case a TA wants to see.
+  case "${ck:-}" in
+    verified*) echo "  [ok] images came from a USB bundle: ${bundle:-?}" ;;
+    *)         echo "  [??] images came from a USB bundle, checksum unconfirmed: ${bundle:-?}" ;;
+  esac
+  echo "       loaded $at — checksum ${ck:-unknown}"
 }
 
 cmd_bundle() {
@@ -1024,6 +1068,7 @@ cmd_load() {
    Use the $want tar instead:  kingo-images-$want.tar
    (arm64 = Apple-Silicon Macs;  amd64 = Windows PCs and Intel Macs.)"
   fi
+  record_install_source "$in"
   echo "Images loaded. Now run:  ./kingo up   (no download needed)"
 }
 
@@ -1137,6 +1182,9 @@ cmd_doctor() {
     echo "  [ok] Docker is also installed; kingo is using Podman (both work fine)."
     echo "       To switch: run './kingo down', then 'echo KINGO_ENGINE=docker >> .env.local', then './kingo up'."
   fi
+
+  # Stick or Wi-Fi? Only 'load' knows, so it writes it down (see above).
+  show_install_source
 
   # Two services on the same host port (stale .env.local override)?
   local dups; dups="$(dup_ports)"

@@ -26,3 +26,7 @@ kingo-images*.tar
 
 # a leftover from an interrupted `kingo bundle` (~13 GB)
 kingo-images*.tar.part
+
+# Note written by `kingo load`: which USB bundle this machine installed from
+# (per-machine fact, like .env.local — never committed).
+.kingo-install-source
