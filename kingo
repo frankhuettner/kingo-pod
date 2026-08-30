@@ -974,7 +974,11 @@ record_install_source() { # $1: bundle that was loaded
 show_install_source() { # one doctor line: stick or internet?
   local at bundle ck
   if [ ! -f "$INSTALL_SOURCE_FILE" ]; then
-    echo "  [ok] images came from the internet (no USB bundle was loaded on this machine)."
+    # Say what we KNOW: there is no note. Claiming "came from the internet"
+    # was wrong for the machine that loaded a stick with a kingo older than
+    # the note itself — measured on Frank's laptop, 2026-08-30.
+    echo "  [ok] no USB bundle recorded — images came from the internet"
+    echo "       (a stick loaded by an older kingo leaves no note either)."
     return 0
   fi
   at="$(awk -F= '/^loaded_at=/{sub(/^loaded_at=/,""); print; exit}' "$INSTALL_SOURCE_FILE" 2>/dev/null || true)"
