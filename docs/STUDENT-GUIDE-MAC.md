@@ -227,6 +227,12 @@ Langflow sees the same folder as **`/app/shared`** — so a file you drop in as
 component, and anything Langflow writes there appears on your Mac. The folder
 is created for you; if it isn't there yet, run `./kingo update` once.
 
+Treat the folder as **shared with Langflow**: anything running inside Langflow
+— including a flow someone else built and you imported — can read, change and
+delete files there. So keep private files out of it, and never let it hold the
+only copy of something. Nothing outside this one folder is reachable from
+Langflow.
+
 > **Using Docker Desktop?** Files that *Langflow itself* writes into the
 > folder can end up owned by the system rather than by you — deleting those
 > from Finder or Terminal may then need `sudo rm`. Files **you** put in are

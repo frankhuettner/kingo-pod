@@ -256,6 +256,12 @@ Langflow sees the same folder as **`/app/shared`** — so a file you drop in as
 component, and anything Langflow writes there appears on your laptop (via the Ubuntu home folder). The folder
 is created for you; if it isn't there yet, run `./kingo update` once.
 
+Treat the folder as **shared with Langflow**: anything running inside Langflow
+— including a flow someone else built and you imported — can read, change and
+delete files there. So keep private files out of it, and never let it hold the
+only copy of something. Nothing outside this one folder is reachable from
+Langflow.
+
 > **Using Docker Desktop?** Files that *Langflow itself* writes into the
 > folder end up owned by `root` inside Ubuntu — deleting those needs
 > `sudo rm`. Files **you** put in are never affected. With Podman (the

@@ -195,6 +195,17 @@ Live during a run, the same thing is visible as `Found the class images on a
 USB stick …` / `Copy done — you can UNPLUG THE STICK NOW` / `Checksum OK`, and
 `kingo pull` afterwards finishing in seconds instead of minutes.
 
+## The Langflow shared folder
+
+`~/kingo-pod/shared` is mounted into Langflow as `/app/shared` — the way
+students hand a CSV in and take results back out. Two things worth saying in
+class: whatever runs inside Langflow (including an imported flow's Python
+components) can read, change and delete everything in that folder, so no
+private files and no only-copies belong there; and nothing outside the folder
+is reachable from Langflow. It is deliberately NOT a bind over `/app/data`,
+which is Langflow's own config dir — flows themselves live in the `langflow`
+PostgreSQL database, so a folder mount is no substitute for exporting a flow.
+
 ## Credentials (public by design)
 
 All logins are fixed, simple, and committed to the repo. This is **not** a leak:
