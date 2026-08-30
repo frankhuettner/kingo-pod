@@ -802,6 +802,70 @@ verify_bundle() { # $1: tar  $2..: images that must be in it
    The unusable file is $tar; delete it to free the space."
 }
 
+# ── Bundle checksums: the stick is not a trusted channel ─────────────────────
+# The blobs INSIDE a bundle are content-addressed (each layer file is named
+# after its own sha256), so a tampered layer cannot load — but a whole tar
+# swapped for a different, self-consistent one would pass unnoticed. The fix
+# is a checksum that does NOT travel on the stick: `bundle` records it here,
+# the instructor commits it, and every student gets it over HTTPS via
+# git clone / `kingo update`. `load` then refuses a tar that does not match.
+BUNDLE_SUMS=bundles.sha256
+
+file_sha256() { # $1: file — prints the hex digest, or nothing if no tool exists
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v openssl >/dev/null 2>&1; then openssl dgst -sha256 "$1" | awk '{print $NF}'
+  fi
+}
+
+record_bundle_sum() { # $1: bundle just written — updates only ITS line
+  local sum base
+  base="$(basename "$1")"
+  sum="$(file_sha256 "$1")"
+  if [ -z "$sum" ]; then
+    warn "no sha256 tool found — $BUNDLE_SUMS not updated, so students cannot verify this bundle"
+    return 0
+  fi
+  # Keep every OTHER architecture's line: a mixed class ships two tars, built
+  # on two different machines, and each build must not wipe the other's entry.
+  { [ -f "$BUNDLE_SUMS" ] && awk -v n="$base" '$2 != n' "$BUNDLE_SUMS" || true; } > "$BUNDLE_SUMS.tmp"
+  printf '%s  %s\n' "$sum" "$base" >> "$BUNDLE_SUMS.tmp"
+  sort -k2,2 "$BUNDLE_SUMS.tmp" > "$BUNDLE_SUMS"
+  rm -f "$BUNDLE_SUMS.tmp"
+  echo
+  echo "Checksum recorded in $BUNDLE_SUMS:"
+  echo "  $sum"
+  echo "COMMIT AND PUSH $BUNDLE_SUMS now — 'kingo load' checks every stick against"
+  echo "it, and students receive it over HTTPS (git), not from the stick itself."
+}
+
+verify_bundle_checksum() { # $1: bundle about to be loaded
+  local base want got
+  base="$(basename "$1")"
+  [ -f "$BUNDLE_SUMS" ] || return 0
+  want="$(awk -v n="$base" '$2 == n {print $1; exit}' "$BUNDLE_SUMS" 2>/dev/null || true)"
+  if [ -z "$want" ]; then
+    warn "$BUNDLE_SUMS has no entry for $base — loading it unchecked."
+    return 0
+  fi
+  echo "Checking the bundle against the checksum from the class repo (~1 minute) ..."
+  got="$(file_sha256 "$1")"
+  if [ -z "$got" ]; then
+    warn "no sha256 tool on this machine — skipping the checksum check"
+    return 0
+  fi
+  [ "$got" = "$want" ] || die "this file does NOT match the class bundle checksum.
+   expected: $want
+   found:    $got
+   Do NOT load it: it is damaged, was copied incompletely, or is not the
+   class bundle at all.
+   1) If your instructor rebuilt the bundle recently, run './kingo update'
+      first — that fetches the new checksum — and try again.
+   2) Otherwise copy the tar from the stick again, and tell your instructor.
+   You can always install without the stick instead:  ./kingo pull"
+  echo "Checksum OK — this is the class bundle."
+}
+
 cmd_bundle() {
   select_engine; ensure_ready
   local out="${1:-kingo-images-$(host_docker_arch).tar}" imgs free_kb
@@ -843,6 +907,7 @@ cmd_bundle() {
   mv -f "$part" "$out"
   echo
   echo "Bundle written: $out   (architecture: $(host_docker_arch), $(du -h "$out" | cut -f1), $(printf '%s\n' $imgs | wc -l | tr -d ' ') images)"
+  record_bundle_sum "$out"
   echo
   echo "This bundle runs ONLY on $(host_docker_arch) machines"
   echo "  (arm64 = Apple-Silicon Macs;  amd64 = Windows PCs and Intel Macs)."
@@ -862,6 +927,7 @@ cmd_load() {
     [ -n "$in" ] || in="kingo-images-$(host_docker_arch).tar"
   fi
   [ -f "$in" ] || die "bundle file not found: $in   (usage: ./kingo load /path/to/kingo-images-<arch>.tar — on Windows/WSL a USB stick is under /mnt/<letter>/, on Mac under /Volumes/)"
+  verify_bundle_checksum "$in"
   echo "Loading images from $in (takes a few minutes) ..."
   $ENGINE load -i "$in"
   # The bundle stores the local builds fully qualified — docker.io/library/…
@@ -1100,10 +1166,12 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo langflow ...  run uv inside the Langflow container to manage Python
                       packages (e.g. kingo langflow pip install statsmodels)
   kingo bundle [file] save all images into one arch-stamped tar for USB sticks
-                      (instructor; default kingo-images-<arch>.tar)
+                      (instructor; default kingo-images-<arch>.tar; records its
+                      checksum in bundles.sha256 — commit that file)
   kingo load [file]   load images from a USB bundle — 'kingo up' then
                       needs no download (classroom Wi-Fi fallback); refuses a
-                      wrong-architecture bundle
+                      wrong-architecture bundle, and one whose checksum does
+                      not match bundles.sha256 from the class repo
   kingo update        get the newest class files + images, rebuild, restart
   kingo reset         wipe all data and start fresh (asks first)
 

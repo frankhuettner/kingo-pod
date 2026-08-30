@@ -73,6 +73,12 @@ with your stick's drive letter if it differs, and press **Enter**:
 cd ~ && sudo apt update && sudo apt install -y git && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null || true; } && cd ~/kingo-pod && git pull --ff-only && cp /mnt/e/kingo-images-$(dpkg --print-architecture).tar . && bash setup/setup-linux.sh
 ```
 
+> **Is the file safe?** The setup script checks it before using it: every
+> bundle's fingerprint (a SHA-256 checksum) is stored in the class repo the
+> line above clones, so it arrives over the internet from GitHub — not on the
+> stick. If the copy is damaged, incomplete, or not the class file, the script
+> stops and says so instead of loading it.
+
 The `cp` part (~5–10 minutes, right after the clone) is the **only** part
 that needs the stick — as soon as the setup output starts, hand the stick to
 the next student. **You do not need to "safely remove" it:** nothing is ever

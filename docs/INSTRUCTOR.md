@@ -55,6 +55,29 @@ students to delete the copy after `SMOKE OK` (it costs 13 GB of disk until
 then; loading directly from the stick stays documented as the fallback for
 disk-tight laptops).
 
+**Commit the checksum after every build.** `kingo bundle` writes the tar's
+SHA-256 into `bundles.sha256`; commit and push that file. `kingo load` (and
+therefore both setup scripts) then verifies every stick copy against it — and
+the trusted value reaches students over HTTPS with `git clone` / `./kingo
+update`, never on the stick itself. That catches a truncated copy, a stick
+that got corrupted while being passed around, and a tar that is simply not
+the class file. Two consequences worth knowing: if you rebuild a bundle and
+forget to push, students get a clear "does not match — run ./kingo update
+first" refusal; and a bundle with no entry at all loads with a warning, so
+older sticks keep working. Students verifying by hand:
+`shasum -a 256 <tar>` (Mac) or `sha256sum <tar>` (WSL), compared against
+`bundles.sha256`. Cost: hashing 13 GB takes ~1 minute from a laptop's own
+disk (the normal copy-then-install path). Only the disk-tight fallback that
+loads *straight from the stick* pays a second stick read, which on a slow
+USB 2 stick is several minutes — one more reason the guides default to
+copying first.
+
+The stick itself is not a trusted channel and never becomes one: nothing is
+ever written to it during setup, and nothing on it is executed — the tar is
+read-only data that the engine unpacks. If you can get USB sticks with a
+physical write-protect switch, use them; that removes the one real risk of
+passing a stick around a room of Windows laptops.
+
 **What the student runs** — each platform has a dedicated USB guide to point
 stick students at: [`STUDENT-GUIDE-MAC-USB.md`](STUDENT-GUIDE-MAC-USB.md) and
 [`STUDENT-GUIDE-WINDOWS-USB.md`](STUDENT-GUIDE-WINDOWS-USB.md). In short:

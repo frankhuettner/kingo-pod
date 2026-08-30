@@ -59,6 +59,12 @@ cd ~ && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null |
    folder.** (That is the Mac file — ignore `kingo-images-amd64.tar`, which
    is for Windows.)
 
+> **Is the file safe?** The setup script checks it before using it: every
+> bundle's fingerprint (a SHA-256 checksum) is stored in the class repo you
+> cloned in Step 2, so it arrives over the internet from GitHub — not on the
+> stick. If the copy is damaged, incomplete, or not the class file, the script
+> stops and says so instead of loading it.
+
 The copy takes ~5–10 minutes and is the **only** part that needs the stick —
 hand it to the next student as soon as the copy is done. **You do not need to
 "eject" it first:** nothing is ever written to the stick, so once the copy

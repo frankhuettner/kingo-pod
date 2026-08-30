@@ -102,6 +102,16 @@ It was ported from the old `kingo-vm` repo.
   (measured 2026-08-29) is all-gzip and bundles 11/11 fine without it, so a
   hard requirement would be wrong — and PR #4's claim that an arm64 bundle
   "cannot ever have worked" does not hold. (issue #3 / PR #4)
+- **A bundle's checksum travels by git, never on the stick**: the blobs inside
+  a bundle are content-addressed (each layer file is named after its own
+  sha256), so a tampered layer cannot load — but a whole tar swapped for a
+  self-consistent one would pass unnoticed. `kingo bundle` therefore records
+  the tar's sha256 in the COMMITTED `bundles.sha256`, and `kingo load` refuses
+  a file that does not match it; students receive that value over HTTPS via
+  `git clone` / `kingo update`. Keep both degradations: no entry for this tar
+  (or no `bundles.sha256` at all) loads with a warning, so older sticks and
+  older repos still work. `record_bundle_sum` must only ever replace ITS OWN
+  line — a mixed class has two tars built on two machines.
 - **USB bundles are single-architecture and arch-stamped**
   (`kingo-images-<arch>.tar`): `save` writes only the host's local image blobs,
   so an arm64 tar exec-format-crashes at `up` on an amd64 laptop. `kingo bundle`
