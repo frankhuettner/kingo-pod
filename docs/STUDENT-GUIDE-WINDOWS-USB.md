@@ -54,30 +54,28 @@ Ubuntu** — Ubuntu only sees drives that were present when it started. Check
 the stick's drive letter in Windows Explorer (say `E:`); inside Ubuntu the
 stick is `/mnt/e` (lowercase).
 
-## Step 4 — Copy the images, pass the stick on, run setup
+## Step 4 — Plug the stick in and run setup
 
 > **Pasting into Ubuntu works differently than you are used to:** Ctrl+V
 > often does nothing there. **Right-click into the Ubuntu window** to paste
 > (on some machines it's Ctrl+Shift+V).
 
 The stick holds **two image files** — `kingo-images-amd64.tar` (for normal
-Windows PCs) and `kingo-images-arm64.tar` (for the rare ARM laptop). The
-command below copies the right one for *your* machine automatically — the
-`$(dpkg --print-architecture)` part just fills in your laptop's type.
+Windows PCs) and `kingo-images-arm64.tar` (for the rare ARM laptop). You do
+not have to know which is yours, or which drive letter the stick has: the
+setup script finds the stick, picks the file for your machine, and copies it.
 
-**Plug the stick in BEFORE you open Ubuntu.** Windows gives it a drive
-letter (look in Explorer — often `D:`, `E:` or `F:`), and Ubuntu only picks
-removable drives up automatically if they were already there at start. If the
-command below says `cp: cannot stat …`, that is exactly what happened — see
-[If the stick isn't found](#if-the-stick-isnt-found) right below, it is one
-command to fix.
+**Plug the stick in** — before or after opening Ubuntu, either is fine.
+(Windows hands a stick to Ubuntu automatically only when it was plugged in
+first; otherwise the script mounts it, which is why Ubuntu may ask for your
+password.)
 
 Open the **Ubuntu** app from the Start menu. Copy this command with its
-**copy button** (it is one long line), paste it into Ubuntu, replace `e`
-with your stick's drive letter if it differs, and press **Enter**:
+**copy button** (it is one long line), paste it into Ubuntu, and press
+**Enter**:
 
 ```bash
-cd ~ && sudo apt update && sudo apt install -y git && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null || true; } && cd ~/kingo-pod && git pull --ff-only && cp /mnt/e/kingo-images-$(dpkg --print-architecture).tar . && bash setup/setup-linux.sh
+cd ~ && sudo apt update && sudo apt install -y git && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null || true; } && cd ~/kingo-pod && git pull --ff-only && bash setup/setup-linux.sh
 ```
 
 > **Is the file safe?** The setup script checks it before using it: every
@@ -86,24 +84,24 @@ cd ~ && sudo apt update && sudo apt install -y git && { git clone https://github
 > stick. If the copy is damaged, incomplete, or not the class file, the script
 > stops and says so instead of loading it.
 
-The `cp` part (~5–10 minutes, right after the clone) is the **only** part
-that needs the stick — as soon as the setup output starts, hand the stick to
-the next student. **You do not need to "safely remove" it:** nothing is ever
-written to the stick, so once the setup output appears just unplug it and pass
-it on. (If Windows says the drive is *"still in use,"* that is only WSL reading
-it — it is safe to pull.) The setup script
-finds the copied file by itself: it installs the small tools over Wi-Fi,
-**loads the images from the copy (~3 minutes)** instead of downloading
-10 GB, starts everything, and verifies it. If it stops partway after the
-copy, re-run it — no stick needed:
+The copy (~5–10 minutes) is the **only** part that needs the stick. The
+script prints **"you can UNPLUG THE STICK NOW"** the moment it is done — from
+then on the stick is free for the next student, and everything else runs
+without it. **You do not need to "safely remove" it:** nothing is ever written
+to the stick, so just unplug it and pass it on. (If Windows says the drive is
+*"still in use,"* that is only WSL reading it — it is safe to pull.) The rest
+of the script installs the small tools over Wi-Fi, **loads the images from the
+copy (~3 minutes)** instead of downloading 10 GB, starts everything, and
+verifies it. If it stops partway after the copy, re-run it — no stick needed:
 
 ```bash
 cd ~/kingo-pod && bash setup/setup-linux.sh
 ```
 
-> **Tight on disk space?** Skip the copy and load straight from the stick —
-> use this command instead of the one above. The stick must stay plugged in
-> for the whole setup, and a re-run needs it again:
+> **Tight on disk space?** If the copy does not fit, the script says so and
+> loads straight from the stick instead — keep it plugged in for the whole
+> setup then. You can also force that from the start (a re-run needs the stick
+> again), replacing `e` with your drive letter:
 >
 > ```bash
 > cd ~ && sudo apt update && sudo apt install -y git && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null || true; } && cd ~/kingo-pod && git pull --ff-only && bash setup/setup-linux.sh /mnt/e/kingo-images-$(dpkg --print-architecture).tar
@@ -111,9 +109,10 @@ cd ~/kingo-pod && bash setup/setup-linux.sh
 
 ## If the stick isn't found
 
-`cp: cannot stat …` (or `bundle file not found`) means the stick isn't
-visible inside Ubuntu yet — normal when it was plugged in after Ubuntu was
-already open. Nothing is broken, and you do **not** need to restart anything.
+`no USB bundle found` means the script could not find a stick at all. First
+just plug the stick in and run the Step 4 command again — that is usually the
+whole fix, and it needs no drive letter. If it still is not found, mount it by
+hand; nothing is broken, and you do **not** need to restart anything.
 
 Not sure which drive letter the stick has? This lists your Windows drives
 from inside Ubuntu (the stick is the ~64 GB one):
@@ -128,11 +127,11 @@ Now mount it by hand (replace `e`/`E:` with your drive letter):
 sudo mkdir -p /mnt/e && sudo mount -t drvfs E: /mnt/e
 ```
 
-then redo the copy and setup (the clone already happened, so not the full
-Step 4 command):
+then run setup again — it finds the now-mounted stick by itself (the clone
+already happened, so this is shorter than the Step 4 command):
 
 ```bash
-cp /mnt/e/kingo-images-$(dpkg --print-architecture).tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
+cd ~/kingo-pod && bash setup/setup-linux.sh
 ```
 
 Still nothing? Then copy the file in **Windows** instead: open the stick in

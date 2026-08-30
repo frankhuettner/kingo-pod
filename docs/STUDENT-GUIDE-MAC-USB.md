@@ -65,6 +65,10 @@ cd ~ && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null |
 > stick. If the copy is damaged, incomplete, or not the class file, the script
 > stops and says so instead of loading it.
 
+> **Prefer not to drag files?** You can skip this step entirely: leave the
+> stick plugged in and go to Step 4 — the setup script finds it by itself and
+> copies the file for you. Dragging is just the version you can watch happen.
+
 The copy takes ~5–10 minutes and is the **only** part that needs the stick —
 hand it to the next student as soon as the copy is done. **You do not need to
 "eject" it first:** nothing is ever written to the stick, so once the copy

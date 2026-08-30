@@ -83,12 +83,18 @@ stick students at: [`STUDENT-GUIDE-MAC-USB.md`](STUDENT-GUIDE-MAC-USB.md) and
 [`STUDENT-GUIDE-WINDOWS-USB.md`](STUDENT-GUIDE-WINDOWS-USB.md). In short:
 
 - **Windows** (WSL2 + Ubuntu must already be done at home — reboot + Store;
-  the USB guide repeats those steps): plug the stick in *before* opening
-  Ubuntu, then the guide's paste block: clone, `cp` the tar from
-  `/mnt/<letter>/`, pass the stick on, `bash setup/setup-linux.sh`.
+  the USB guide repeats those steps): plug the stick in and run the guide's
+  paste block — clone, then `bash setup/setup-linux.sh`. **No drive letter,
+  no `cp`**: setup asks `kingo findbundle`, which searches the mounted media
+  and, on WSL, mounts the Windows drives Ubuntu has not picked up (asking for
+  the student's password). That case is the norm, not the exception — WSL2
+  only auto-mounts removable drives that were plugged in before it started,
+  so a student following the guide literally always hit `cp: cannot stat`.
 - **Mac**: the guide's clone one-liner creates `~/kingo-pod`; drag the tar
-  from the stick into that folder in Finder, pass the stick on, then
-  `cd ~/kingo-pod && bash setup/setup-mac.sh`.
+  from the stick into that folder in Finder, then `cd ~/kingo-pod && bash
+  setup/setup-mac.sh` — or skip the drag entirely and let setup find the
+  stick under `/Volumes` by itself. Either way it copies the tar in and tells
+  the student when the stick can be passed on.
 - **Already set up, only images missing**:
   `./kingo load /path/to/kingo-images-<arch>.tar && ./kingo up` does it
   directly (`load` with no path auto-finds this machine's arch tar).

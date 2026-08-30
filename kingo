@@ -802,6 +802,77 @@ verify_bundle() { # $1: tar  $2..: images that must be in it
    The unusable file is $tar; delete it to free the space."
 }
 
+# ── Finding the instructor's USB stick ───────────────────────────────────────
+# Students plug the stick in at the moment the guide tells them to use it — by
+# then Ubuntu is already open, and WSL2 only auto-mounts removable drives that
+# were present when it STARTED. "cp: cannot stat /mnt/e/..." is therefore the
+# NORMAL outcome on Windows, not the exception (hit live 2026-08-30), and
+# making students look up a drive letter is exactly the kind of step that
+# strands people in a classroom. So look for the bundle ourselves, and on WSL
+# mount the Windows drives Ubuntu has not picked up yet.
+is_wsl() { grep -qi microsoft /proc/version 2>/dev/null; }
+
+bundle_names() { # candidate file names, this machine's architecture first
+  printf '%s\n' "kingo-images-$(host_docker_arch).tar" kingo-images.tar
+}
+
+find_bundle_in_dirs() { # $@: directories — prints the first bundle found
+  local d n
+  for d in "$@"; do
+    [ -d "$d" ] || continue
+    while IFS= read -r n; do
+      [ -f "${d%/}/$n" ] && { printf '%s\n' "${d%/}/$n"; return 0; }
+    done <<EOF
+$(bundle_names)
+EOF
+  done
+  return 1
+}
+
+# Where removable media shows up, per platform. Globs are NOT word-split, so a
+# volume with a space in its name ("/Volumes/Macintosh HD") stays one argument.
+find_bundle_on_media() {
+  find_bundle_in_dirs /mnt/*/ /Volumes/*/ /media/*/ /media/*/*/ /run/media/*/*/ 2>/dev/null
+}
+
+wsl_mount_windows_drives() { # mount what Windows has but Ubuntu does not
+  is_wsl || return 1
+  command -v sudo >/dev/null 2>&1 || return 1
+  local letters l m upper mounted=0
+  # Ask Windows which drives exist; fall back to the usual stick letters when
+  # interop is off. tr strips CRs and normalises to lowercase.
+  letters="$(powershell.exe -NoProfile -Command 'Get-Volume | Where-Object { $_.DriveLetter } | ForEach-Object { $_.DriveLetter }' 2>/dev/null \
+    | tr -d '\r' | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z\n')"
+  [ -n "$letters" ] || letters="$(printf 'd\ne\nf\ng\nh')"
+  for l in $letters; do
+    m="/mnt/$l"
+    # Already mounted and readable? Leave it alone — never remount /mnt/c.
+    [ -d "$m" ] && [ -n "$(ls -A "$m" 2>/dev/null)" ] && continue
+    sudo mkdir -p "$m" >/dev/null 2>&1 || continue
+    upper="$(printf '%s' "$l" | tr '[:lower:]' '[:upper:]')"
+    sudo mount -t drvfs "$upper:" "$m" >/dev/null 2>&1 && mounted=1
+  done
+  [ "$mounted" = 1 ]
+}
+
+# The one entry point: this folder → media that is already mounted → (WSL) the
+# drives Ubuntu has not mounted yet. Prints a path, or nothing.
+discover_bundle() {
+  local p
+  p="$(find_bundle_in_dirs . 2>/dev/null || true)"
+  [ -n "$p" ] && { printf '%s\n' "${p#./}"; return 0; }
+  p="$(find_bundle_on_media || true)"
+  [ -n "$p" ] && { printf '%s\n' "$p"; return 0; }
+  if is_wsl; then
+    echo "Your USB stick is not visible in Ubuntu yet — mounting it (Ubuntu may ask for your password) ..." >&2
+    if wsl_mount_windows_drives; then
+      p="$(find_bundle_on_media || true)"
+      [ -n "$p" ] && { printf '%s\n' "$p"; return 0; }
+    fi
+  fi
+  return 1
+}
+
 # ── Bundle checksums: the stick is not a trusted channel ─────────────────────
 # The blobs INSIDE a bundle are content-addressed (each layer file is named
 # after its own sha256), so a tampered layer cannot load — but a whole tar
@@ -920,12 +991,12 @@ cmd_bundle() {
 cmd_load() {
   select_engine; ensure_ready
   local in="${1:-}"
-  if [ -z "$in" ]; then
-    for cand in "kingo-images-$(host_docker_arch).tar" kingo-images.tar; do
-      [ -f "$cand" ] && in="$cand" && break
-    done
-    [ -n "$in" ] || in="kingo-images-$(host_docker_arch).tar"
-  fi
+  [ -n "$in" ] || in="$(discover_bundle || true)"
+  [ -n "$in" ] || die "no USB bundle found — not in this folder, and no stick with one on it.
+   Is the stick plugged in? Then try again (that is all it takes).
+   If it still is not found, see docs/STUDENT-GUIDE-WINDOWS-USB.md
+   ('If the stick isn't found'), or name the file yourself:
+     ./kingo load /path/to/kingo-images-$(host_docker_arch).tar"
   [ -f "$in" ] || die "bundle file not found: $in   (usage: ./kingo load /path/to/kingo-images-<arch>.tar — on Windows/WSL a USB stick is under /mnt/<letter>/, on Mac under /Volumes/)"
   verify_bundle_checksum "$in"
   echo "Loading images from $in (takes a few minutes) ..."
@@ -1097,6 +1168,7 @@ case "${1:-help}" in
   smoke)             cmd_smoke ;;
   doctor)            cmd_doctor ;;
   fixports)          cmd_fixports ;;
+  findbundle)        discover_bundle || die "no USB bundle found (is the stick plugged in?)" ;;
   credentials|creds) cmd_credentials ;;
   mcp)               cmd_mcp ;;
   logs)              select_engine; shift; compose logs --tail=100 -f "$@" ;;
@@ -1168,7 +1240,10 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo bundle [file] save all images into one arch-stamped tar for USB sticks
                       (instructor; default kingo-images-<arch>.tar; records its
                       checksum in bundles.sha256 — commit that file)
-  kingo load [file]   load images from a USB bundle — 'kingo up' then
+  kingo findbundle    print the path of a USB bundle — searches this folder and
+                      every stick, and mounts the stick on WSL if needed
+  kingo load [file]   load images from a USB bundle — finds the stick by itself
+                      when no file is named; 'kingo up' then
                       needs no download (classroom Wi-Fi fallback); refuses a
                       wrong-architecture bundle, and one whose checksum does
                       not match bundles.sha256 from the class repo

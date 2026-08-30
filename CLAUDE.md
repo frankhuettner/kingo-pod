@@ -102,6 +102,17 @@ It was ported from the old `kingo-vm` repo.
   (measured 2026-08-29) is all-gzip and bundles 11/11 fine without it, so a
   hard requirement would be wrong — and PR #4's claim that an arm64 bundle
   "cannot ever have worked" does not hold. (issue #3 / PR #4)
+- **The USB stick is found FOR the student, never typed by them**: WSL2
+  auto-mounts only removable drives that were present when it started, so a
+  student who plugs the stick in when the guide says to — the normal
+  sequence — sees `cp: cannot stat /mnt/e/...`. `kingo findbundle` /
+  `discover_bundle` therefore searches this folder, then mounted media
+  (`/mnt/*`, `/Volumes/*`, `/media/*`), then on WSL mounts the Windows drives
+  Ubuntu lacks (drive letters from `powershell.exe Get-Volume`, blind d–h
+  fallback) — and both setup scripts use it before falling back to a download.
+  Never remount a drive that is already mounted and non-empty (that would hit
+  `/mnt/c`), and keep the copy-then-pass-the-stick-on flow: the script says
+  "UNPLUG THE STICK NOW" so one stick can serve a whole room.
 - **A bundle's checksum travels by git, never on the stick**: the blobs inside
   a bundle are content-addressed (each layer file is named after its own
   sha256), so a tampered layer cannot load — but a whole tar swapped for a

@@ -126,6 +126,30 @@ if [ -z "$BUNDLE" ]; then
     [ -f "$cand" ] && BUNDLE="$cand" && break
   done
 fi
+# Nothing in this folder — look on the instructor's stick. On WSL this also
+# mounts the stick when Windows has it but Ubuntu does not, which is the
+# NORMAL case (students plug it in only when the guide asks for it, long after
+# Ubuntu started). Copy it here so the stick can be passed on right away and a
+# re-run never needs it again; if the copy does not fit, load off the stick.
+if [ -z "$BUNDLE" ]; then
+  STICK="$(./kingo findbundle 2>/dev/null || true)"
+  if [ -n "$STICK" ]; then
+    say "Found the class images on a USB stick ($STICK)."
+    say "Copying them to this folder (5-10 minutes) so you can pass the stick on ..."
+    _tmp="./$(basename "$STICK").part"
+    rm -f "$_tmp"
+    if cp "$STICK" "$_tmp"; then
+      mv "$_tmp" "./$(basename "$STICK")"
+      BUNDLE="$(basename "$STICK")"
+      say "Copy done — you can UNPLUG THE STICK NOW and pass it to the next student."
+    else
+      rm -f "$_tmp"
+      say "Could not copy it (not enough disk space?) — loading straight from the stick instead. Keep it plugged in."
+      BUNDLE="$STICK"
+    fi
+  fi
+fi
+
 if [ -n "$BUNDLE" ]; then
   say "Loading the container images from the USB bundle ($BUNDLE) — no big download needed ..."
   ./kingo load "$BUNDLE"
