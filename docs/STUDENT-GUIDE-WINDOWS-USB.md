@@ -65,6 +65,13 @@ Windows PCs) and `kingo-images-arm64.tar` (for the rare ARM laptop). The
 command below copies the right one for *your* machine automatically — the
 `$(dpkg --print-architecture)` part just fills in your laptop's type.
 
+**Plug the stick in BEFORE you open Ubuntu.** Windows gives it a drive
+letter (look in Explorer — often `D:`, `E:` or `F:`), and Ubuntu only picks
+removable drives up automatically if they were already there at start. If the
+command below says `cp: cannot stat …`, that is exactly what happened — see
+[If the stick isn't found](#if-the-stick-isnt-found) right below, it is one
+command to fix.
+
 Open the **Ubuntu** app from the Start menu. Copy this command with its
 **copy button** (it is one long line), paste it into Ubuntu, replace `e`
 with your stick's drive letter if it differs, and press **Enter**:
@@ -105,7 +112,17 @@ cd ~/kingo-pod && bash setup/setup-linux.sh
 ## If the stick isn't found
 
 `cp: cannot stat …` (or `bundle file not found`) means the stick isn't
-visible inside Ubuntu yet. Mount it by hand (use your drive letter):
+visible inside Ubuntu yet — normal when it was plugged in after Ubuntu was
+already open. Nothing is broken, and you do **not** need to restart anything.
+
+Not sure which drive letter the stick has? This lists your Windows drives
+from inside Ubuntu (the stick is the ~64 GB one):
+
+```bash
+powershell.exe -NoProfile -Command "Get-Volume | Format-Table DriveLetter,FileSystemLabel,Size"
+```
+
+Now mount it by hand (replace `e`/`E:` with your drive letter):
 
 ```bash
 sudo mkdir -p /mnt/e && sudo mount -t drvfs E: /mnt/e
@@ -116,6 +133,14 @@ Step 4 command):
 
 ```bash
 cp /mnt/e/kingo-images-$(dpkg --print-architecture).tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
+```
+
+Still nothing? Then copy the file in **Windows** instead: open the stick in
+Explorer, copy `kingo-images-amd64.tar` into your `Downloads` folder, and run
+this in Ubuntu (replace `YourName` with your Windows user name):
+
+```bash
+cp /mnt/c/Users/YourName/Downloads/kingo-images-amd64.tar ~/kingo-pod/ && cd ~/kingo-pod && bash setup/setup-linux.sh
 ```
 
 Next time: plug the stick in before opening Ubuntu.
