@@ -177,10 +177,10 @@ committed `.env`.
 
 ## Pinned versions (and when to move them)
 
-Every image is pinned to an exact tag — a class where two laptops run
-different versions is a class where half the room's screenshots don't match.
-The pins live in `compose.yml`, except the two local builds, which take theirs
-from the `FROM` line of their Dockerfile:
+Images are pinned by tag — a class where two laptops run different versions is
+a class where half the room's screenshots don't match. The pins live in
+`compose.yml`, except the two local builds, which take theirs from the `FROM`
+line of their Dockerfile:
 
 | Service | Pin | Where |
 |---|---|---|
@@ -203,6 +203,13 @@ student for**: it prints the stack version, the commit and date of their
 class files (or "installed from a ZIP"), every container engine on the
 machine, and the platform — one paste that answers most "it doesn't work"
 mails.
+
+**Two of these are not exact**: `postgres:16` and `jupyterhub:5` follow their
+major line, so a fresh install today and one from last month can differ by a
+patch release, and a rebuild can move JupyterHub without anyone editing a
+file. Harmless so far, and CI's `smoke` would catch a bad patch — but it is
+the opposite of what the paragraph above promises, so pinning them exactly is
+on the list in issue #6.
 
 **Bumping one is never just an edit.** It means: rebuild and re-run
 `./kingo smoke` locally, let CI do both engines, tell every student to run
@@ -235,8 +242,15 @@ between cohorts, not during one.
   dump/restore — or a `./kingo reset`, which throws their work away. If it is
   to happen, it happens between cohorts and with a documented dump/restore
   step, not as part of a routine update.
-- The others were within one release of current (Qdrant exactly current,
-  Metabase one patch behind, n8n a few weeks, CloudBeaver one minor).
+- **The Jupyter MCP server is a whole major behind**: we pin
+  `datalayer/jupyter-mcp-server:1.4.5`, upstream is at 2.x. Worth attention
+  precisely because `kingo smoke` asserts `4040/mcp → 401` — if 2.x changed
+  the endpoint or its auth, that check fails loudly, which is the good case;
+  the bad case is a silent change in what students point Claude Desktop at.
+- The rest were within one release of current: Qdrant exactly current,
+  Metabase one patch behind, n8n a few weeks, CloudBeaver one minor, and the
+  JupyterLab image two weekly builds behind (it is rebuilt roughly weekly, so
+  "behind" is normal there).
 
 The actual to-do list, with the checklist for doing it safely, lives in
 [issue #6](https://github.com/frankhuettner/kingo-pod/issues/6) — that is
