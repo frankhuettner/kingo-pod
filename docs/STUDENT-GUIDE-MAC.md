@@ -7,7 +7,7 @@ script checks itself and tells you if something needs fixing.
 > **Jump to:** [Setup](#step-1--install-homebrew) ·
 > [Your services](#step-4--open-your-services) ·
 > [Update](#keeping-up-to-date) ·
-> [Everyday use](#everyday-use) ·
+> [Everyday use](#everyday-use) · [Your files](#your-own-files--the-shared-folder) ·
 > [If something breaks](#if-something-breaks) · [FAQ](#faq)
 
 ## Keeping up to date
@@ -172,6 +172,33 @@ then one command per job:
 > again. (Docker Desktop users: the stack may come back by itself when
 > Docker starts — `./kingo status` shows what's up.)
 
+### Your own files — the `shared` folder
+
+Your own data files — a CSV, an Excel sheet, a PDF — go into the **`shared`
+folder inside `kingo-pod`** (`~/kingo-pod/shared`).
+Langflow sees the same folder as **`/app/shared`** — so a file you drop in as
+`~/kingo-pod/shared/sales.csv` is `/app/shared/sales.csv` in a Langflow
+component, and anything Langflow writes there appears on your Mac. The folder
+is created for you; if it isn't there yet, run `./kingo update` once.
+
+One line opens it in Finder (and ⌘-drag it to the Finder sidebar to keep it
+there):
+
+```
+open ~/kingo-pod/shared
+```
+
+Treat the folder as **shared with Langflow**: anything running inside Langflow
+— including a flow someone else built and you imported — can read, change and
+delete files there. So keep private files out of it, and never let it hold the
+only copy of something. Nothing outside this one folder is reachable from
+Langflow.
+
+> **Using Docker Desktop?** Files that *Langflow itself* writes into the
+> folder can end up owned by the system rather than by you — deleting those
+> from Finder or Terminal may then need `sudo rm`. Files **you** put in are
+> never affected. With Podman (the default) this does not happen.
+
 ## If something breaks
 
 **Always start with one command** — it checks the usual suspects and tells you
@@ -220,32 +247,6 @@ real API key into an n8n workflow you share or export.**
 **Where is my data?** Databases, notebooks, and workflows live in container
 volumes on your Mac and survive `./kingo down` and reboots. Only
 `./kingo reset` deletes them (it asks first).
-
-**How do I get my own files into Langflow?**
-
-Put them in the **`shared` folder inside `kingo-pod`** (`~/kingo-pod/shared`).
-Langflow sees the same folder as **`/app/shared`** — so a file you drop in as
-`~/kingo-pod/shared/sales.csv` is `/app/shared/sales.csv` in a Langflow
-component, and anything Langflow writes there appears on your Mac. The folder
-is created for you; if it isn't there yet, run `./kingo update` once.
-
-One line opens it in Finder (and ⌘-drag it to the Finder sidebar to keep it
-there):
-
-```
-open ~/kingo-pod/shared
-```
-
-Treat the folder as **shared with Langflow**: anything running inside Langflow
-— including a flow someone else built and you imported — can read, change and
-delete files there. So keep private files out of it, and never let it hold the
-only copy of something. Nothing outside this one folder is reachable from
-Langflow.
-
-> **Using Docker Desktop?** Files that *Langflow itself* writes into the
-> folder can end up owned by the system rather than by you — deleting those
-> from Finder or Terminal may then need `sudo rm`. Files **you** put in are
-> never affected. With Podman (the default) this does not happen.
 
 **Can I use extra Python packages (say, statsmodels)?**
 

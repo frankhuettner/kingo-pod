@@ -64,19 +64,6 @@ const using = GUIDES.filter((g) => g.kind === "Using the stack");
       }
     </ul>
   </section>
-
-  <section class="section">
-    <h2 class="label">Already installed?</h2>
-    <p class="lede">
-      One line brings any installation up to date — newest class files, images and rebuilt containers. Safe to run any
-      time, on a Mac in Terminal and on Windows inside Ubuntu:
-    </p>
-    <pre class="update-line"><code>cd ~/kingo-pod && ./kingo update</code></pre>
-    <p class="note">
-      Something broken? Every guide has an <em>If something breaks</em> section, and problems can be
-      <a href="https://github.com/frankhuettner/kingo-pod/issues">reported on GitHub</a>.
-    </p>
-  </section>
 </Docs>
 
 <style>
@@ -157,17 +144,5 @@ const using = GUIDES.filter((g) => g.kind === "Using the stack");
     color: var(--ink-muted);
     font-size: var(--step--1);
     flex: 1;
-  }
-
-  .update-line {
-    max-width: var(--measure);
-    padding: 1rem 1.1rem;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    background: var(--bg-soft);
-    overflow-x: auto;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.85rem;
-    margin: 0;
   }
 </style>

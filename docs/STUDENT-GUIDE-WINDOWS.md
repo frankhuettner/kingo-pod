@@ -10,7 +10,7 @@ fixing.
 > **Jump to:** [Setup](#step-1--turn-on-wsl2--ubuntu) ·
 > [Your services](#step-5--open-your-services) ·
 > [Update](#keeping-up-to-date) ·
-> [Everyday use](#everyday-use) ·
+> [Everyday use](#everyday-use) · [Your files](#your-own-files--the-shared-folder) ·
 > [If something breaks](#if-something-breaks) · [FAQ](#faq)
 
 ## Keeping up to date
@@ -197,6 +197,50 @@ then one command per job:
 > run `./kingo up` again. (Docker Desktop users: the stack may come back by
 > itself when Docker starts — `./kingo status` shows what's up.)
 
+### Your own files — the `shared` folder
+
+Your own data files — a CSV, an Excel sheet, a PDF — go into the **`shared`
+folder inside `kingo-pod`** (`~/kingo-pod/shared`).
+Langflow sees the same folder as **`/app/shared`** — so a file you drop in as
+`~/kingo-pod/shared/sales.csv` is `/app/shared/sales.csv` in a Langflow
+component, and anything Langflow writes there appears on your laptop, in
+the Ubuntu home folder. The folder is created for you; if it isn't there
+yet, run `./kingo update` once.
+
+**Where is that folder in Windows?** Ubuntu's files show up in File Explorer.
+Open Explorer and follow the left sidebar: **Linux → Ubuntu → home → *your
+Linux user name* → kingo-pod → shared** (your user name is the one you picked
+in Step 2, so the folder is called something else than `frank` below). You can
+also paste `\\wsl.localhost\Ubuntu\home\` into the address bar and click
+onwards from there.
+
+![File Explorer at Linux → Ubuntu → home → frank → kingo-pod, with the shared folder highlighted](img/wsl-shared-1-explorer.png)
+
+Drag files in and out like in any other folder — Langflow sees them
+immediately, and files Langflow writes appear here.
+
+![The shared folder open in Explorer, next to an Ubuntu terminal in the same folder](img/wsl-shared-2-folder.png)
+
+Quickest way to get there, from Ubuntu — this opens the folder in Explorer:
+
+```bash
+cd ~/kingo-pod/shared && explorer.exe .
+```
+
+Then right-click **shared** in Explorer's sidebar → **Pin to Quick access**,
+and it is one click away from then on.
+
+Treat the folder as **shared with Langflow**: anything running inside Langflow
+— including a flow someone else built and you imported — can read, change and
+delete files there. So keep private files out of it, and never let it hold the
+only copy of something. Nothing outside this one folder is reachable from
+Langflow.
+
+> **Using Docker Desktop?** Files that *Langflow itself* writes into the
+> folder end up owned by `root` inside Ubuntu — deleting those needs
+> `sudo rm`. Files **you** put in are never affected. With Podman (the
+> default) this does not happen.
+
 ## If something breaks
 
 **Always start with one command** (in Ubuntu, inside `kingo-pod`) — it checks
@@ -247,48 +291,6 @@ workflow you share or export.**
 **Where is my data?** Databases, notebooks, and workflows live in container
 volumes inside WSL2 and survive `./kingo down` and reboots. Only
 `./kingo reset` deletes them (it asks first).
-
-**How do I get my own files into Langflow?**
-
-Put them in the **`shared` folder inside `kingo-pod`** (`~/kingo-pod/shared`).
-Langflow sees the same folder as **`/app/shared`** — so a file you drop in as
-`~/kingo-pod/shared/sales.csv` is `/app/shared/sales.csv` in a Langflow
-component, and anything Langflow writes there appears on your laptop (via the Ubuntu home folder). The folder
-is created for you; if it isn't there yet, run `./kingo update` once.
-
-**Where is that folder in Windows?** Ubuntu's files show up in File Explorer.
-Open Explorer and follow the left sidebar: **Linux → Ubuntu → home → *your
-Linux user name* → kingo-pod → shared** (your user name is the one you picked
-in Step 2, so the folder is called something else than `frank` below). You can
-also paste `\\wsl.localhost\Ubuntu\home\` into the address bar and click
-onwards from there.
-
-![File Explorer at Linux → Ubuntu → home → frank → kingo-pod, with the shared folder highlighted](img/wsl-shared-1-explorer.png)
-
-Drag files in and out like in any other folder — Langflow sees them
-immediately, and files Langflow writes appear here.
-
-![The shared folder open in Explorer, next to an Ubuntu terminal in the same folder](img/wsl-shared-2-folder.png)
-
-Quickest way to get there, from Ubuntu — this opens the folder in Explorer:
-
-```bash
-cd ~/kingo-pod/shared && explorer.exe .
-```
-
-Then right-click **shared** in Explorer's sidebar → **Pin to Quick access**,
-and it is one click away from then on.
-
-Treat the folder as **shared with Langflow**: anything running inside Langflow
-— including a flow someone else built and you imported — can read, change and
-delete files there. So keep private files out of it, and never let it hold the
-only copy of something. Nothing outside this one folder is reachable from
-Langflow.
-
-> **Using Docker Desktop?** Files that *Langflow itself* writes into the
-> folder end up owned by `root` inside Ubuntu — deleting those needs
-> `sudo rm`. Files **you** put in are never affected. With Podman (the
-> default) this does not happen.
 
 **Can I use extra Python packages (say, statsmodels)?**
 
