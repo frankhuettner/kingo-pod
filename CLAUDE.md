@@ -146,6 +146,19 @@ It was ported from the old `kingo-vm` repo.
   on an Apple-Silicon Mac. Do NOT collapse back to a single `kingo-images.tar`
   name (kept only as an auto-detect fallback).
 
+- **The guides in `docs/` ARE the website**: `site/` is a small Astro project
+  that publishes them at <https://huettner.io/kingo-pod/> (GitHub Pages project
+  site; it inherits the custom domain of `frankhuettner.github.io`). Edit the
+  markdown in `docs/` — `site/scripts/sync-docs.mjs` copies it in at build time
+  and rewrites the two things that differ between GitHub and the web: links
+  between guides (`STUDENT-GUIDE-MAC.md` → `/kingo-pod/mac/`) and image paths.
+  So the files must stay valid markdown for the GitHub view: no front matter
+  (titles and menu labels live in `site/src/lib/guides.ts`), keep the `# Title`
+  first line and the `Jump to:` line — the sync strips both for the web, where
+  the page header and the sidebar do that job. **Never add a `CNAME` file
+  here** (it would fight the main site for huettner.io), and never let a guide
+  exist in two places.
+
 ## Layout
 
 - `compose.yml` — the 9-service stack (ports overridable via `KINGO_PORT_*`).
@@ -165,7 +178,9 @@ It was ported from the old `kingo-vm` repo.
   tutorial in the guide (Frank's call — a .ps1 was tried and dropped as too
   complicated), then run setup-linux.sh inside Ubuntu.
 - `docs/` — student guides (Mac/Windows, each in an internet and a USB-stick
-  variant) + instructor notes.
+  variant), the CloudBeaver walkthrough + instructor notes.
+- `site/` — the Astro build that publishes `docs/` to huettner.io/kingo-pod
+  (`npm run dev` to preview; deployed by `.github/workflows/pages.yml`).
 - `.github/workflows/ci.yml` — both engines, two boot cycles.
 
 ## Windows = WSL2, one CLI

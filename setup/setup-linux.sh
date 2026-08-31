@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Kingo classroom — one-time setup for Linux. This is ALSO the Windows path:
-# Windows students run it inside their WSL2 Ubuntu (see docs/STUDENT-GUIDE-
-# WINDOWS.md). Re-runnable. Uses an already-running Docker as-is (Docker
+# Windows students run it inside their WSL2 Ubuntu (see
+# https://huettner.io/kingo-pod/windows/). Re-runnable. Uses an already-running Docker as-is (Docker
 # Desktop's WSL integration, or native Linux Docker); otherwise installs
 # Podman + the Compose v2 provider binary. Either way it then brings the
 # stack up and verifies it.

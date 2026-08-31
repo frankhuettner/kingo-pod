@@ -20,13 +20,14 @@ data, flows and notebooks stay.
 
 ## 🚀 Students: pick your guide
 
-Two questions decide it — **which laptop**, and **where do the ~10 GB of
-images come from**?
+The guides are published as a small website — **<https://huettner.io/kingo-pod/>**
+(the same files as in [`docs/`](docs), with navigation, a table of contents and
+a copy button on every command).
 
 | | 🌐 Internet (at home, before class) | 🔌 USB stick (from your instructor) |
 |---|---|---|
-| 🍎 **Mac** (Apple Silicon) | ➡️ [Mac guide](docs/STUDENT-GUIDE-MAC.md) | ➡️ [Mac USB guide](docs/STUDENT-GUIDE-MAC-USB.md) |
-| 🪟 **Windows** (10/11) | ➡️ [Windows guide](docs/STUDENT-GUIDE-WINDOWS.md) | ➡️ [Windows USB guide](docs/STUDENT-GUIDE-WINDOWS-USB.md) |
+| 🍎 **Mac** (Apple Silicon) | ➡️ [Mac guide](https://huettner.io/kingo-pod/mac/) | ➡️ [Mac USB guide](https://huettner.io/kingo-pod/mac-usb/) |
+| 🪟 **Windows** (10/11) | ➡️ [Windows guide](https://huettner.io/kingo-pod/windows/) | ➡️ [Windows USB guide](https://huettner.io/kingo-pod/windows-usb/) |
 
 - 🌐 is the normal path: **do it at home on your own Wi-Fi** — the first run
   downloads ~10 GB, and on Windows enabling WSL2 needs a restart.
@@ -38,6 +39,9 @@ Every guide is a complete walkthrough: it picks a container engine (**an
 already-running Docker Desktop is used as-is**; otherwise Podman is
 installed), auto-resolves port conflicts with software you already run, starts
 the stack, and verifies it — you're done when you see **`SMOKE OK`**.
+
+Once installed, [Using CloudBeaver](https://huettner.io/kingo-pod/cloudbeaver/)
+shows how to open the class database.
 
 👩‍🏫 **Instructors**: [`docs/INSTRUCTOR.md`](docs/INSTRUCTOR.md) — minimum
 specs, preparing the day-1 USB bundle, and what to put in the syllabus.

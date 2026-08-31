@@ -1,0 +1,63 @@
+name: Docs site
+
+# Publishes site/ to GitHub Pages, which serves it at
+# https://huettner.io/kingo-pod/ (project pages inherit the custom domain of
+# frankhuettner.github.io). The guides themselves live in docs/ and are pulled
+# in by site/scripts/sync-docs.mjs at build time — so a typo fix in a guide is
+# a one-file commit that publishes itself.
+#
+# Repository setting this needs, once: Settings → Pages → Source = GitHub Actions.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a deploy half-way; queue instead.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install
+        working-directory: site
+        run: npm ci
+
+      - name: Build (syncs docs/ into the site, then renders it)
+        working-directory: site
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

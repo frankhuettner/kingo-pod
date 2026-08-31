@@ -81,8 +81,8 @@ physical write-protect switch, use them; that removes the one real risk of
 passing a stick around a room of Windows laptops.
 
 **What the student runs** — each platform has a dedicated USB guide to point
-stick students at: [`STUDENT-GUIDE-MAC-USB.md`](STUDENT-GUIDE-MAC-USB.md) and
-[`STUDENT-GUIDE-WINDOWS-USB.md`](STUDENT-GUIDE-WINDOWS-USB.md). In short:
+stick students at: [`STUDENT-GUIDE-MAC-USB.md`](https://huettner.io/kingo-pod/mac-usb/) and
+[`STUDENT-GUIDE-WINDOWS-USB.md`](https://huettner.io/kingo-pod/windows-usb/). In short:
 
 - **Windows** (WSL2 + Ubuntu must already be done at home — reboot + Store;
   the USB guide repeats those steps): plug the stick in and run the guide's
@@ -219,7 +219,7 @@ The connection itself is provisioned by us
 (`cloudbeaver/data-sources.json`, mounted into the container) — the database
 password is not, because CloudBeaver keeps saved credentials in its own
 encrypted store. Step-by-step for students:
-[`docs/CLOUDBEAVER.md`](CLOUDBEAVER.md). `kingo smoke` only asserts that
+[`docs/CLOUDBEAVER.md`](https://huettner.io/kingo-pod/cloudbeaver/). `kingo smoke` only asserts that
 CloudBeaver answers on 8978; it does not click through this.
 
 ## Credentials (public by design)

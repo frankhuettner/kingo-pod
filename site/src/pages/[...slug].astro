@@ -1,0 +1,220 @@
+---
+import { getEntry, render } from "astro:content";
+import Docs from "../layouts/Docs.astro";
+import { GUIDES, bySlug } from "../lib/guides";
+import type { GetStaticPaths } from "astro";
+
+export const getStaticPaths: GetStaticPaths = () => GUIDES.map((g) => ({ params: { slug: g.slug } }));
+
+const { slug } = Astro.params;
+const guide = bySlug(slug!)!;
+const entry = await getEntry("guides", guide.slug);
+const { Content, headings } = await render(entry!);
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+// h2 is a step; h3 is detail inside one. Deeper levels would only add noise.
+const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
+const others = GUIDES.filter((g) => g.slug !== guide.slug);
+---
+
+<Docs title={guide.title} description={guide.summary}>
+  <header class="page-head">
+    <p class="label"><a href={`${base}/`}>All guides</a> · {guide.platform} · {guide.kind}</p>
+    <h1>{guide.title}</h1>
+    <p>{guide.summary}</p>
+  </header>
+
+  <div class="guide">
+    <details class="toc toc--mobile">
+      <summary>On this page</summary>
+      <ul>
+        {
+          toc.map((h) => (
+            <li class={`toc__item toc__item--${h.depth}`}>
+              <a href={`#${h.slug}`}>{h.text}</a>
+            </li>
+          ))
+        }
+      </ul>
+    </details>
+
+    <article class="prose" data-guide>
+      <Content />
+    </article>
+
+    <nav class="toc toc--rail" aria-label="On this page">
+      <p class="label">On this page</p>
+      <ul>
+        {
+          toc.map((h) => (
+            <li class={`toc__item toc__item--${h.depth}`}>
+              <a href={`#${h.slug}`}>{h.text}</a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+  </div>
+
+  <nav class="more" aria-label="Other guides">
+    <p class="label">Other guides</p>
+    <ul>
+      {
+        others.map((g) => (
+          <li>
+            <a href={`${base}/${g.slug}/`}>{g.title}</a>
+          </li>
+        ))
+      }
+    </ul>
+  </nav>
+</Docs>
+
+<script>
+  // Copy buttons: every runnable command in these guides is one line meant to
+  // be pasted whole, and selecting it by hand on a phone is where students slip.
+  for (const pre of document.querySelectorAll<HTMLPreElement>("[data-guide] pre")) {
+    const wrap = document.createElement("div");
+    wrap.className = "code-wrap";
+    pre.parentNode?.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn copy-btn";
+    btn.textContent = "Copy";
+    wrap.insertBefore(btn, pre);
+
+    btn.addEventListener("click", async () => {
+      const text = (pre.querySelector("code") ?? pre).textContent ?? "";
+      try {
+        await navigator.clipboard.writeText(text.trim());
+        btn.textContent = "Copied";
+      } catch {
+        btn.textContent = "Select it";
+      }
+      setTimeout(() => (btn.textContent = "Copy"), 1600);
+    });
+  }
+
+  // Mark the section being read in the table of contents.
+  const links = new Map<string, HTMLAnchorElement>();
+  for (const a of document.querySelectorAll<HTMLAnchorElement>(".toc--rail a")) {
+    links.set(decodeURIComponent(a.hash.slice(1)), a);
+  }
+  const targets = [...links.keys()].map((id) => document.getElementById(id)).filter((el): el is HTMLElement => !!el);
+
+  if (targets.length) {
+    const seen = new Set<string>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) seen.add(entry.target.id);
+          else seen.delete(entry.target.id);
+        }
+        const current = targets.find((t) => seen.has(t.id));
+        for (const [id, a] of links) a.classList.toggle("is-current", !!current && id === current.id);
+      },
+      { rootMargin: "0px 0px -70% 0px" },
+    );
+    for (const t of targets) observer.observe(t);
+  }
+</script>
+
+<style>
+  .guide {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--toc);
+    gap: 0 3rem;
+    align-items: start;
+  }
+
+  .toc--rail {
+    position: sticky;
+    top: 1.5rem;
+    font-size: var(--step--1);
+    border-left: 1px solid var(--rule-soft);
+    padding-left: 1rem;
+  }
+
+  .toc ul {
+    list-style: none;
+    margin: 0.6rem 0 0;
+    padding: 0;
+  }
+
+  .toc__item--3 {
+    padding-left: 0.8rem;
+  }
+
+  .toc a {
+    color: var(--ink-muted);
+    text-decoration: none;
+    display: block;
+    padding-block: 0.22rem;
+  }
+
+  .toc a:hover {
+    color: var(--accent);
+  }
+
+  .toc a.is-current {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .toc--mobile {
+    display: none;
+    margin-bottom: 1.6rem;
+    border: 1px solid var(--rule-soft);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    padding: 0.7rem 1rem;
+    font-size: var(--step--1);
+  }
+
+  .toc--mobile summary {
+    cursor: pointer;
+    color: var(--ink-muted);
+    font-weight: 500;
+  }
+
+  @media (max-width: 68rem) {
+    .guide {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .toc--rail {
+      display: none;
+    }
+
+    .toc--mobile {
+      display: block;
+    }
+  }
+
+  .page-head .label a {
+    color: var(--ink-muted);
+    text-decoration: none;
+  }
+
+  .page-head .label a:hover {
+    color: var(--accent);
+  }
+
+  .more {
+    border-top: 1px solid var(--rule);
+    padding-block: 1.6rem;
+    margin-top: 2.5rem;
+  }
+
+  .more ul {
+    list-style: none;
+    margin: 0.7rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.4rem;
+    font-size: var(--step--1);
+  }
+</style>

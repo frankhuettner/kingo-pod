@@ -1,0 +1,101 @@
+---
+import { Font } from "astro:assets";
+import "../styles/global.css";
+import { GUIDES } from "../lib/guides";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const { title, description = "Setup guides for the Kingo Classroom stack — it runs in containers on your own laptop." } =
+  Astro.props;
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const pageTitle = title ? `${title} · Kingo Classroom` : "Kingo Classroom";
+const path = Astro.url.pathname.replace(/\/+$/, "");
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐳</text></svg>"
+    />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary" />
+
+    <Font cssVariable="--font-sans" preload />
+
+    <script is:inline>
+      // Set the theme before first paint so the page never flashes the wrong one.
+      (() => {
+        try {
+          const saved = localStorage.getItem("theme");
+          if (saved === "light" || saved === "dark") {
+            document.documentElement.dataset.theme = saved;
+          }
+        } catch {}
+      })();
+    </script>
+  </head>
+
+  <body>
+    <a class="visually-hidden" href="#main">Skip to content</a>
+
+    <div class="shell">
+      <header class="masthead">
+        <a class="masthead__name" href={`${base}/`}>Kingo Classroom</a>
+        <nav class="nav" aria-label="Guides">
+          {
+            GUIDES.map((g) => (
+              <a href={`${base}/${g.slug}/`} aria-current={path === `${base}/${g.slug}` ? "page" : undefined}>
+                {g.nav}
+              </a>
+            ))
+          }
+          <a href="https://github.com/frankhuettner/kingo-pod">GitHub</a>
+          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Toggle colour theme">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+        </nav>
+      </header>
+
+      <main id="main">
+        <slot />
+      </main>
+
+      <footer class="site-foot">
+        <span>Kingo Classroom — course materials of <a href="https://huettner.io/">Frank Huettner</a></span>
+        <span>
+          <a href="https://github.com/frankhuettner/kingo-pod">Repository</a> ·
+          <a href="https://github.com/frankhuettner/kingo-pod/issues">Report a problem</a>
+        </span>
+      </footer>
+    </div>
+
+    <script is:inline>
+      document.querySelector("[data-theme-toggle]")?.addEventListener("click", () => {
+        const root = document.documentElement;
+        const current = root.dataset.theme ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        const next = current === "dark" ? "light" : "dark";
+        root.dataset.theme = next;
+        try {
+          localStorage.setItem("theme", next);
+        } catch {}
+      });
+    </script>
+  </body>
+</html>

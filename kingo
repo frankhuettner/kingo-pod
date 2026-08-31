@@ -63,7 +63,7 @@ select_engine() {
   fi
   if command -v docker >/dev/null 2>&1; then ENGINE=docker; return; fi
   if command -v podman >/dev/null 2>&1; then ENGINE=podman; return; fi
-  die "No container engine found. Install Podman (recommended) or Docker Desktop — see docs/STUDENT-GUIDE-*.md."
+  die "No container engine found. Install Podman (recommended) or Docker Desktop — see https://huettner.io/kingo-pod/"
 }
 
 # Make sure the engine can actually run containers (start podman machine if it

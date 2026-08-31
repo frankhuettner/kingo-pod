@@ -1,0 +1,173 @@
+---
+import Docs from "../layouts/Docs.astro";
+import { GUIDES } from "../lib/guides";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const setup = GUIDES.filter((g) => g.kind !== "Using the stack");
+const using = GUIDES.filter((g) => g.kind === "Using the stack");
+---
+
+<Docs description="Setup guides for the Kingo Classroom stack — Langflow, n8n, JupyterLab, JupyterHub, Metabase, CloudBeaver, Qdrant and PostgreSQL, running in containers on your own laptop.">
+  <header class="page-head">
+    <p class="label">Class setup</p>
+    <h1>Kingo Classroom</h1>
+    <p>
+      Everything the class uses — Langflow, n8n, JupyterLab, JupyterHub, Metabase, CloudBeaver, Qdrant and a PostgreSQL
+      database — runs in containers on your own laptop. Nothing is shared, nothing is in the cloud, and one command sets
+      it all up.
+    </p>
+  </header>
+
+  <section class="section">
+    <h2 class="label">Install it</h2>
+    <p class="lede">
+      Pick your laptop. <strong>Do this at home, before class</strong> — the first run downloads about 10 GB, and on
+      Windows it needs one restart. Plan about an hour, most of it unattended.
+    </p>
+    <ul class="grid">
+      {
+        setup.map((g) => (
+          <li class="card">
+            <p class="card__meta">
+              <span class="badge">{g.platform}</span>
+              <span class="badge">{g.kind}</span>
+            </p>
+            <a class="card__link" href={`${base}/${g.slug}/`}>
+              <h3 class="card__title">{g.title}</h3>
+            </a>
+            <p class="card__summary">{g.summary}</p>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="note">
+      The USB guides are for the stick handed round in class: same result, but the images come off the stick instead of
+      the Wi-Fi. On Windows, WSL2 still has to be switched on at home first.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2 class="label">Use it</h2>
+    <ul class="grid">
+      {
+        using.map((g) => (
+          <li class="card">
+            <p class="card__meta">
+              <span class="badge">{g.kind}</span>
+            </p>
+            <a class="card__link" href={`${base}/${g.slug}/`}>
+              <h3 class="card__title">{g.title}</h3>
+            </a>
+            <p class="card__summary">{g.summary}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2 class="label">Already installed?</h2>
+    <p class="lede">
+      One line brings any installation up to date — newest class files, images and rebuilt containers. Safe to run any
+      time, on a Mac in Terminal and on Windows inside Ubuntu:
+    </p>
+    <pre class="update-line"><code>cd ~/kingo-pod && ./kingo update</code></pre>
+    <p class="note">
+      Something broken? Every guide has an <em>If something breaks</em> section, and problems can be
+      <a href="https://github.com/frankhuettner/kingo-pod/issues">reported on GitHub</a>.
+    </p>
+  </section>
+</Docs>
+
+<style>
+  .section {
+    padding-block: 2.2rem;
+    border-top: 1px solid var(--rule);
+  }
+
+  .section > h2 {
+    margin-bottom: 1rem;
+  }
+
+  .lede {
+    max-width: var(--measure);
+    color: var(--ink-muted);
+    margin: 0 0 1.4rem;
+  }
+
+  .note {
+    max-width: var(--measure);
+    color: var(--ink-muted);
+    font-size: var(--step--1);
+    margin: 1.2rem 0 0;
+  }
+
+  .grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    /* Two columns: Mac beside Windows, then the two USB variants under them. */
+    grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+    max-width: 56rem;
+    gap: 1rem;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    padding: 1.25rem;
+    border: 1px solid var(--rule-soft);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    box-shadow: var(--shadow-sm);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .card:hover {
+    border-color: var(--rule);
+    box-shadow: var(--shadow-md);
+  }
+
+  .card__meta {
+    margin: 0 0 0.7rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .card__link {
+    text-decoration: none;
+    color: var(--ink);
+  }
+
+  .card__title {
+    font-size: var(--step-1);
+    margin: 0;
+  }
+
+  .card__link:hover .card__title {
+    color: var(--accent);
+  }
+
+  .card__summary {
+    margin: 0.45rem 0 0;
+    color: var(--ink-muted);
+    font-size: var(--step--1);
+    flex: 1;
+  }
+
+  .update-line {
+    max-width: var(--measure);
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+    margin: 0;
+  }
+</style>
