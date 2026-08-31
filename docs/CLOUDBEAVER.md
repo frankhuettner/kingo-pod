@@ -17,7 +17,12 @@ means you are not logged in yet.
 
 1. Click the **gear icon** in the top-right corner.
 2. Choose **Login**.
+
+   ![The gear menu in the top right, with Preferences and Login](img/cloudbeaver-1-login-menu.png)
+
 3. User name **`student`**, password **`Kingo2026!`**, then **LOGIN**.
+
+   ![The Authentication dialog with user name student](img/cloudbeaver-2-login-dialog.png)
 
 Your name now appears in the blue bar, and the left panel shows **Shared →
 Classroom (PostgreSQL)**. (The connection is pre-made for you — you never have
@@ -27,7 +32,11 @@ to create one.)
 
 Click **Classroom (PostgreSQL)**. CloudBeaver asks for the database
 credentials. If it does not ask, click the **≡ menu** next to the connection →
-**Manage → Edit Connection**, and fill in the **AUTHENTICATION** box:
+**Manage → Edit Connection**:
+
+![The connection menu, Manage, Edit Connection](img/cloudbeaver-3-edit-connection.png)
+
+Fill in the **AUTHENTICATION** box:
 
 | Field | Value |
 |---|---|
@@ -36,8 +45,11 @@ credentials. If it does not ask, click the **≡ menu** next to the connection �
 | User password | `kingo2026` |
 | Save credentials … | **tick it** |
 
-Then **TEST** (should say the connection works) and **SAVE**. You only do this
-once — CloudBeaver remembers it from then on.
+![The AUTHENTICATION box with user name student and Save credentials ticked](img/cloudbeaver-4-database-password.png)
+
+Then **TEST** (should say the connection works) and **SAVE** — both buttons sit
+at the top of the page. You only do this once: CloudBeaver remembers it from
+then on.
 
 ## 3. Look at the data
 
