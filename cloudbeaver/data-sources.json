@@ -1,19 +1,38 @@
 {
-  "folders": {},
-  "connections": {
-    "postgres-classroom": {
-      "provider": "postgresql",
-      "driver": "postgres-jdbc",
-      "name": "Classroom (PostgreSQL)",
-      "save-password": true,
-      "configuration": {
-        "host": "postgres",
-        "port": "5432",
-        "database": "classroom",
-        "url": "jdbc:postgresql://postgres:5432/classroom",
-        "type": "dev",
-        "auth-model": "native"
-      }
-    }
-  }
+	"folders": {},
+	"connections": {
+		"postgres-classroom": {
+			"provider": "postgresql",
+			"driver": "postgres-jdbc",
+			"name": "Classroom (PostgreSQL)",
+			"save-password": true,
+			"configuration": {
+				"host": "postgres",
+				"port": "5432",
+				"database": "classroom",
+				"url": "jdbc:postgresql://postgres:5432/classroom",
+				"configurationType": "MANUAL",
+				"type": "dev",
+				"closeIdleConnection": false,
+				"auth-model": "native"
+			}
+		}
+	},
+	"connection-types": {
+		"dev": {
+			"name": "Development",
+			"color": "255,255,255",
+			"colorDark": "255,255,255",
+			"description": "Regular development database",
+			"auto-commit": true,
+			"confirm-execute": false,
+			"confirm-data-change": false,
+			"smart-commit": false,
+			"smart-commit-recover": true,
+			"auto-close-transactions": true,
+			"close-transactions-period": 1800,
+			"auto-close-connections": true,
+			"close-connections-period": 14400
+		}
+	}
 }

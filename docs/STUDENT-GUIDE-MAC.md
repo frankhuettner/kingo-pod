@@ -127,9 +127,14 @@ Default addresses (yours may differ — see Step 3). Open them in Safari or Chro
 | JupyterLab | <http://localhost:8888> | none |
 | JupyterHub | <http://localhost:8000> | any username + password `kingo2026` |
 | Metabase | <http://localhost:3000> | `admin@kingo.local` / `Kingo2026!` |
-| CloudBeaver | <http://localhost:8978> | `student` / `Kingo2026!` |
+| CloudBeaver | <http://localhost:8978> | `student` / `Kingo2026!` — [how to connect](CLOUDBEAVER.md) |
 | Qdrant | <http://localhost:6333/dashboard> | none |
 | PostgreSQL | `localhost:5432` | `student` / `kingo2026` (db: `classroom`) |
+
+> **CloudBeaver looks empty at first** ("No Connections") — you have to log in
+> via the **gear icon → Login** before the class database shows up, and give it
+> the database password once. Two minutes, step by step:
+> [Using CloudBeaver](CLOUDBEAVER.md).
 
 MCP (*Model Context Protocol*) is how AI assistants such as Claude Desktop,
 Claude Code, or Cursor connect to tools. Point yours at the Jupyter MCP

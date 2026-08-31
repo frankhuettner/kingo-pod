@@ -206,6 +206,22 @@ is reachable from Langflow. It is deliberately NOT a bind over `/app/data`,
 which is Langflow's own config dir — flows themselves live in the `langflow`
 PostgreSQL database, so a folder mount is no substitute for exporting a flow.
 
+## CloudBeaver has two logins (students will ask)
+
+CloudBeaver opens on an empty page saying "No Connections" — that is an
+**anonymous** session, and an anonymous session sees neither the pre-made
+connection nor the `+` button to create one. Students must first log in to
+CloudBeaver itself (**gear icon → Login**, `student` / `Kingo2026!`); only then
+does *Shared → Classroom (PostgreSQL)* appear. Opening it asks once for the
+**database** password (`student` / `kingo2026`, tick "Save credentials").
+
+The connection itself is provisioned by us
+(`cloudbeaver/data-sources.json`, mounted into the container) — the database
+password is not, because CloudBeaver keeps saved credentials in its own
+encrypted store. Step-by-step for students:
+[`docs/CLOUDBEAVER.md`](CLOUDBEAVER.md). `kingo smoke` only asserts that
+CloudBeaver answers on 8978; it does not click through this.
+
 ## Credentials (public by design)
 
 All logins are fixed, simple, and committed to the repo. This is **not** a leak:
