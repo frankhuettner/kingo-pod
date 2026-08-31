@@ -76,6 +76,20 @@ It was ported from the old `kingo-vm` repo.
   deliberately NOT auto-healed. Never advise a blanket engine/machine restart
   in guides or error text without the "stops ALL your containers" warning —
   students may run containers from other courses.
+- **`langflow-data` is mounted `:z`** (`compose.yml`): Langflow copies its
+  avatar SVGs out of the image into `LANGFLOW_CONFIG_DIR` with
+  `shutil.copytree`, which copies extended attributes — `security.selinux`
+  included. The podman machine is Fedora CoreOS, where every container gets a
+  random MCS category pair and may only open files carrying its own; the
+  copied files keep the pair of the container that wrote them, so every LATER
+  container can list `profile_pictures/` but gets EACCES on every read, and
+  the profile-picture chooser is a wall of broken images (root does not help
+  — SELinux denies before the mode is even consulted). `:z` relabels the
+  volume's contents to the shared label at mount, which also self-heals on
+  each start; it is a no-op where SELinux is absent (Docker Desktop, CI).
+  Same shape for any volume whose files were written by a container that no
+  longer exists: "can list it, cannot open it" means SELinux, not `chmod`.
+
 - **A running Docker is a first-class engine, not a grudging fallback**: both
   setup scripts detect an already-running Docker (Desktop) and use it,
   installing nothing; Podman is only installed when no working engine exists.
