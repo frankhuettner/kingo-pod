@@ -36,61 +36,28 @@ credentials. If it does not ask, click the **≡ menu** next to the connection �
 
 ![The connection menu, Manage, Edit Connection](img/cloudbeaver-3-edit-connection.png)
 
-Fill in the **AUTHENTICATION** box:
+You land on the **MAIN** tab. Everything except the password is already filled
+in — check that it says **Database `classroom`** (that is the class database;
+the server also holds the internal databases of Langflow, n8n and Metabase,
+which you should leave alone), then type the password:
 
 | Field | Value |
 |---|---|
+| Host | `postgres` |
+| Port | `5432` |
+| **Database** | **`classroom`** |
 | Authentication | Username/password |
 | User name | `student` |
 | User password | `kingo2026` |
-| Save credentials … | **tick it** |
+| Save credentials for all users with access | **tick it** |
 
-![The AUTHENTICATION box with user name student and Save credentials ticked](img/cloudbeaver-4-database-password.png)
+![The MAIN tab of the connection: host postgres, port 5432, database classroom, user student, Save credentials ticked](img/cloudbeaver-4-connection-settings.png)
 
 Then **TEST** (should say the connection works) and **SAVE** — both buttons sit
-at the top of the page. You only do this once: CloudBeaver remembers it from
-then on.
+at the top right. You only do this once: CloudBeaver remembers it from then on.
 
 ## 3. Look at the data
 
 Expand **Classroom (PostgreSQL) → classroom → Schemas → public → Tables**.
 The class sample data is there: `products`, `customers`, `orders`. Double-click
 a table to see its rows.
-
-For your own SQL, click the **SQL** icon in the blue bar (with the connection
-selected) and type away, for example:
-
-```sql
-SELECT p.category, sum(o.quantity) AS units FROM orders o JOIN products p USING (product_id) GROUP BY 1 ORDER BY 2 DESC;
-```
-
-Run it with **Ctrl+Enter** (⌘+Enter on a Mac).
-
-## Which database should I pick?
-
-The stack runs **one PostgreSQL server with four databases** inside it:
-
-| Database | What it is |
-|---|---|
-| `classroom` | **yours** — the class data, this is the one you work in |
-| `langflow` | Langflow's own storage (your flows live here) |
-| `n8n` | n8n's own storage (your workflows) |
-| `metabase` | Metabase's own storage (dashboards, settings) |
-
-You can see all four, because they share one login. **Only work in
-`classroom`.** Writing into the other three can break the app that owns them.
-
-## If something looks wrong
-
-- **"No Connections", and no `+` icon in the blue bar** → you are not logged in.
-  Go back to step 1; an anonymous visitor sees neither the connection nor the
-  button to make one.
-- **It asks for the database password every time** → the "Save credentials"
-  box in step 2 was not ticked. Repeat step 2.
-- **The connection fails to open** → check that the stack is up
-  (`./kingo status`). If the setup moved PostgreSQL to another port on your
-  laptop, that does not matter here: CloudBeaver talks to the database *inside*
-  the stack, always on `postgres:5432`.
-- **You want to start over** → `≡ menu → Manage → Edit Connection` lets you
-  correct anything. The connection cannot be lost: it is re-created from the
-  class files every time the stack starts.
