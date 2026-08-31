@@ -65,6 +65,7 @@ then one command per job:
 | `./kingo status` | which services are up? |
 | `./kingo credentials` | my addresses + logins |
 | `./kingo doctor` | something's wrong? start here |
+| `./kingo version` | which version am I running? (send this when you ask for help) |
 | `./kingo update` | get the newest class files + images (run it when the instructor announces an update) |
 
 > **What if I just close the Terminal window?** Nothing breaks — the stack

@@ -29,6 +29,7 @@ kingo doctor      preflight: engine ready? memory? ports free?
 kingo fixports    move Kingo off ports taken by other software (e.g. your
                   own Postgres on 5432) — saved to gitignored .env.local
 kingo credentials print all URLs and logins
+kingo version     which stack is this? (the line to ask a student for)
 kingo mcp         print the Jupyter MCP endpoint + bearer token
 kingo pull        download all images, one at a time with retries
 kingo bundle      save all images into one tar for USB sticks (instructor)

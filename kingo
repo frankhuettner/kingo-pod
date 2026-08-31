@@ -1132,10 +1132,45 @@ EOF
   $ENGINE exec kingo-langflow uv "$@"
 }
 
+# ── version: the one line to ask a student for ───────────────────────────────
+# VERSION holds the released stack version (semver; same string as the git
+# tag). It is a FILE and not `git describe` on purpose: ZIP-era folders have
+# no .git, and those are exactly the installs whose age you cannot otherwise
+# tell. Never fatal, and never calls select_engine — a student whose engine is
+# broken must still be able to report what they are running.
+kingo_version() {
+  if [ -f ./VERSION ]; then
+    tr -d ' \t\r\n' < ./VERSION
+  else
+    printf 'unknown'   # pre-1.0.0 folder, or someone deleted it
+  fi
+}
+
+cmd_version() {
+  local ref eng ver
+  echo "kingo-pod $(kingo_version)"
+  if [ -d .git ] && command -v git >/dev/null 2>&1; then
+    ref="$(git log -1 --date=short --format='%h %ad' 2>/dev/null || true)"
+    if [ -n "$ref" ]; then
+      [ -n "$(git status --porcelain 2>/dev/null)" ] && ref="$ref (locally modified)"
+      echo "  files:  $ref"
+    fi
+  else
+    echo "  files:  installed from a ZIP (no git history in this folder)"
+  fi
+  for eng in podman docker; do
+    command -v "$eng" >/dev/null 2>&1 || continue
+    ver="$("$eng" --version 2>/dev/null | head -1)"
+    echo "  engine: ${ver:-$eng}${KINGO_ENGINE:+$([ "$KINGO_ENGINE" = "$eng" ] && printf '  (pinned via KINGO_ENGINE)')}"
+  done
+  echo "  system: $(uname -s) $(uname -m)${WSL_DISTRO_NAME:+  (WSL: $WSL_DISTRO_NAME)}"
+}
+
 # ── doctor: preflight before setup ───────────────────────────────────────────
 cmd_doctor() {
   select_engine
   echo "== kingo doctor =="
+  echo "kingo-pod $(kingo_version)"
   echo "Selected engine: $ENGINE${KINGO_ENGINE:+  (pinned via KINGO_ENGINE)}"
   command -v "$ENGINE" >/dev/null 2>&1 && echo "  [ok] $ENGINE is installed" || echo "  [!!] $ENGINE not on PATH"
 
@@ -1248,6 +1283,7 @@ case "${1:-help}" in
   fixports)          cmd_fixports ;;
   findbundle)        discover_bundle || die "no USB bundle found (is the stick plugged in?)" ;;
   credentials|creds) cmd_credentials ;;
+  version|--version) cmd_version ;;
   mcp)               cmd_mcp ;;
   logs)              select_engine; shift; compose logs --tail=100 -f "$@" ;;
   restart)           select_engine; ensure_ready; shift; compose restart "$@" ;;
@@ -1256,6 +1292,7 @@ case "${1:-help}" in
   bundle)            shift; cmd_bundle "${1:-}" ;;
   load)              shift; cmd_load "${1:-}" ;;
   update)            select_engine; ensure_ready
+                     _v_before="$(kingo_version)"
                      # Newest class files first. git installs pull; ZIP
                      # installs (the documented Mac path, no .git) fetch the
                      # repo tarball and sync it over this folder. rsync
@@ -1288,7 +1325,14 @@ case "${1:-help}" in
                      cmd_pull
                      compose build
                      compose up -d
-                     echo "Stack updated." ;;
+                     # Name the version students landed on: it is what support
+                     # asks for, and it makes "did the update take?" answerable.
+                     _v_after="$(kingo_version)"
+                     if [ "$_v_before" = "$_v_after" ]; then
+                       echo "Stack updated — kingo-pod $_v_after (unchanged; images may still be newer)."
+                     else
+                       echo "Stack updated — kingo-pod $_v_before → $_v_after."
+                     fi ;;
   reset)             select_engine; ensure_ready
                      echo "This DELETES all data (databases, notebooks, workflows) and starts fresh."
                      read -r -p "Type 'yes' to continue: " a
@@ -1309,6 +1353,7 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo fixports      a port is taken (e.g. your own Postgres)? move Kingo
                       to free ports automatically (saved in .env.local)
   kingo credentials   print all URLs and logins
+  kingo version       which stack am I running? (ask students for this)
   kingo mcp           print the Jupyter MCP endpoint + bearer token
   kingo logs [svc]    follow logs (e.g. kingo logs langflow)
   kingo restart [svc] restart everything or one service

@@ -203,11 +203,16 @@ alone?**
   applies by itself.
 - **PATCH** — yes, and nothing is new: fixes, guides, the website, CI.
 
-Releases are annotated git tags (`v1.0.0`); `v1.0.0` is the stack the first
-two cohorts ran. There is deliberately no `VERSION` file and no
-`kingo version` yet — that is worth adding when it earns its keep in support
-("send me the first line of `./kingo doctor`"), not before, and it needs a
-fallback for ZIP-era folders, which have no `.git` to read a tag from.
+A release is an annotated git tag (`v1.0.0` = the stack the first two cohorts
+ran) AND the same string in the committed `VERSION` file — **bump the file in
+the commit you tag**, or `kingo version` will keep naming the previous
+release. It is a file rather than `git describe` because ZIP-era folders have
+no `.git`, and those are exactly the installs whose age nobody can otherwise
+tell. `kingo version` prints it (plus commit, engines, platform), `kingo
+doctor` echoes it as its second line, and `kingo update` reports the
+transition — so "send me `./kingo version`" is the first question in support.
+`kingo_version()` must stay non-fatal and must never call `select_engine`: a
+student whose engine is broken still has to be able to say what they run.
 
 ## Layout
 
