@@ -188,6 +188,27 @@ It was ported from the old `kingo-vm` repo.
   WSL1, Compose v2); anything about *running* the stack belongs to the using
   guide's `If something breaks`, which the setup guide points to at the end.
 
+## Versioning
+
+The stack is versioned with semver, and the test for which number moves is
+always the same question: **can a student get there with `./kingo update`
+alone?**
+
+- **MAJOR** — no. Their data needs migrating (a PostgreSQL major changes the
+  data directory format), or a `kingo` command / port / service / `.env`
+  variable they were told to use is gone or renamed. A major means the
+  announcement is longer than one line.
+- **MINOR** — yes, and something is new: a service, a `kingo` command, a
+  class package in `langflow/requirements.txt`, an image bump that `update`
+  applies by itself.
+- **PATCH** — yes, and nothing is new: fixes, guides, the website, CI.
+
+Releases are annotated git tags (`v1.0.0`); `v1.0.0` is the stack the first
+two cohorts ran. There is deliberately no `VERSION` file and no
+`kingo version` yet — that is worth adding when it earns its keep in support
+("send me the first line of `./kingo doctor`"), not before, and it needs a
+fallback for ZIP-era folders, which have no `.git` to read a tag from.
+
 ## Layout
 
 - `compose.yml` — the 9-service stack (ports overridable via `KINGO_PORT_*`).

@@ -194,6 +194,11 @@ from the `FROM` line of their Dockerfile:
 | Metabase | `metabase/metabase:v0.60.25` | `compose.yml` |
 | CloudBeaver | `dbeaver/cloudbeaver:26.1.5` | `compose.yml` |
 
+The stack as a whole is versioned too (semver, annotated git tags): `v1.0.0`
+is what the first two cohorts installed. The rule of thumb is whether
+`./kingo update` alone gets a student from the old state to the new one — if
+it does not, it is a major, and the announcement needs more than one line.
+
 **Bumping one is never just an edit.** It means: rebuild and re-run
 `./kingo smoke` locally, let CI do both engines, tell every student to run
 `./kingo update` (**at home** — the download is not a classroom activity),
