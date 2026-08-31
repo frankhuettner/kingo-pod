@@ -256,6 +256,29 @@ Langflow sees the same folder as **`/app/shared`** — so a file you drop in as
 component, and anything Langflow writes there appears on your laptop (via the Ubuntu home folder). The folder
 is created for you; if it isn't there yet, run `./kingo update` once.
 
+**Where is that folder in Windows?** Ubuntu's files show up in File Explorer.
+Open Explorer and follow the left sidebar: **Linux → Ubuntu → home → *your
+Linux user name* → kingo-pod → shared** (your user name is the one you picked
+in Step 2, so the folder is called something else than `frank` below). You can
+also paste `\\wsl.localhost\Ubuntu\home\` into the address bar and click
+onwards from there.
+
+![File Explorer at Linux → Ubuntu → home → frank → kingo-pod, with the shared folder highlighted](img/wsl-shared-1-explorer.png)
+
+Drag files in and out like in any other folder — Langflow sees them
+immediately, and files Langflow writes appear here.
+
+![The shared folder open in Explorer, next to an Ubuntu terminal in the same folder](img/wsl-shared-2-folder.png)
+
+Quickest way to get there, from Ubuntu — this opens the folder in Explorer:
+
+```bash
+cd ~/kingo-pod/shared && explorer.exe .
+```
+
+Then right-click **shared** in Explorer's sidebar → **Pin to Quick access**,
+and it is one click away from then on.
+
 Treat the folder as **shared with Langflow**: anything running inside Langflow
 — including a flow someone else built and you imported — can read, change and
 delete files there. So keep private files out of it, and never let it hold the

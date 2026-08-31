@@ -14,7 +14,9 @@ their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
 - **Run an "install party"** in the first session (or a drop-in hour before day
   1). WSL2 on Windows is the #1 support burden — pair students who are done with
   those still setting up.
-- **Minimum specs**: 8 GB RAM (16 GB recommended), ~20 GB free disk. The stack
+- **Minimum specs**: 8 GB RAM (16 GB recommended), ~20 GB free disk — ~30 GB
+  during a USB setup, where the ~14 GB file and the images it loads coexist.
+  The stack
   gets a ~5 GB budget and idles at ~3 GB (measured 2026-08-21; biggest single
   consumer: Metabase at ~1.2 GB). If 8-GB laptops still struggle, the planned
   `--lite` profile (drop Metabase + CloudBeaver, saves ~1.5 GB) is the next lever.
@@ -24,7 +26,7 @@ their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
 
 ## USB bundle (day-1 Wi-Fi saver)
 
-**Prepare at home**: `./kingo bundle` writes `kingo-images-<arch>.tar` (13 GB,
+**Prepare at home**: `./kingo bundle` writes `kingo-images-<arch>.tar` (~14 GB,
 measured 2026-08-21) with every image the stack needs, including the
 locally-built jupyterhub one. **A bundle is single-architecture** — `save`
 writes only the local image blobs, which match the machine that built them —
@@ -39,19 +41,19 @@ class, build BOTH and put both on each stick:
 With both tars on one stick, students auto-pick the right one for their laptop
 (the setup script and the guides' copy commands select by architecture, and
 `kingo load` refuses a wrong-arch tar with a clear message). Format the stick
-**exFAT** so both Mac and Windows can read it, and size it for **two** 13 GB
+**exFAT** so both Mac and Windows can read it, and size it for **two** ~14 GB
 files: a **64 GB** stick is comfortable; a 32 GB one fits both only barely, so
 prefer one 32 GB stick per architecture if that is all you have. Most sticks
 ship as FAT32, which refuses files over 4 GB ("too large for the volume's
 format") — reformat first: Disk Utility (Mac) → Erase → format exFAT, scheme
 Master Boot Record; or Windows Explorer → right-click the stick → Format… →
 exFAT. Reformatting erases the stick. Bring **several sticks**: each student
-reads 13 GB from it, so one stick serializes the room. The USB guides therefore default to **copy, pass on,
+reads ~14 GB from it, so one stick serializes the room. The USB guides therefore default to **copy, pass on,
 then install**: the student copies the tar into their `kingo-pod` folder
 (~5–10 min, the only step that needs the stick), hands the stick on, and the
 setup script picks the copy up automatically — installs overlap instead of
 queueing, and a failed setup re-runs without the stick. The setup script deletes its own copy once `SMOKE OK` passes — the images are
-in the engine by then, and a 13 GB leftover on a laptop that needs ~20 GB free
+in the engine by then, and a ~14 GB leftover on a laptop that needs ~20 GB free
 is exactly what students forget to clean up. It removes ONLY a copy it made
 itself: a tar the student dragged in stays theirs (the guides say how to
 delete it), and a file on your stick is never touched. Loading directly from
@@ -68,7 +70,7 @@ forget to push, students get a clear "does not match — run ./kingo update
 first" refusal; and a bundle with no entry at all loads with a warning, so
 older sticks keep working. Students verifying by hand:
 `shasum -a 256 <tar>` (Mac) or `sha256sum <tar>` (WSL), compared against
-`bundles.sha256`. Cost: hashing 13 GB takes ~1 minute from a laptop's own
+`bundles.sha256`. Cost: hashing ~14 GB takes ~1 minute from a laptop's own
 disk (the normal copy-then-install path). Only the disk-tight fallback that
 loads *straight from the stick* pays a second stick read, which on a slow
 USB 2 stick is several minutes — one more reason the guides default to
@@ -101,7 +103,7 @@ stick students at: [`STUDENT-GUIDE-MAC-USB.md`](https://huettner.io/kingo-pod/ma
   `./kingo load /path/to/kingo-images-<arch>.tar && ./kingo up` does it
   directly (`load` with no path auto-finds this machine's arch tar).
 
-**What still touches the internet** — the stick replaces only the 13 GB image
+**What still touches the internet** — the stick replaces only the ~14 GB image
 download, which is the part classroom Wi-Fi can't take. A student starting
 from zero still needs Wi-Fi for the small stuff: `git clone` (a few MB) and,
 if no engine is present yet, the Podman/compose install (a few hundred MB on

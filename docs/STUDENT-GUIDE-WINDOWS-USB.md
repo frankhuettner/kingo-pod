@@ -1,6 +1,6 @@
 # Kingo Classroom — Windows setup from the USB stick
 
-This is the setup path for the **instructor's USB stick**: the ~13 GB of
+This is the setup path for the **instructor's USB stick**: the ~14 GB of
 container images come from the stick instead of the internet. You still need
 Wi-Fi for a few small tools (a few hundred MB) — nothing near the 10 GB of
 the normal path.
@@ -31,8 +31,11 @@ the normal path.
 ## Before you start
 
 - **Windows 10 or 11**, with **8 GB RAM** (16 GB recommended).
-- About **25 GB free disk space** during setup (the 13 GB image file is
-  deleted at the end, leaving ~20 GB in use).
+- About **30 GB free disk space** during setup: the ~14 GB image file and the
+  ~14 GB of images it loads sit side by side for a few minutes. The file is
+  deleted at the end, leaving **~20 GB** in use. Tighter than that? See
+  "Tight on disk space?" in Step 3 — loading straight from the stick needs no
+  copy, so ~20 GB is enough.
 - The instructor's **USB stick**. It holds two image files; the setup script
   picks the right one for your laptop — you do not need to know which.
 - **How long?** Steps 1–2 (WSL2 + Ubuntu, at home): **15–20 minutes**, most of
@@ -175,7 +178,7 @@ Next time: plug the stick in before opening Ubuntu.
 You're done when the script prints **`SMOKE OK`** followed by your personal
 table of addresses and logins. Reprint it any time with `./kingo credentials`.
 
-The 13 GB image file is already gone: the script deletes the copy it made
+The ~14 GB image file is already gone: the script deletes the copy it made
 once the smoke test passes — the images live in the container engine now. Only
 if you copied a file into the folder **yourself** is one still there; this
 removes it:
@@ -307,6 +310,29 @@ Langflow sees the same folder as **`/app/shared`** — so a file you drop in as
 `~/kingo-pod/shared/sales.csv` is `/app/shared/sales.csv` in a Langflow
 component, and anything Langflow writes there appears on your laptop (via the Ubuntu home folder). The folder
 is created for you; if it isn't there yet, run `./kingo update` once.
+
+**Where is that folder in Windows?** Ubuntu's files show up in File Explorer.
+Open Explorer and follow the left sidebar: **Linux → Ubuntu → home → *your
+Linux user name* → kingo-pod → shared** (your user name is the one you picked
+in Step 2, so the folder is called something else than `frank` below). You can
+also paste `\\wsl.localhost\Ubuntu\home\` into the address bar and click
+onwards from there.
+
+![File Explorer at Linux → Ubuntu → home → frank → kingo-pod, with the shared folder highlighted](img/wsl-shared-1-explorer.png)
+
+Drag files in and out like in any other folder — Langflow sees them
+immediately, and files Langflow writes appear here.
+
+![The shared folder open in Explorer, next to an Ubuntu terminal in the same folder](img/wsl-shared-2-folder.png)
+
+Quickest way to get there, from Ubuntu — this opens the folder in Explorer:
+
+```bash
+cd ~/kingo-pod/shared && explorer.exe .
+```
+
+Then right-click **shared** in Explorer's sidebar → **Pin to Quick access**,
+and it is one click away from then on.
 
 Treat the folder as **shared with Langflow**: anything running inside Langflow
 — including a flow someone else built and you imported — can read, change and

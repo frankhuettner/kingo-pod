@@ -1,6 +1,6 @@
 # Kingo Classroom — Mac setup from the USB stick
 
-This is the setup path for the **instructor's USB stick**: the ~13 GB of
+This is the setup path for the **instructor's USB stick**: the ~14 GB of
 container images come from the stick instead of the internet. You still need
 Wi-Fi for a few small tools (a few hundred MB; up to ~1 GB on a Mac that has
 never had Homebrew) — nothing near the 10 GB of the normal path.
@@ -26,8 +26,11 @@ never had Homebrew) — nothing near the 10 GB of the normal path.
 ## Before you start
 
 - An **Apple-Silicon Mac** (M1 or newer — any Mac from 2021 on).
-- **8 GB RAM** (16 GB recommended) and about **25 GB free disk space** during
-  setup (the 13 GB image file goes away at the end, leaving ~20 GB in use).
+- **8 GB RAM** (16 GB recommended) and about **30 GB free disk space** during
+  setup: the ~14 GB image file and the ~14 GB of images it loads sit side by
+  side for a few minutes. The file is deleted at the end, leaving **~20 GB**
+  in use. Tighter than that? See "Tight on disk space?" in Step 5 — loading
+  straight from the stick needs no copy, so ~20 GB is enough.
 - The instructor's **USB stick**. It holds two image files;
   `kingo-images-arm64.tar` is the one for your Mac (the other, `-amd64`, is
   for Windows PCs).
@@ -84,7 +87,7 @@ cd ~ && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null |
 
 > **Simpler: skip this step.** Leave the stick plugged in and go straight to
 > Step 4 — the setup script finds it by itself, copies the file, and **deletes
-> that copy again** once everything works, so you never spend 13 GB of disk on
+> that copy again** once everything works, so you never spend 14 GB of disk on
 > it. Dragging is just the version you can watch happen; then the file is
 > yours and you delete it in Step 5.
 
@@ -113,7 +116,7 @@ the stick again.
 You're done when the script prints **`SMOKE OK`** followed by your personal
 table of addresses and logins. Reprint it any time with `./kingo credentials`.
 
-The 13 GB image file is already gone: the script deletes the copy it made
+The ~14 GB image file is already gone: the script deletes the copy it made
 once the smoke test passes — the images live in the container engine now. Only
 if you copied a file into the folder **yourself** is one still there; this
 removes it:
@@ -247,6 +250,13 @@ Langflow sees the same folder as **`/app/shared`** — so a file you drop in as
 `~/kingo-pod/shared/sales.csv` is `/app/shared/sales.csv` in a Langflow
 component, and anything Langflow writes there appears on your Mac. The folder
 is created for you; if it isn't there yet, run `./kingo update` once.
+
+One line opens it in Finder (and ⌘-drag it to the Finder sidebar to keep it
+there):
+
+```
+open ~/kingo-pod/shared
+```
 
 Treat the folder as **shared with Langflow**: anything running inside Langflow
 — including a flow someone else built and you imported — can read, change and

@@ -103,9 +103,11 @@ It was ported from the old `kingo-vm` repo.
   hard requirement would be wrong — and PR #4's claim that an arm64 bundle
   "cannot ever have worked" does not hold. (issue #3 / PR #4)
 - **Setup deletes only the bundle IT copied**: after `smoke` passes, the
-  setup scripts remove the 13 GB tar they copied off the stick (tracked in
+  setup scripts remove the ~14 GB tar they copied off the stick (tracked in
   `COPIED_BUNDLE`) — students left it lying around on laptops that need ~20 GB
-  free. A tar the student or instructor put in the folder is NOT ours (only a
+  free. (Measured 2026-08-31: both bundles are 14.5 GB / 13.5 GiB and their
+  layers are stored UNCOMPRESSED, so loading adds about the same again — a USB
+  setup peaks near 30 GB, which is what the USB guides now ask for.) A tar the student or instructor put in the folder is NOT ours (only a
   hint is printed), and a file on the stick itself is never touched: an
   instructor's `setup-*.sh /path/to/stick/tar` must come back with the stick
   intact.

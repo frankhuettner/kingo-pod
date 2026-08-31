@@ -918,7 +918,7 @@ record_bundle_sum() { # $1: bundle just written — updates only ITS line
 }
 
 # Set by verify_bundle_checksum so record_install_source can report WHAT was
-# checked without hashing 13 GB a second time.
+# checked without hashing 14 GB a second time.
 BUNDLE_SUM_VALUE=""
 BUNDLE_SUM_STATUS="not checked"
 
@@ -1032,7 +1032,7 @@ cmd_bundle() {
   # stick tar every time a re-run fails halfway.
   local part="$out.part"
   rm -f "$part"
-  echo "Writing $out (~13 GB — this takes a few minutes) ..."
+  echo "Writing $out (~14 GB — this takes a few minutes) ..."
   case "$ENGINE" in
     # podman needs -m for a multi-image (docker-compatible) archive.
     # shellcheck disable=SC2086

@@ -159,7 +159,7 @@ if [ -n "$BUNDLE" ]; then
   case "$BUNDLE" in
     */*) : ;;  # loaded straight from a stick path — never ours to delete
     *)   [ "$BUNDLE" = "${COPIED_BUNDLE:-}" ] \
-           || echo "    (you can delete $BUNDLE in this folder afterwards to free ~13 GB)" ;;
+           || echo "    (you can delete $BUNDLE in this folder afterwards to free ~14 GB)" ;;
   esac
 fi
 
@@ -172,7 +172,7 @@ say "Starting the Kingo stack ..."
 say "Verifying the stack (smoke test) ..."
 ./kingo smoke
 
-# Everything works, so the 13 GB copy has done its job: the images live in the
+# Everything works, so the 14 GB copy has done its job: the images live in the
 # container engine now, and a re-run needs neither the copy nor the stick.
 # Students were asked to delete it by hand and mostly did not — on a laptop
 # that needs ~20 GB free that is a lot to leave lying around. Deleted ONLY if
@@ -180,7 +180,7 @@ say "Verifying the stack (smoke test) ..."
 # instructor put in the folder, and the instructor's file on the stick, are
 # never ours to remove.
 if [ -n "${COPIED_BUNDLE:-}" ] && [ -f "$COPIED_BUNDLE" ]; then
-  say "Removing $COPIED_BUNDLE (~13 GB) — the images are installed, the file is no longer needed."
+  say "Removing $COPIED_BUNDLE (~14 GB) — the images are installed, the file is no longer needed."
   rm -f "$COPIED_BUNDLE"
 fi
 
