@@ -5,9 +5,6 @@ container images come from the stick instead of the internet. You still need
 Wi-Fi for a few small tools (a few hundred MB; up to ~1 GB on a Mac that has
 never had Homebrew) — nothing near the 10 GB of the normal path.
 
-Setting up at home with good internet instead? Use the
-[regular Mac guide](STUDENT-GUIDE-MAC.md).
-
 ## Before you start
 
 - An **Apple-Silicon Mac** (M1 or newer — any Mac from 2021 on).

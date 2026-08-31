@@ -37,11 +37,6 @@ fixing.
   the restart and the Store download. The stack (Step 3): a few minutes of
   install plus the 10 GB download — **15–45 minutes** depending on your
   internet. Total: plan **about an hour**, mostly unattended.
-- **Slow or no internet at home?** Your instructor can bring the images on a
-  **USB stick** to class — then follow the
-  [Windows USB guide](STUDENT-GUIDE-WINDOWS-USB.md) instead of Step 3 below.
-  **Steps 1–2 (WSL2 + Ubuntu) must still happen at home** — they need a
-  restart and the Microsoft Store.
 
 > **Already have Docker Desktop?** (e.g. from another course) — perfect, keep
 > it. Do Steps 1–2 anyway (WSL2 + Ubuntu are needed either way), then before
@@ -120,10 +115,6 @@ already done — but you do not need it if the setup finished.
 ```bash
 cd ~/kingo-pod && bash setup/setup-linux.sh
 ```
-
-> **Got the instructor's USB stick?** Use the
-> [Windows USB guide](STUDENT-GUIDE-WINDOWS-USB.md) instead — same result,
-> but the 10 GB of images come from the stick.
 
 (Only if the *download* itself broke off and even the re-run fails: delete the
 half-finished folder with `rm -rf ~/kingo-pod` and start Step 3 from the top.)

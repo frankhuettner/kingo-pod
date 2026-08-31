@@ -5,9 +5,6 @@ container images come from the stick instead of the internet. You still need
 Wi-Fi for a few small tools (a few hundred MB) — nothing near the 10 GB of
 the normal path.
 
-Setting up at home with good internet instead? Use the
-[regular Windows guide](STUDENT-GUIDE-WINDOWS.md).
-
 > **The stick cannot replace Steps 1–2 (WSL2 + Ubuntu).** They need one
 > restart and the Microsoft Store — ideally do them **at home, before class**.
 > Already done? Jump straight to [Step 3](#step-3--plug-in-the-stick-first).

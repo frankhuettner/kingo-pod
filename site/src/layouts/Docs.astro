@@ -8,11 +8,11 @@ interface Props {
   description?: string;
 }
 
-const { title, description = "Setup guides for the Kingo Classroom stack — it runs in containers on your own laptop." } =
+const { title, description = "Setup guides for kingo-pod — the class stack, running in containers on your own laptop." } =
   Astro.props;
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-const pageTitle = title ? `${title} · Kingo Classroom` : "Kingo Classroom";
+const pageTitle = title ? `${title} · kingo-pod` : "kingo-pod";
 const path = Astro.url.pathname.replace(/\/+$/, "");
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
@@ -55,7 +55,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 
     <div class="shell">
       <header class="masthead">
-        <a class="masthead__name" href={`${base}/`}>Kingo Classroom</a>
+        <a class="masthead__name" href={`${base}/`}>kingo-pod</a>
         <nav class="nav" aria-label="Guides">
           {
             GUIDES.map((g) => (
@@ -64,7 +64,6 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
               </a>
             ))
           }
-          <a href="https://github.com/frankhuettner/kingo-pod">GitHub</a>
           <button class="theme-toggle" type="button" data-theme-toggle aria-label="Toggle colour theme">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke-linejoin="round"></path>
@@ -78,7 +77,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       </main>
 
       <footer class="site-foot">
-        <span>Kingo Classroom — course materials of <a href="https://huettner.io/">Frank Huettner</a></span>
+        <span>kingo-pod — course materials of <a href="https://huettner.io/">Frank Huettner</a></span>
         <span>
           <a href="https://github.com/frankhuettner/kingo-pod">Repository</a> ·
           <a href="https://github.com/frankhuettner/kingo-pod/issues">Report a problem</a>

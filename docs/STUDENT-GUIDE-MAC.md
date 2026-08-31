@@ -31,9 +31,6 @@ script checks itself and tells you if something needs fixing.
   one-time wait. After that, starting is quick and works offline.
 - **How long?** A few minutes of setup plus the 10 GB download —
   **15–45 minutes** depending on your internet, mostly unattended.
-- **Slow or no internet at home?** Your instructor can bring the images on a
-  **USB stick** to class — then follow the
-  [Mac USB guide](STUDENT-GUIDE-MAC-USB.md) instead of Step 2 below.
 
 > **Already have Docker Desktop?** (e.g. from another course) — perfect, keep
 > it. Just make sure Docker Desktop is **running** before Step 2, and you can
@@ -97,10 +94,6 @@ this step is done.
 time, from anywhere: it updates you to the newest class version and skips
 everything already done. If it stops partway (Wi-Fi hiccup, closed laptop),
 just run it again.
-
-> **Got the instructor's USB stick?** Use the
-> [Mac USB guide](STUDENT-GUIDE-MAC-USB.md) instead — same result, but the
-> 10 GB of images come from the stick.
 
 ## Step 3 — Did it work?
 
