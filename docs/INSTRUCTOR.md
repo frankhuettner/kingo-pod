@@ -175,6 +175,59 @@ All setup scripts are **re-runnable**, and both handle the two most common
 `kingo update` (which does a `git pull`). Students are never told to edit the
 committed `.env`.
 
+## Pinned versions (and when to move them)
+
+Every image is pinned to an exact tag — a class where two laptops run
+different versions is a class where half the room's screenshots don't match.
+The pins live in `compose.yml`, except the two local builds, which take theirs
+from the `FROM` line of their Dockerfile:
+
+| Service | Pin | Where |
+|---|---|---|
+| PostgreSQL | `postgres:16` | `compose.yml` |
+| Qdrant | `qdrant/qdrant:v1.19.0` | `compose.yml` |
+| JupyterLab | `quay.io/jupyter/scipy-notebook:2026-08-17` | `compose.yml` |
+| JupyterHub | `quay.io/jupyterhub/jupyterhub:5` | `jupyterhub/Dockerfile` |
+| Jupyter MCP | `datalayer/jupyter-mcp-server:1.4.5` | `compose.yml` |
+| Langflow | `langflowai/langflow:1.8.0` | `langflow/Dockerfile` |
+| n8n | `n8nio/n8n:2.35.5` | `compose.yml` |
+| Metabase | `metabase/metabase:v0.60.25` | `compose.yml` |
+| CloudBeaver | `dbeaver/cloudbeaver:26.1.5` | `compose.yml` |
+
+**Bumping one is never just an edit.** It means: rebuild and re-run
+`./kingo smoke` locally, let CI do both engines, tell every student to run
+`./kingo update` (**at home** — the download is not a classroom activity),
+and rebuild BOTH USB tars, which re-records `bundles.sha256`. So do it
+between cohorts, not during one.
+
+### Where the pins stood on 2026-08-31
+
+- **Langflow 1.8.0 is the outlier** — that image was built 2026-03-05, while
+  upstream stable was 1.11.5 (2026-08-25): three minor releases and ~950
+  merged PRs. The one item that is more than nice-to-have is a security fix
+  in **1.10.1**, `stop issuing 365-day superuser token via auto_login`
+  (GHSA-fjgc-vj2f-77hm) — which is exactly our configuration, mitigated only
+  by everything being bound to `127.0.0.1`. The rest is class-relevant but
+  optional: OpenRouter became a first-class provider (and validates the key
+  properly, instead of surfacing a bare `User not found.` from inside an
+  Agent build), MCP servers are persisted in the database, the Agent gained
+  code agents and a sandboxed file-system tool, and there is a full i18n
+  pipeline. Costs on the way: `Text Input`/`Text Output` became legacy
+  (i.e. hidden), the JSON/Table/Text operations merged into one
+  **Data Operations** component, four starter templates are gone, and 1.11
+  splits the components into separate bundle packages. Alembic migrates the
+  `langflow` database on first start — take a `pg_dump` of it first, because
+  that is the only way back.
+- **PostgreSQL 16 is two majors behind** (16: Sept 2023, supported until Nov
+  2028; 18 is current). Not urgent on support grounds, but it is the one pin
+  that cannot be moved by editing a tag: a major upgrade changes the data
+  directory format, so every student would need `pg_upgrade` or a
+  dump/restore — or a `./kingo reset`, which throws their work away. If it is
+  to happen, it happens between cohorts and with a documented dump/restore
+  step, not as part of a routine update.
+- The others were within one release of current (Qdrant exactly current,
+  Metabase one patch behind, n8n a few weeks, CloudBeaver one minor).
+
 ## Python packages in Langflow
 
 Langflow is built locally (`langflow/Dockerfile`) on top of the upstream

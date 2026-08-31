@@ -208,7 +208,9 @@ It was ported from the old `kingo-vm` repo.
   complicated), then run setup-linux.sh inside Ubuntu.
 - `docs/` — setup guides (Mac/Windows, each in an internet and a USB-stick
   variant), the two everyday-use guides (`USING-MAC.md`, `USING-WINDOWS.md`),
-  the CloudBeaver walkthrough + instructor notes.
+  the CloudBeaver walkthrough + instructor notes. `INSTRUCTOR.md` carries the
+  table of pinned image versions — change a pin in `compose.yml` or either
+  Dockerfile and that table moves with it, or it starts lying.
 - `site/` — the Astro build that publishes `docs/` to huettner.io/kingo-pod
   (`npm run dev` to preview; deployed by `.github/workflows/pages.yml`).
 - `.github/workflows/ci.yml` — both engines, two boot cycles.
