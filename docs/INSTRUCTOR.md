@@ -11,6 +11,14 @@ The first `kingo up` downloads **~10 GB** of images, and on Windows enabling
 WSL2 can require a reboot. **Students must run the setup script at home, on
 their own Wi-Fi, before class.** Put this in the syllabus and repeat it.
 
+**What to put in the syllabus**: the setup guide for their laptop
+(<https://huettner.io/kingo-pod/> lists all four), and — for the rest of the
+term — the everyday-use page,
+[Mac](https://huettner.io/kingo-pod/using-mac/) or
+[Windows](https://huettner.io/kingo-pod/using-windows/). Setup is read once;
+that second page is the one students come back to (addresses and logins, the
+`kingo` commands, the `shared` folder, updating, troubleshooting).
+
 - **Run an "install party"** in the first session (or a drop-in hour before day
   1). WSL2 on Windows is the #1 support burden — pair students who are done with
   those still setting up.

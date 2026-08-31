@@ -161,6 +161,19 @@ It was ported from the old `kingo-vm` repo.
   here** (it would fight the main site for huettner.io), and never let a guide
   exist in two places.
 
+- **Setup guides end when setup ends**: `STUDENT-GUIDE-*` is read once and
+  stops at "it works"; everything a student needs for the rest of the term
+  (services + logins, the `kingo` commands, the `shared` folder, updating,
+  troubleshooting, FAQ, architecture, KNIME) lives in `USING-MAC.md` /
+  `USING-WINDOWS.md`. Before that split the tail was duplicated across all
+  four setup guides — byte-identical between a platform's internet and USB
+  variant, and 4x the drift risk. So: never move everyday material back into
+  a setup guide, and when you add something everyday, add it ONCE per
+  platform. What legitimately stays in a setup guide is `If setup fails` —
+  only failures of the install itself (Homebrew, dev tools, WSL2 enable,
+  WSL1, Compose v2); anything about *running* the stack belongs to the using
+  guide's `If something breaks`, which the setup guide points to at the end.
+
 ## Layout
 
 - `compose.yml` — the 9-service stack (ports overridable via `KINGO_PORT_*`).
@@ -179,8 +192,9 @@ It was ported from the old `kingo-vm` repo.
   Windows setup script: students enable WSL2 + Ubuntu by following the video
   tutorial in the guide (Frank's call — a .ps1 was tried and dropped as too
   complicated), then run setup-linux.sh inside Ubuntu.
-- `docs/` — student guides (Mac/Windows, each in an internet and a USB-stick
-  variant), the CloudBeaver walkthrough + instructor notes.
+- `docs/` — setup guides (Mac/Windows, each in an internet and a USB-stick
+  variant), the two everyday-use guides (`USING-MAC.md`, `USING-WINDOWS.md`),
+  the CloudBeaver walkthrough + instructor notes.
 - `site/` — the Astro build that publishes `docs/` to huettner.io/kingo-pod
   (`npm run dev` to preview; deployed by `.github/workflows/pages.yml`).
 - `.github/workflows/ci.yml` — both engines, two boot cycles.

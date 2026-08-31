@@ -1,7 +1,7 @@
 ---
 import { Font } from "astro:assets";
 import "../styles/global.css";
-import { GUIDES } from "../lib/guides";
+import { SETUP, USE } from "../lib/guides";
 
 interface Props {
   title?: string;
@@ -58,10 +58,18 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         <a class="masthead__name" href={`${base}/`}>kingo-pod</a>
         <nav class="nav" aria-label="Guides">
           {
-            GUIDES.map((g) => (
-              <a href={`${base}/${g.slug}/`} aria-current={path === `${base}/${g.slug}` ? "page" : undefined}>
-                {g.nav}
-              </a>
+            [
+              { label: "Setup", guides: SETUP },
+              { label: "Use", guides: USE },
+            ].map((group) => (
+              <div class="nav__group">
+                <span class="nav__label">{group.label}</span>
+                {group.guides.map((g) => (
+                  <a href={`${base}/${g.slug}/`} aria-current={path === `${base}/${g.slug}` ? "page" : undefined}>
+                    {g.nav}
+                  </a>
+                ))}
+              </div>
             ))
           }
           <button class="theme-toggle" type="button" data-theme-toggle aria-label="Toggle colour theme">
@@ -79,8 +87,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       <footer class="site-foot">
         <span>kingo-pod — course materials of <a href="https://huettner.io/">Frank Huettner</a></span>
         <span>
-          <a href="https://github.com/frankhuettner/kingo-pod">Repository</a> ·
-          <a href="https://github.com/frankhuettner/kingo-pod/issues">Report a problem</a>
+          <a href="https://github.com/frankhuettner/kingo-pod">Repository</a>{" · "}<a
+            href="https://github.com/frankhuettner/kingo-pod/issues">Report a problem</a
+          >
         </span>
       </footer>
     </div>

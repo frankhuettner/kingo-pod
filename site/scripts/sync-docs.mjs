@@ -25,6 +25,8 @@ const SLUGS = {
   "STUDENT-GUIDE-WINDOWS.md": "windows",
   "STUDENT-GUIDE-MAC-USB.md": "mac-usb",
   "STUDENT-GUIDE-WINDOWS-USB.md": "windows-usb",
+  "USING-MAC.md": "using-mac",
+  "USING-WINDOWS.md": "using-windows",
   "CLOUDBEAVER.md": "cloudbeaver",
 };
 

@@ -1,15 +1,13 @@
 ---
 import Docs from "../layouts/Docs.astro";
-import { GUIDES } from "../lib/guides";
+import { SETUP, USE } from "../lib/guides";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-const setup = GUIDES.filter((g) => g.kind !== "Using the stack");
-const using = GUIDES.filter((g) => g.kind === "Using the stack");
 ---
 
 <Docs description="Setup guides for kingo-pod — Langflow, n8n, JupyterLab, JupyterHub, Metabase, CloudBeaver, Qdrant and PostgreSQL, running in containers on your own laptop.">
   <header class="page-head">
-    <p class="label">Class setup</p>
+    <p class="label">Class stack</p>
     <h1>kingo-pod</h1>
     <p>
       Everything the class uses — Langflow, n8n, JupyterLab, JupyterHub, Metabase, CloudBeaver, Qdrant and a PostgreSQL
@@ -26,7 +24,7 @@ const using = GUIDES.filter((g) => g.kind === "Using the stack");
     </p>
     <ul class="grid">
       {
-        setup.map((g) => (
+        SETUP.map((g) => (
           <li class="card">
             <p class="card__meta">
               <span class="badge">{g.platform}</span>
@@ -48,11 +46,16 @@ const using = GUIDES.filter((g) => g.kind === "Using the stack");
 
   <section class="section">
     <h2 class="label">Use it</h2>
+    <p class="lede">
+      Setup happens once; these are the pages to keep for the rest of the term: addresses and logins, the everyday
+      commands, your own files, updating, and what to do when something breaks.
+    </p>
     <ul class="grid">
       {
-        using.map((g) => (
+        USE.map((g) => (
           <li class="card">
             <p class="card__meta">
+              <span class="badge">{g.platform === "Any" ? "Mac & Windows" : g.platform}</span>
               <span class="badge">{g.kind}</span>
             </p>
             <a class="card__link" href={`${base}/${g.slug}/`}>

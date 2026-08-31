@@ -35,3 +35,6 @@ kingo-images*.tar.part
 # /app/shared) — the folder itself is tracked via .gitkeep, its contents are not.
 shared/*
 !shared/.gitkeep
+
+# Screenshots taken while checking the site locally.
+.playwright-mcp/

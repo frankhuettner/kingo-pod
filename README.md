@@ -18,7 +18,7 @@ any folder, on Mac and on Windows (inside **Ubuntu**). It updates **every**
 kind of install, including folders that came from an old ZIP download. Your
 data, flows and notebooks stay.
 
-## 🚀 Students: pick your guide
+## 🚀 Students: install it
 
 The guides are published as a small website — **<https://huettner.io/kingo-pod/>**
 (the same files as in [`docs/`](docs), with navigation, a table of contents and
@@ -35,13 +35,21 @@ a copy button on every command).
   tools come from the Wi-Fi. (🪟 Windows: WSL2 + Ubuntu must still be set up
   at home first — the USB guide explains.)
 
-Every guide is a complete walkthrough: it picks a container engine (**an
+Each setup guide is a complete walkthrough: it picks a container engine (**an
 already-running Docker Desktop is used as-is**; otherwise Podman is
 installed), auto-resolves port conflicts with software you already run, starts
 the stack, and verifies it — you're done when you see **`SMOKE OK`**.
 
-Once installed, [Using CloudBeaver](https://huettner.io/kingo-pod/cloudbeaver/)
-shows how to open the class database.
+## 📖 Students: after setup
+
+Setup happens once; everything after it lives on one page — your addresses and
+logins, the everyday commands, getting your own files in and out, updating,
+and what to do when something breaks:
+
+- 🍎 [Using the stack on a Mac](https://huettner.io/kingo-pod/using-mac/)
+- 🪟 [Using the stack on Windows](https://huettner.io/kingo-pod/using-windows/)
+- 🗄️ [Using CloudBeaver](https://huettner.io/kingo-pod/cloudbeaver/) — opening
+  the class database in the browser SQL workbench
 
 👩‍🏫 **Instructors**: [`docs/INSTRUCTOR.md`](docs/INSTRUCTOR.md) — minimum
 specs, preparing the day-1 USB bundle, and what to put in the syllabus.
