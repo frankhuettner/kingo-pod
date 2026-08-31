@@ -238,6 +238,10 @@ between cohorts, not during one.
 - The others were within one release of current (Qdrant exactly current,
   Metabase one patch behind, n8n a few weeks, CloudBeaver one minor).
 
+The actual to-do list, with the checklist for doing it safely, lives in
+[issue #6](https://github.com/frankhuettner/kingo-pod/issues/6) — that is
+the reminder to open between cohorts.
+
 ## Python packages in Langflow
 
 Langflow is built locally (`langflow/Dockerfile`) on top of the upstream
