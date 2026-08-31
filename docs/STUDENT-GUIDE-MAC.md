@@ -89,6 +89,10 @@ The script does four things, in order, and says so as it goes:
 3. **Downloads and starts everything** (~10 GB on the first run — be patient).
 4. **Verifies it** and prints your personal table of addresses and logins.
 
+**That one command is the whole installation — there is no second command to
+run.** When it ends with **`SMOKE OK`** and your table of addresses and logins,
+this step is done.
+
 **You normally do this once** — but the same line is safe to run again any
 time, from anywhere: it updates you to the newest class version and skips
 everything already done. If it stops partway (Wi-Fi hiccup, closed laptop),

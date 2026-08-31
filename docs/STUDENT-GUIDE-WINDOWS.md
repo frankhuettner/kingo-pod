@@ -109,8 +109,13 @@ The script does four things, in order, and says so as it goes:
 3. **Downloads and starts everything** (~10 GB on the first run — be patient).
 4. **Verifies it** and prints your personal table of addresses and logins.
 
-**You only do this once.** If it stops partway (Wi-Fi hiccup, closed laptop),
-run it again — it is safe to re-run and skips what's done:
+**That one command is the whole installation — there is no second command to
+run.** When it ends with **`SMOKE OK`** and your table of addresses and logins,
+Step 3 is done and you go on to Step 4.
+
+**Only if it stopped partway** (Wi-Fi hiccup, closed laptop): run the line
+below to pick up where it left off. It is safe to re-run and skips what's
+already done — but you do not need it if the setup finished.
 
 ```bash
 cd ~/kingo-pod && bash setup/setup-linux.sh

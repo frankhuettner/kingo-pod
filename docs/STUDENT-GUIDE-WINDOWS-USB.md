@@ -92,7 +92,12 @@ to the stick, so just unplug it and pass it on. (If Windows says the drive is
 *"still in use,"* that is only WSL reading it — it is safe to pull.) The rest
 of the script installs the small tools over Wi-Fi, **loads the images from the
 copy (~3 minutes)** instead of downloading 10 GB, starts everything, and
-verifies it. If it stops partway after the copy, re-run it — no stick needed:
+verifies it.
+
+**That one command is the whole installation — there is no second command to
+run.** When it ends with **`SMOKE OK`** and your table of addresses and logins,
+this step is done. **Only if it stopped partway** after the copy, run the line
+below to pick it up again — no stick needed:
 
 ```bash
 cd ~/kingo-pod && bash setup/setup-linux.sh
