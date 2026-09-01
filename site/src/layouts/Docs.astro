@@ -1,7 +1,6 @@
 ---
 import { Font } from "astro:assets";
 import "../styles/global.css";
-import { SETUP, USE } from "../lib/guides";
 
 interface Props {
   title?: string;
@@ -13,7 +12,6 @@ const { title, description = "Setup guides for kingo-pod — the class stack, ru
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const pageTitle = title ? `${title} · kingo-pod` : "kingo-pod";
-const path = Astro.url.pathname.replace(/\/+$/, "");
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
 
@@ -54,30 +52,16 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <a class="visually-hidden" href="#main">Skip to content</a>
 
     <div class="shell">
+      <!-- The guide menu lives in the rail on each guide page, not up here: it
+           is seven entries in three platform groups, and a horizontal strip
+           cannot show a group heading loudly enough to tell two "Mac"s apart. -->
       <header class="masthead">
         <a class="masthead__name" href={`${base}/`}>kingo-pod</a>
-        <nav class="nav" aria-label="Guides">
-          {
-            [
-              { label: "Setup", guides: SETUP },
-              { label: "Use", guides: USE },
-            ].map((group) => (
-              <div class="nav__group">
-                <span class="nav__label">{group.label}</span>
-                {group.guides.map((g) => (
-                  <a href={`${base}/${g.slug}/`} aria-current={path === `${base}/${g.slug}` ? "page" : undefined}>
-                    {g.nav}
-                  </a>
-                ))}
-              </div>
-            ))
-          }
-          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Toggle colour theme">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke-linejoin="round"></path>
-            </svg>
-          </button>
-        </nav>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Toggle colour theme">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke-linejoin="round"></path>
+          </svg>
+        </button>
       </header>
 
       <main id="main">

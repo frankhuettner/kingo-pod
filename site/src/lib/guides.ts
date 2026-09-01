@@ -7,9 +7,11 @@
  * `file` is the name in docs/; `slug` is the URL. Old GitHub links keep
  * working because the file names never change.
  *
- * Two groups, because they are read at different times: a student follows a
- * SETUP guide once and then never again, and lives in the USE guide for the
- * rest of the term.
+ * Two groupings, for two jobs. `group` (Install / Use) is how the landing page
+ * introduces the guides: install once, live in the using guide for the rest
+ * of the term. `RAIL` groups the same seven by platform, because
+ * that is the choice a student actually makes — they have a Mac or they have
+ * a Windows laptop, and half of this site is then irrelevant to them.
  */
 export interface Guide {
   slug: string;
@@ -17,9 +19,9 @@ export interface Guide {
   title: string;
   /** One line, shown under the title and on the card. */
   summary: string;
-  /** Short label for the header menu — unique only within its group. */
-  nav: string;
-  group: "Setup" | "Use";
+  /** Short label for the left rail — unique within its platform group. */
+  rail: string;
+  group: "Install" | "Use";
   platform: "Mac" | "Windows" | "Any";
   kind: "Internet" | "USB stick" | "Everyday use" | "The class database";
 }
@@ -30,8 +32,8 @@ export const GUIDES: Guide[] = [
     file: "STUDENT-GUIDE-MAC.md",
     title: "Mac setup",
     summary: "Apple Silicon, over the internet. One command installs and starts the whole class stack.",
-    nav: "Mac",
-    group: "Setup",
+    rail: "Install",
+    group: "Install",
     platform: "Mac",
     kind: "Internet",
   },
@@ -40,8 +42,8 @@ export const GUIDES: Guide[] = [
     file: "STUDENT-GUIDE-WINDOWS.md",
     title: "Windows setup",
     summary: "Windows 10/11 via WSL2. Turn WSL2 on once, then one command does the rest.",
-    nav: "Windows",
-    group: "Setup",
+    rail: "Install",
+    group: "Install",
     platform: "Windows",
     kind: "Internet",
   },
@@ -50,8 +52,8 @@ export const GUIDES: Guide[] = [
     file: "STUDENT-GUIDE-MAC-USB.md",
     title: "Mac setup from the USB stick",
     summary: "Same result as the Mac guide, but the ~14 GB of images come off the instructor's stick.",
-    nav: "Mac (USB)",
-    group: "Setup",
+    rail: "Install from USB",
+    group: "Install",
     platform: "Mac",
     kind: "USB stick",
   },
@@ -60,8 +62,8 @@ export const GUIDES: Guide[] = [
     file: "STUDENT-GUIDE-WINDOWS-USB.md",
     title: "Windows setup from the USB stick",
     summary: "Same result as the Windows guide, but the ~14 GB of images come off the instructor's stick.",
-    nav: "Windows (USB)",
-    group: "Setup",
+    rail: "Install from USB",
+    group: "Install",
     platform: "Windows",
     kind: "USB stick",
   },
@@ -70,7 +72,7 @@ export const GUIDES: Guide[] = [
     file: "USING-MAC.md",
     title: "Using the stack on a Mac",
     summary: "Your addresses and logins, the everyday commands, your own files, updating, and fixing things.",
-    nav: "Mac",
+    rail: "Everyday use",
     group: "Use",
     platform: "Mac",
     kind: "Everyday use",
@@ -80,7 +82,7 @@ export const GUIDES: Guide[] = [
     file: "USING-WINDOWS.md",
     title: "Using the stack on Windows",
     summary: "Your addresses and logins, the everyday commands, your own files, updating, and fixing things.",
-    nav: "Windows",
+    rail: "Everyday use",
     group: "Use",
     platform: "Windows",
     kind: "Everyday use",
@@ -90,15 +92,28 @@ export const GUIDES: Guide[] = [
     file: "CLOUDBEAVER.md",
     title: "Using CloudBeaver",
     summary: "How to log in to the browser SQL workbench and open the class database.",
-    nav: "CloudBeaver",
+    rail: "CloudBeaver",
     group: "Use",
     platform: "Any",
     kind: "The class database",
   },
 ];
 
-export const SETUP = GUIDES.filter((g) => g.group === "Setup");
+export const INSTALL = GUIDES.filter((g) => g.group === "Install");
 export const USE = GUIDES.filter((g) => g.group === "Use");
+
+/**
+ * The left rail on every guide page, grouped by laptop. "Install" appears under
+ * both Mac and Windows, which is fine: the two lists sit far apart vertically,
+ * where a heading can scope them. The header menu this replaced put "Mac" and
+ * "Windows" twice on ONE line, 200px apart, where a small uppercase label read
+ * as decoration rather than as scope.
+ */
+export const RAIL: { label: string; guides: Guide[] }[] = [
+  { label: "Mac", guides: GUIDES.filter((g) => g.platform === "Mac") },
+  { label: "Windows", guides: GUIDES.filter((g) => g.platform === "Windows") },
+  { label: "Both", guides: GUIDES.filter((g) => g.platform === "Any") },
+];
 
 /** docs/<file> → /<slug>/, used by the doc-sync script. */
 export const FILE_TO_SLUG = Object.fromEntries(GUIDES.map((g) => [g.file, g.slug]));

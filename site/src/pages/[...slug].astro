@@ -1,7 +1,7 @@
 ---
 import { getEntry, render } from "astro:content";
 import Docs from "../layouts/Docs.astro";
-import { GUIDES, SETUP, USE, bySlug } from "../lib/guides";
+import { GUIDES, RAIL, bySlug } from "../lib/guides";
 import type { GetStaticPaths } from "astro";
 
 export const getStaticPaths: GetStaticPaths = () => GUIDES.map((g) => ({ params: { slug: g.slug } }));
@@ -14,36 +14,56 @@ const { Content, headings } = await render(entry!);
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 // h2 is a step; h3 is detail inside one. Deeper levels would only add noise.
 const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
-const otherGroups = [
-  { label: "Setup", guides: SETUP.filter((g) => g.slug !== guide.slug) },
-  { label: "Use", guides: USE.filter((g) => g.slug !== guide.slug) },
-];
 ---
 
 <Docs title={guide.title} description={guide.summary}>
-  <header class="page-head">
-    <p class="label"><a href={`${base}/`}>All guides</a> · {guide.platform} · {guide.kind}</p>
-    <h1>{guide.title}</h1>
-    <p>{guide.summary}</p>
-  </header>
-
   <div class="guide">
-    <details class="toc toc--mobile">
-      <summary>On this page</summary>
-      <ul>
-        {
-          toc.map((h) => (
-            <li class={`toc__item toc__item--${h.depth}`}>
-              <a href={`#${h.slug}`}>{h.text}</a>
-            </li>
-          ))
-        }
-      </ul>
-    </details>
+    {/* Wide screens: a column down the left. Narrow ones: the same lists as a
+        stack of labelled rows above the title. Either way every guide stays
+        one click away and no two entries in a group share a label. */}
+    <nav class="rail" aria-label="Guides">
+      {
+        RAIL.map((group) => (
+          <div class="rail__group">
+            <p class="label">{group.label}</p>
+            <ul>
+              {group.guides.map((g) => (
+                <li>
+                  <a href={`${base}/${g.slug}/`} aria-current={g.slug === guide.slug ? "page" : undefined}>
+                    {g.rail}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
+    </nav>
 
-    <article class="prose" data-guide>
-      <Content />
-    </article>
+    <div class="guide__body">
+      <header class="page-head">
+        <p class="label"><a href={`${base}/`}>All guides</a> · {guide.platform} · {guide.kind}</p>
+        <h1>{guide.title}</h1>
+        <p>{guide.summary}</p>
+      </header>
+
+      <details class="toc toc--mobile">
+        <summary>On this page</summary>
+        <ul>
+          {
+            toc.map((h) => (
+              <li class={`toc__item toc__item--${h.depth}`}>
+                <a href={`#${h.slug}`}>{h.text}</a>
+              </li>
+            ))
+          }
+        </ul>
+      </details>
+
+      <article class="prose" data-guide>
+        <Content />
+      </article>
+    </div>
 
     <nav class="toc toc--rail" aria-label="On this page">
       <p class="label">On this page</p>
@@ -58,23 +78,6 @@ const otherGroups = [
       </ul>
     </nav>
   </div>
-
-  <nav class="more" aria-label="Other guides">
-    {
-      otherGroups.map((group) => (
-        <div class="more__group">
-          <p class="label">{group.label}</p>
-          <ul>
-            {group.guides.map((g) => (
-              <li>
-                <a href={`${base}/${g.slug}/`}>{g.title}</a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))
-    }
-  </nav>
 </Docs>
 
 <script>
@@ -129,16 +132,57 @@ const otherGroups = [
 </script>
 
 <style>
+  /* Three columns where there is room for them: guides on the left, prose in
+     the middle, the page's own headings on the right. Each side column drops
+     away at the width where keeping it would squeeze the prose — the guide
+     rail at 78rem, the contents rail at 68rem. Below that the guide rail
+     becomes labelled rows above the title, so navigation never disappears. */
   .guide {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--toc);
-    gap: 0 3rem;
+    grid-template-columns: var(--rail) minmax(0, 1fr) var(--toc);
+    gap: 0 2.25rem;
     align-items: start;
+  }
+
+  .rail {
+    position: sticky;
+    top: 1.5rem;
+    margin-top: 2.5rem;
+    font-size: var(--step--1);
+    border-right: 1px solid var(--rule-soft);
+    padding-right: 1rem;
+  }
+
+  .rail__group + .rail__group {
+    margin-top: 1.15rem;
+  }
+
+  .rail ul {
+    list-style: none;
+    margin: 0.4rem 0 0;
+    padding-left: 0.7rem;
+  }
+
+  .rail a {
+    display: block;
+    padding-block: 0.22rem;
+    color: var(--ink-muted);
+    text-decoration: none;
+  }
+
+  .rail a:hover {
+    color: var(--accent);
+  }
+
+  .rail a[aria-current="page"] {
+    color: var(--ink);
+    font-weight: 600;
   }
 
   .toc--rail {
     position: sticky;
     top: 1.5rem;
+    margin-top: 2.5rem;
     font-size: var(--step--1);
     border-left: 1px solid var(--rule-soft);
     padding-left: 1rem;
@@ -186,6 +230,57 @@ const otherGroups = [
     font-weight: 500;
   }
 
+  @media (max-width: 78rem) {
+    .guide {
+      grid-template-columns: minmax(0, 1fr) var(--toc);
+    }
+
+    /* The same lists, laid on their side: one row per platform, the label
+       holding a fixed column so "Setup" lines up down the three rows. */
+    .rail {
+      grid-column: 1 / -1;
+      position: static;
+      margin-top: 1.4rem;
+      border-right: 0;
+      padding-right: 0;
+      border-bottom: 1px solid var(--rule);
+      padding-bottom: 1rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .rail__group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.2rem 1.2rem;
+    }
+
+    .rail__group + .rail__group {
+      margin-top: 0.4rem;
+    }
+
+    .rail__group > .label {
+      flex: 0 0 5.5rem;
+    }
+
+    .rail ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.2rem 1.2rem;
+      margin: 0;
+      padding-left: 0;
+    }
+
+    .rail a {
+      padding-block: 0;
+    }
+
+    /* The strip already separates the title from the masthead. */
+    .guide__body > .page-head {
+      padding-top: 1.2rem;
+    }
+  }
+
   @media (max-width: 68rem) {
     .guide {
       grid-template-columns: minmax(0, 1fr);
@@ -200,6 +295,21 @@ const otherGroups = [
     }
   }
 
+  /* A phone has no room for a label column; let each row start at the margin. */
+  @media (max-width: 34rem) {
+    .rail__group {
+      display: block;
+    }
+
+    .rail__group > .label {
+      margin-bottom: 0.1rem;
+    }
+
+    .rail ul {
+      padding-left: 0.7rem;
+    }
+  }
+
   .page-head .label a {
     color: var(--ink-muted);
     text-decoration: none;
@@ -209,23 +319,4 @@ const otherGroups = [
     color: var(--accent);
   }
 
-  .more {
-    border-top: 1px solid var(--rule);
-    padding-block: 1.6rem;
-    margin-top: 2.5rem;
-  }
-
-  .more__group + .more__group {
-    margin-top: 1.1rem;
-  }
-
-  .more ul {
-    list-style: none;
-    margin: 0.5rem 0 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem 1.4rem;
-    font-size: var(--step--1);
-  }
 </style>

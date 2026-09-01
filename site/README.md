@@ -19,11 +19,19 @@ page and a Copy button on every command.
 
 So: **edit the guides in `docs/`, never here.** What does live here is the
 presentation — and `src/lib/guides.ts`, which holds each guide's URL slug,
-title, one-line summary, menu label and menu group (kept out of the markdown,
-where front matter would show up as a stray table in the GitHub view). The
-`group` is why the header carries two menus, **Setup** and **Use**: a student
-follows a setup guide once and then lives in the using guide, so the two "Mac"
-entries are told apart by their group label, not by longer names.
+title, one-line summary, rail label, platform and group (kept out of the
+markdown, where front matter would show up as a stray table in the GitHub
+view).
+
+The seven guides are grouped twice, for two jobs. `group` (**Install** / **Use**)
+is how the landing page introduces them. `RAIL` groups the same seven by
+**platform**, and that is the menu on every guide page: a wide screen gets it as
+a column down the left, a narrow one as three labelled rows above the title.
+Grouping by platform is what makes the repetition harmless — "Install" appears
+under both Mac and Windows, but the two lists sit far apart vertically, where a
+heading can scope them. The header menu this replaced put "Mac" and "Windows"
+twice on one line, where a small uppercase group label read as decoration
+rather than as scope.
 
 ## Work on it
 

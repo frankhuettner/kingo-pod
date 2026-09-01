@@ -1,6 +1,6 @@
 ---
 import Docs from "../layouts/Docs.astro";
-import { SETUP, USE } from "../lib/guides";
+import { INSTALL, USE } from "../lib/guides";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
@@ -24,7 +24,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     </p>
     <ul class="grid">
       {
-        SETUP.map((g) => (
+        INSTALL.map((g) => (
           <li class="card">
             <p class="card__meta">
               <span class="badge">{g.platform}</span>

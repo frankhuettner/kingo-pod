@@ -21,8 +21,11 @@
   --shadow-md: 0 2px 5px rgb(0 0 0 / 0.16), 0 2px 10px rgb(0 0 0 / 0.12);
 
   --measure: 46rem;
-  --shell: 72rem;
-  --toc: 14rem;
+  /* Three columns have to fit inside --shell without starving the prose:
+     rail + toc + two gaps come to 27rem, leaving ~43rem of text. */
+  --shell: 76rem;
+  --toc: 13rem;
+  --rail: 9.5rem;
 
   --step--1: clamp(0.82rem, 0.8rem + 0.1vw, 0.88rem);
   --step-0: clamp(1rem, 0.97rem + 0.16vw, 1.09rem);
@@ -136,7 +139,7 @@ h3 {
   padding-block: 1.5rem 1rem;
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem 1.5rem;
   border-bottom: 1px solid var(--rule);
@@ -152,47 +155,6 @@ h3 {
 
 .masthead__name:hover {
   color: var(--accent);
-}
-
-.nav {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 1.4rem;
-  font-size: var(--step--1);
-}
-
-/* Two menus, because the guides are read at two different times: setup once,
-   everyday use all term. The group label is what tells the two "Mac" links
-   apart. */
-.nav__group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.3rem 0.9rem;
-}
-
-.nav__label {
-  font-size: 0.66rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--ink-muted);
-  opacity: 0.75;
-}
-
-.nav a {
-  color: var(--ink-muted);
-  text-decoration: none;
-}
-
-.nav a:hover {
-  color: var(--accent);
-}
-
-.nav a[aria-current="page"] {
-  color: var(--ink);
-  font-weight: 600;
 }
 
 .theme-toggle {
