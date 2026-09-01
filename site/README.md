@@ -23,11 +23,11 @@ title, one-line summary, rail label, platform and group (kept out of the
 markdown, where front matter would show up as a stray table in the GitHub
 view).
 
-The seven guides are grouped twice, for two jobs. `group` (**Install** / **Use**)
+The seven guides are grouped twice, for two jobs. `group` (**Setup** / **Use**)
 is how the landing page introduces them. `RAIL` groups the same seven by
 **platform**, and that is the menu on every guide page: a wide screen gets it as
 a column down the left, a narrow one as three labelled rows above the title.
-Grouping by platform is what makes the repetition harmless — "Install" appears
+Grouping by platform is what makes the repetition harmless — "Setup" appears
 under both Mac and Windows, but the two lists sit far apart vertically, where a
 heading can scope them. The header menu this replaced put "Mac" and "Windows"
 twice on one line, where a small uppercase group label read as decoration

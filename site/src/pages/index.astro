@@ -1,6 +1,6 @@
 ---
 import Docs from "../layouts/Docs.astro";
-import { INSTALL, USE } from "../lib/guides";
+import { SETUP, USE } from "../lib/guides";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
@@ -17,14 +17,14 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   </header>
 
   <section class="section">
-    <h2 class="label">Install it</h2>
+    <h2 class="label">Set it up</h2>
     <p class="lede">
       Pick your laptop. <strong>Do this at home, before class</strong> — the first run downloads about 10 GB, and on
       Windows it needs one restart. Plan about an hour, most of it unattended.
     </p>
     <ul class="grid">
       {
-        INSTALL.map((g) => (
+        SETUP.map((g) => (
           <li class="card">
             <p class="card__meta">
               <span class="badge">{g.platform}</span>
