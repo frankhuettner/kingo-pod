@@ -78,25 +78,40 @@ then one command per job:
 
 ### Your own files — the `shared` folder
 
-Your own data files — a CSV, an Excel sheet, a PDF — go into the **`shared`
-folder inside `kingo-pod`** (`~/kingo-pod/shared`). Langflow sees the same
-folder as **`/app/shared`** — so a file you drop in as
-`~/kingo-pod/shared/sales.csv` is `/app/shared/sales.csv` in a Langflow
-component, and anything Langflow writes there appears on your Mac. The folder
-is created for you; if it isn't there yet, run `./kingo update` once.
+`shared` is a folder inside `kingo-pod` that both you and Langflow can see.
+Put your own files there: a SQLite database, a CSV, an Excel sheet, a PDF.
 
-One line opens it in Finder (and ⌘-drag it to the Finder sidebar to keep it
-there):
+It is one folder with two names, because you and Langflow look at it from
+different sides:
+
+| Looking from | The folder is called |
+|---|---|
+| your Mac | `~/kingo-pod/shared` |
+| inside Langflow | `/app/shared` |
+
+So a database you drop in as `~/kingo-pod/shared/trials.sqlite` is
+`/app/shared/trials.sqlite` when you type it into a Langflow component. It
+works the other way round too: whatever Langflow writes there shows up on your
+Mac. The folder is made for you — if it is not there, run `./kingo update`
+once.
+
+> **Opening a SQLite file in Langflow?** The SQL component wants a database
+> URL, not a path, and an absolute path takes **four** slashes:
+> `sqlite:////app/shared/trials.sqlite`.
+
+One line opens the folder in Finder (then ⌘-drag it to the Finder sidebar to
+keep it there):
 
 ```
 open ~/kingo-pod/shared
 ```
 
-Treat the folder as **shared with Langflow**: anything running inside Langflow
-— including a flow someone else built and you imported — can read, change and
-delete files there. So keep private files out of it, and never let it hold the
-only copy of something. Nothing outside this one folder is reachable from
-Langflow.
+Drag files in and out like in any other folder. Langflow sees them at once.
+
+**Keep private files out of it.** Anything running inside Langflow can read,
+change and delete what is in this folder — including a flow someone else built
+and you imported. Never let it hold your only copy of something. Nothing
+outside this one folder is reachable from Langflow.
 
 > **Using Docker Desktop?** Files that *Langflow itself* writes into the
 > folder can end up owned by the system rather than by you — deleting those
