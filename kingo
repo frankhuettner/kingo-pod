@@ -51,6 +51,31 @@ case "${KINGO_ENGINE:-}" in
   *) die "KINGO_ENGINE is '$KINGO_ENGINE' — it must be 'podman' or 'docker'. Check .env.local (or your shell environment)." ;;
 esac
 
+# ── Modes: which services run ────────────────────────────────────────────────
+# compose.yml's profiles are NAMED after these modes. UNSET means full: an
+# install from before modes keeps every service after `kingo update` — the
+# setup scripts pin abp for fresh installs. A KINGO_MODE from the shell
+# environment beats .env.local (the _cli_overrides rule above), so `kingo mode`
+# refuses to run then: the line it writes would be silently overridden.
+MODES="full abp bi langflow n8n"
+MODE_FROM_ENV=0
+printf '%s\n' "$_cli_overrides" | grep -q '^KINGO_MODE=' && MODE_FROM_ENV=1
+KINGO_MODE="${KINGO_MODE:-full}"
+case " $MODES " in
+  *" $KINGO_MODE "*) ;;
+  *) die "KINGO_MODE is '$KINGO_MODE' — it must be one of: $MODES. Check .env.local (or your shell environment)." ;;
+esac
+export KINGO_MODE
+# Overrides the COMPOSE_PROFILES=full that .env carries for pre-modes scripts.
+export COMPOSE_PROFILES="$KINGO_MODE"
+# A memory pin (./kingo memory N, in .env.local) must be a number of MB and at
+# least what the lightest mode needs — anything else is ignored, loudly.
+case "${KINGO_MEMORY_MB:-}" in
+  '') ;;
+  *[!0-9]*) warn "ignoring KINGO_MEMORY_MB='$KINGO_MEMORY_MB' in .env.local — it must be a number of MB. Clear it: ./kingo memory auto"; KINGO_MEMORY_MB="" ;;
+  *) [ "$KINGO_MEMORY_MB" -ge 2048 ] || { warn "ignoring KINGO_MEMORY_MB=$KINGO_MEMORY_MB in .env.local — below the 2 GB any mode needs. Clear it: ./kingo memory auto"; KINGO_MEMORY_MB=""; } ;;
+esac
+
 # ── Engine detection ─────────────────────────────────────────────────────────
 # Order (per plan §4): $KINGO_ENGINE override → podman (usable or startable) →
 # docker → podman as last resort (so the error points at podman setup).
@@ -144,7 +169,17 @@ neutral_auth() {
 }
 
 # One wrapper every verb goes through: `podman compose ...` or `docker compose ...`.
+# It sees the CURRENT MODE's services only (COMPOSE_PROFILES, exported above).
 compose() { neutral_auth; $ENGINE compose "$@"; }
+# The same with EVERY service in view. `--profile full` REPLACES the exported
+# COMPOSE_PROFILES (docker-compose does not union the two) — it shows every
+# service only because every profiled service lists `full`, which `kingo
+# smoke` asserts (assert_modes). Required wherever another mode's leftovers
+# matter: down and reset (a container of an inactive profile stays attached to
+# the network and podman then refuses to remove it — exit code 0, silently),
+# bundle and pull (all images), the loopback + drift guards (all ports), CI
+# diagnostics.
+compose_all() { neutral_auth; $ENGINE compose --profile full "$@"; }
 
 # ── The service table: the ONE list every command derives from ───────────────
 # DisplayName|ENV_SUFFIX|host port|health path|expected codes
@@ -167,6 +202,92 @@ SERVICE_TABLE=(
   "PostgreSQL|POSTGRES|${P_POSTGRES}|tcp|-"
 )
 
+# ── Modes: what each one runs and how much memory it wants ───────────────────
+# Machine budgets in MiB, measured under classroom use on 2026-09-05 (see
+# docs/INSTRUCTOR.md "Modes"): target = what setup creates and `mode` resizes
+# to; floor = below it a mode swaps or gets OOM-killed during normal class use.
+mode_mem_mb()   { case "$1" in full) echo 6144 ;; abp) echo 4096 ;; bi) echo 4608 ;; langflow) echo 3584 ;; n8n) echo 2560 ;; esac; }
+mode_floor_mb() { case "$1" in full) echo 6144 ;; abp) echo 3584 ;; bi) echo 4096 ;; langflow) echo 3072 ;; n8n) echo 2048 ;; esac; }
+mode_describe() {
+  case "$1" in
+    full)     echo "all 9 services" ;;
+    abp)      echo "Langflow, n8n, CloudBeaver, PostgreSQL" ;;
+    bi)       echo "JupyterLab, JupyterHub, Jupyter MCP, Metabase, CloudBeaver, Qdrant, PostgreSQL" ;;
+    langflow) echo "Langflow, PostgreSQL" ;;
+    n8n)      echo "n8n, PostgreSQL" ;;
+  esac
+}
+# The modes each service runs in — MUST match the `profiles:` in compose.yml
+# (`kingo smoke` asserts they agree, for every mode). PostgreSQL is always on.
+service_modes() {
+  case "$1" in
+    Langflow)    echo "full abp langflow" ;;
+    n8n)         echo "full abp n8n" ;;
+    CloudBeaver) echo "full abp bi" ;;
+    PostgreSQL)  echo "$MODES" ;;
+    *)           echo "full bi" ;;   # JupyterLab, JupyterHub, Jupyter MCP, Metabase, Qdrant (+ its gRPC port)
+  esac
+}
+service_active() { case " $(service_modes "$1") " in *" $KINGO_MODE "*) return 0 ;; esac; return 1; }
+compose_name() { # table name → compose service name
+  case "$1" in
+    JupyterLab) echo jupyterlab ;; JupyterHub) echo jupyterhub ;; "Jupyter MCP") echo jupyter-mcp ;;
+    Langflow) echo langflow ;; n8n) echo n8n ;; Metabase) echo metabase ;; CloudBeaver) echo cloudbeaver ;;
+    Qdrant|"Qdrant gRPC") echo qdrant ;; PostgreSQL) echo postgres ;;
+  esac
+}
+off_services() { # display names that are off in the current mode, comma-separated
+  local s name rest out=""
+  for s in "${SERVICE_TABLE[@]}"; do
+    IFS='|' read -r name rest <<<"$s"
+    [ "$name" = "Qdrant gRPC" ] && continue
+    service_active "$name" || out="${out:+$out, }$name"
+  done
+  printf '%s' "$out"
+}
+off_running() { # compose names of services that are OFF in this mode but whose container runs anyway
+  local s name rest running=""
+  running=" $( { $ENGINE ps --filter name=kingo- --format '{{.Names}}' 2>/dev/null || true; } | tr '\n' ' ') "
+  for s in "${SERVICE_TABLE[@]}"; do
+    IFS='|' read -r name rest <<<"$s"
+    [ "$name" = "Qdrant gRPC" ] && continue
+    service_active "$name" && continue
+    case "$running" in *" kingo-$(compose_name "$name") "*) printf '%s ' "$(compose_name "$name")" ;; esac
+  done
+}
+# Compose never stops what a disabled profile owns: after `KINGO_MODE=n8n
+# ./kingo up` on a running full stack the other seven containers would keep
+# running — `status` would call them "Off", smoke would pass, and the memory
+# the mode exists to free would still be in use. So `up` enforces the mode.
+stop_off_services() {
+  local svcs; svcs="$(off_running)"
+  [ -n "${svcs% }" ] || return 0
+  echo "Stopping services that are off in $KINGO_MODE mode: ${svcs% }"
+  # shellcheck disable=SC2086
+  compose_all rm -sf $svcs >/dev/null 2>&1 || $ENGINE rm -f $(printf 'kingo-%s ' $svcs) >/dev/null 2>&1 || true
+}
+services_on() { # "4 of 9"
+  local s name rest n=0 all=0
+  for s in "${SERVICE_TABLE[@]}"; do
+    IFS='|' read -r name rest <<<"$s"
+    [ "$name" = "Qdrant gRPC" ] && continue
+    all=$((all + 1)); service_active "$name" && n=$((n + 1))
+  done
+  echo "$n of $all"
+}
+inactive_hint() { # $@: compose service names a student typed — refuse ones that are off
+  local a s name rest
+  for a in "$@"; do
+    case "$a" in -*) continue ;; esac
+    for s in "${SERVICE_TABLE[@]}"; do
+      IFS='|' read -r name rest <<<"$s"
+      [ "$(compose_name "$name")" = "$a" ] || continue
+      service_active "$name" && continue
+      die "$a is off in $KINGO_MODE mode (runs in: $(service_modes "$name")). Switch with: ./kingo mode <name> — './kingo mode' lists them."
+    done
+  done
+}
+
 check() { # port path [want] -> 0 if the expected code(s) match
   local port="$1" path="$2" want="${3:-200}" code
   if [ "$path" = "tcp" ]; then
@@ -184,6 +305,7 @@ wait_all() { # $1 = max attempts (10s apart)
     for s in "${SERVICE_TABLE[@]}"; do
       IFS='|' read -r name suffix port path want <<<"$s"
       [ "$path" = "-" ] && continue
+      service_active "$name" || continue
       check "$port" "$path" "${want:-200}" || { all=0; break; }
     done
     [ "$all" = 1 ] && return 0
@@ -196,10 +318,14 @@ wait_all() { # $1 = max attempts (10s apart)
 # ── First-run initialization (idempotent; absorbed from the old bake.sh) ──────
 init_stack() {
   # Starter notebook the MCP server points at.
-  $ENGINE exec kingo-jupyterlab bash -lc \
-    'mkdir -p work && [ -f work/notebook.ipynb ] || printf "%s" "{\"cells\":[],\"metadata\":{},\"nbformat\":4,\"nbformat_minor\":5}" > work/notebook.ipynb' \
-    2>/dev/null || warn "could not create the starter notebook (retry with: kingo up)"
-  setup_metabase || warn "Metabase pre-setup skipped (worst case: you click through the wizard once)"
+  if service_active JupyterLab; then
+    $ENGINE exec kingo-jupyterlab bash -lc \
+      'mkdir -p work && [ -f work/notebook.ipynb ] || printf "%s" "{\"cells\":[],\"metadata\":{},\"nbformat\":4,\"nbformat_minor\":5}" > work/notebook.ipynb' \
+      2>/dev/null || warn "could not create the starter notebook (retry with: kingo up)"
+  fi
+  if service_active Metabase; then
+    setup_metabase || warn "Metabase pre-setup skipped (worst case: you click through the wizard once)"
+  fi
 }
 
 # Pre-provision the Metabase admin + classroom DB so students never see the
@@ -235,6 +361,7 @@ cmd_up() {
   select_engine; ensure_ready
   preflight_ports
   echo "Engine: $ENGINE. Starting the Kingo stack ..."
+  stop_off_services
   # `up` builds the local jupyterhub image only if it's missing (first run);
   # use `kingo update` to force a rebuild after changing the Dockerfile.
   compose up -d
@@ -246,6 +373,7 @@ cmd_up() {
   cmd_status
   echo
   echo "Ready. Run 'kingo credentials' for all URLs and logins."
+  small_host_hint
 }
 
 # Tear the stack down WITHOUT the compose provider, using the engine CLI's own
@@ -269,7 +397,7 @@ cmd_down() {
   # Prefer a clean compose teardown. If the compose provider can't reach the
   # engine socket (the sleep/wake staleness above), fall back to the CLI so the
   # stack always comes down — a stuck-up stack was a real, confusing failure.
-  if compose down; then release_after_down; return 0; fi
+  if compose_all down; then release_after_down; return 0; fi
   warn "the compose provider could not reach the engine — taking the Kingo stack down directly instead (your other containers are untouched)."
   cli_teardown
   release_after_down
@@ -278,11 +406,20 @@ cmd_down() {
 
 cmd_status() {
   select_engine
-  local all_up=1 any_up=0 s name suffix port path want st
+  local all_up=1 any_up=0 s name suffix port path want st off
+  off="$(off_services)"
+  if [ -n "$off" ]; then
+    echo "Mode: $KINGO_MODE — $(services_on) services on. Off: $off   (./kingo mode full turns them on)"
+    local stray; stray="$(off_running)"
+    [ -z "${stray% }" ] || echo "  [!!] still running although off in $KINGO_MODE mode: ${stray% } — './kingo up' stops them"
+  else
+    echo "Mode: full — all 9 services."
+  fi
   printf '%-14s %-8s %s\n' "SERVICE" "STATUS" "URL"
   for s in "${SERVICE_TABLE[@]}"; do
     IFS='|' read -r name suffix port path want <<<"$s"
     [ "$path" = "-" ] && continue
+    service_active "$name" || continue
     # status is lenient (any answer = up); smoke enforces exact codes.
     if [ "$path" = "tcp" ]; then
       if check "$port" tcp; then st="up"; any_up=1; else st="DOWN"; all_up=0; fi
@@ -303,28 +440,35 @@ cmd_status() {
   fi
 }
 
+cred_row() { # name url login — an off service keeps its row (a missing row is a mystery, a marked one is an answer)
+  if service_active "$1"; then printf '%-14s %-40s %s\n' "$1" "$2" "$3"
+  else printf '%-14s %-40s %s\n' "$1" "off in $KINGO_MODE mode" "./kingo mode full turns it on"; fi
+}
 cmd_credentials() {
-  cat <<EOF
-Service        URL                                      Login
--------        ---                                      -----
-JupyterLab     http://localhost:${P_JUPYTERLAB}                    no login required
-JupyterHub     http://localhost:${P_JUPYTERHUB}                    any username / ${KINGO_PASSWORD}
-Jupyter MCP    http://localhost:${P_MCP}/mcp                Bearer token: ${MCP_TOKEN}
-Langflow       http://localhost:${P_LANGFLOW}                    auto-login (classroom instance)
-n8n            http://localhost:${P_N8N}                    create an account on first visit
-Metabase       http://localhost:${P_METABASE}                    ${METABASE_ADMIN_EMAIL} / ${KINGO_STRONG_PASSWORD}
-CloudBeaver    http://localhost:${P_CLOUDBEAVER}                    ${KINGO_USER} / ${KINGO_STRONG_PASSWORD}
-Qdrant         http://localhost:${P_QDRANT}/dashboard          no login required
-PostgreSQL     localhost:${P_POSTGRES}                          ${KINGO_USER} / ${KINGO_PASSWORD}  (db: classroom)
-
-MCP clients (Claude Desktop/Code, Cursor): point at http://localhost:${P_MCP}/mcp
-  with header  Authorization: Bearer ${MCP_TOKEN}
-OpenCode (AI coding) runs natively on your laptop — install it separately (see
-  the student guide), then run 'opencode' in a terminal. Keys: opencode auth login.
-EOF
+  printf '%-14s %-40s %s\n' "Service" "URL" "Login"
+  printf '%-14s %-40s %s\n' "-------" "---" "-----"
+  cred_row JupyterLab    "http://localhost:${P_JUPYTERLAB}"          "no login required"
+  cred_row JupyterHub    "http://localhost:${P_JUPYTERHUB}"          "any username / ${KINGO_PASSWORD}"
+  cred_row "Jupyter MCP" "http://localhost:${P_MCP}/mcp"             "Bearer token: ${MCP_TOKEN}"
+  cred_row Langflow      "http://localhost:${P_LANGFLOW}"            "auto-login (classroom instance)"
+  cred_row n8n           "http://localhost:${P_N8N}"                 "create an account on first visit"
+  cred_row Metabase      "http://localhost:${P_METABASE}"            "${METABASE_ADMIN_EMAIL} / ${KINGO_STRONG_PASSWORD}"
+  cred_row CloudBeaver   "http://localhost:${P_CLOUDBEAVER}"         "${KINGO_USER} / ${KINGO_STRONG_PASSWORD}"
+  cred_row Qdrant        "http://localhost:${P_QDRANT}/dashboard"    "no login required"
+  cred_row PostgreSQL    "localhost:${P_POSTGRES}"                   "${KINGO_USER} / ${KINGO_PASSWORD}  (db: classroom)"
+  echo
+  if service_active "Jupyter MCP"; then
+    echo "MCP clients (Claude Desktop/Code, Cursor): point at http://localhost:${P_MCP}/mcp"
+    echo "  with header  Authorization: Bearer ${MCP_TOKEN}"
+  else
+    echo "MCP clients: the Jupyter MCP server is off in $KINGO_MODE mode — ./kingo mode full (or bi) turns it on."
+  fi
+  echo "OpenCode (AI coding) runs natively on your laptop — install it separately (see"
+  echo "  the student guide), then run 'opencode' in a terminal. Keys: opencode auth login."
 }
 
 cmd_mcp() {
+  service_active "Jupyter MCP" || echo "NOTE: the Jupyter MCP server is off in $KINGO_MODE mode — ./kingo mode full (or bi) turns it on."
   echo "Jupyter MCP endpoint : http://localhost:${P_MCP}/mcp"
   echo "Bearer token         : ${MCP_TOKEN}"
   echo
@@ -338,7 +482,7 @@ assert_loopback() {
   # renders the normalized config identically for both engines (both use the
   # docker-compose binary), so we assert host_ip there.
   local cfg npub nloop
-  cfg="$(compose config 2>/dev/null)" || { warn "could not render compose config for the bind-address check"; return 0; }
+  cfg="$(compose_all config 2>/dev/null)" || { warn "could not render compose config for the bind-address check"; return 0; }
   if printf '%s\n' "$cfg" | grep -E 'host_ip:' | grep -qvE 'host_ip:[[:space:]]*127\.0\.0\.1'; then
     echo "FAIL: a published port is NOT bound to 127.0.0.1:"
     printf '%s\n' "$cfg" | grep -E 'host_ip:' | grep -vE 'host_ip:[[:space:]]*127\.0\.0\.1'
@@ -376,18 +520,59 @@ assert_stable() {
   wait_all 3 || { compose ps; die "services flapped after coming up"; }
 }
 
+mode_services_expected() { # $1: mode — the compose service names kingo's table puts in it
+  local s name rest
+  for s in "${SERVICE_TABLE[@]}"; do
+    IFS='|' read -r name rest <<<"$s"
+    [ "$name" = "Qdrant gRPC" ] && continue
+    case " $(service_modes "$name") " in *" $1 "*) compose_name "$name" ;; esac
+  done | sort -u | tr '\n' ' '
+}
+assert_modes() { # compose.yml's profiles and service_modes() must agree, for every mode
+  # (a `case` must not sit textually inside $( ): macOS ships bash 3.2)
+  local m want got
+  neutral_auth
+  for m in $MODES; do
+    want=$(mode_services_expected "$m")
+    got=$(COMPOSE_PROFILES=$m $ENGINE compose config --services 2>/dev/null | sort -u | tr '\n' ' ')
+    if [ "$want" != "$got" ]; then
+      echo "FAIL: mode '$m' — compose.yml's profiles and kingo's service_modes() disagree"
+      echo "  compose.yml: $got"
+      echo "  kingo:       $want"
+      return 1
+    fi
+  done
+  # compose_all relies on `--profile full` showing EVERY service (see there):
+  # a service that lists other modes but not full would be invisible to down,
+  # reset, pull and bundle — and this is the only place that would notice.
+  want=$(for s in "${SERVICE_TABLE[@]}"; do IFS='|' read -r name rest <<<"$s"; [ "$name" = "Qdrant gRPC" ] || compose_name "$name"; done | sort -u | tr '\n' ' ')
+  got=$(mode_services_expected full)
+  if [ "$want" != "$got" ]; then
+    echo "FAIL: every service must list 'full' in its profiles — compose_all (down, reset, pull, bundle) sees only these: $got"
+    return 1
+  fi
+  return 0
+}
+
 cmd_smoke() {
   select_engine; ensure_ready
-  echo "Smoke test — asserting 127.0.0.1 bindings ..."
+  echo "Smoke test — mode $KINGO_MODE ($(mode_describe "$KINGO_MODE")); asserting 127.0.0.1 bindings ..."
   assert_loopback || die "port-binding check failed (see plan §5 security)"
+  assert_modes || die "mode/profile drift — fix compose.yml or service_modes() in kingo"
+  local stray; stray="$(off_running)"
+  [ -z "${stray% }" ] || die "running although off in $KINGO_MODE mode: ${stray% } — './kingo up' stops them"
   echo "Waiting for exact health codes ..."
   wait_all 90 || { compose ps; die "services did not all reach their expected codes"; }
   assert_stable
   # A healthy hub is not enough — it must be able to LAUNCH a Lab.
-  echo "Verifying JupyterHub can launch a Lab ..."
-  $ENGINE exec kingo-jupyterhub jupyterhub-singleuser --version >/dev/null || die "hub cannot launch single-user server"
-  $ENGINE exec kingo-jupyterhub python3 -c 'import jupyterlab' || die "jupyterlab not importable in the hub image"
-  echo "SMOKE OK — all services healthy, stable, loopback-bound, hub can launch Lab."
+  if service_active JupyterHub; then
+    echo "Verifying JupyterHub can launch a Lab ..."
+    $ENGINE exec kingo-jupyterhub jupyterhub-singleuser --version >/dev/null || die "hub cannot launch single-user server"
+    $ENGINE exec kingo-jupyterhub python3 -c 'import jupyterlab' || die "jupyterlab not importable in the hub image"
+    echo "SMOKE OK — all services healthy, stable, loopback-bound, hub can launch Lab."
+  else
+    echo "SMOKE OK — $KINGO_MODE mode: all its services healthy, stable, loopback-bound."
+  fi
 }
 
 # ── Host ports: collision detection + automatic remapping ────────────────────
@@ -520,10 +705,13 @@ release_after_down() {
 # never pays for them.
 count_busy_ports() {
   FOREIGN_LIST=""; FOREIGN_PORTS=" "; FOREIGN_N=0; OURS_N=0
+  FOREIGN_ACTIVE_LIST=""; FOREIGN_ACTIVE_PORTS=" "; FOREIGN_ACTIVE_N=0   # the subset the current mode publishes
+  ACTIVE_PORTS_N=0                                                        # how many ports the current mode publishes
   OTHER_ENGINE=""; OTHER_ENGINE_N=0
   local busy="" entry name suffix port rest mine theirs oeng
   for entry in "${SERVICE_TABLE[@]}"; do
     IFS='|' read -r name suffix port rest <<<"$entry"
+    service_active "$name" && ACTIVE_PORTS_N=$((ACTIVE_PORTS_N + 1))
     if port_in_use "$port"; then busy="${busy}${port}|${name}"$'\n'; fi
   done
   [ -n "$busy" ] || return 0
@@ -540,6 +728,11 @@ count_busy_ports() {
       FOREIGN_LIST="${FOREIGN_LIST}  - port $port ($name)"$'\n'
       FOREIGN_PORTS="${FOREIGN_PORTS}${port} "
       FOREIGN_N=$((FOREIGN_N + 1))
+      if service_active "$name"; then
+        FOREIGN_ACTIVE_LIST="${FOREIGN_ACTIVE_LIST}  - port $port ($name)"$'\n'
+        FOREIGN_ACTIVE_PORTS="${FOREIGN_ACTIVE_PORTS}${port} "
+        FOREIGN_ACTIVE_N=$((FOREIGN_ACTIVE_N + 1))
+      fi
     fi
   done <<<"$busy"
 }
@@ -555,7 +748,12 @@ other_engine_hint() { # requires count_busy_ports (sets OTHER_ENGINE)
 # Fallback when attribution sees nothing: ALL ports busy at once almost always
 # means the Kingo stack itself is running but no engine CLI can see it (e.g.
 # the other engine is temporarily unreachable) — moving ports would be exactly
-# wrong then. Deliberately no count in the text: the guides quote this string.
+# wrong then. "All" = every port the CURRENT MODE publishes (all_active_busy):
+# both engines share .env.local, so an invisible copy runs in this very mode
+# and holds exactly these ports — abp's four, never the ten of full. (In the
+# two-port modes the signature is weaker; that is the price of not remapping
+# a live stack.) Deliberately no count in the text: the guides quote this string.
+all_active_busy() { [ "$ACTIVE_PORTS_N" -gt 0 ] && [ "$FOREIGN_ACTIVE_N" = "$ACTIVE_PORTS_N" ]; }
 all_busy_hint() {
   echo "ALL of Kingo's ports are busy at once — that usually means the Kingo stack"
   echo "is ALREADY RUNNING (possibly under your other container engine)."
@@ -581,23 +779,33 @@ preflight_ports() {
     die "not starting a second copy"
   fi
   [ "$FOREIGN_N" = 0 ] && return 0   # all free, or busy only by our own containers
-  if [ "$FOREIGN_N" = "${#SERVICE_TABLE[@]}" ]; then
+  if all_active_busy; then
     all_busy_hint
     die "not starting a second copy"
+  fi
+  # A busy port this mode does not publish is not our problem today; fixports
+  # still moves it (forward-looking, harmless), so mention it once and go on —
+  # after dropping what is merely a forward a previous 'down' leaked.
+  if [ "$FOREIGN_ACTIVE_N" = 0 ]; then
+    # shellcheck disable=SC2086
+    if [ -n "$(release_leaked_forwards $FOREIGN_PORTS)" ]; then count_busy_ports; fi
+    [ "$FOREIGN_N" = 0 ] && return 0
+    echo "(other software uses ports Kingo would need in other modes — fine in $KINGO_MODE mode; './kingo fixports' moves them if you ever want)"
+    return 0
   fi
   # Self-heal before complaining: these listeners are sometimes forwards a
   # previous 'down' leaked (see release_leaked_forwards). Only provably-
   # orphaned ones are dropped; real software is never touched.
   # shellcheck disable=SC2086
-  if [ -n "$(release_leaked_forwards $FOREIGN_PORTS)" ]; then
+  if [ -n "$(release_leaked_forwards $FOREIGN_ACTIVE_PORTS)" ]; then
     count_busy_ports
-    if [ "$OTHER_ENGINE_N" = 0 ] && [ "$FOREIGN_N" = 0 ]; then
+    if [ "$OTHER_ENGINE_N" = 0 ] && [ "$FOREIGN_ACTIVE_N" = 0 ]; then
       echo "(freed port forwards a previous 'down' had leaked — continuing)"
       return 0
     fi
   fi
   echo "Other software on this machine is already using ports Kingo needs:"
-  printf '%s' "$FOREIGN_LIST"
+  printf '%s' "$FOREIGN_ACTIVE_LIST"
   echo
   echo "Easy fix: run  ./kingo fixports  — it moves Kingo to free ports"
   echo "automatically (your other software is untouched) — then run './kingo up' again."
@@ -628,7 +836,7 @@ cmd_fixports() {
     fi
     return 0
   fi
-  if [ "$FOREIGN_N" = "${#SERVICE_TABLE[@]}" ]; then
+  if all_active_busy; then
     all_busy_hint
     die "refusing to remap all ports"
   fi
@@ -679,7 +887,7 @@ cmd_pull() {
   local imgs img ref
   # All pullable images: everything in compose.yml except the locally-built
   # tags (*:local), plus those builds' BASE images from their Dockerfiles.
-  imgs="$( { compose config --images 2>/dev/null | grep -v ':local$'; \
+  imgs="$( { compose_all config --images 2>/dev/null | grep -v ':local$'; \
              awk '/^FROM/{print $2; exit}' jupyterhub/Dockerfile; \
              awk '/^FROM/{print $2; exit}' langflow/Dockerfile; } || true)"
   [ -n "$imgs" ] || die "could not read the image list from compose.yml"
@@ -701,7 +909,41 @@ cmd_pull() {
     echo "== pulling $ref"
     pull_retry "$ref" || die "could not pull $ref after 3 attempts — check your internet connection (or, if the error above mentions credentials: ./kingo doctor explains), then re-run: ./kingo pull"
   done
+  build_missing
   echo "All images present."
+}
+
+# The locally-built images (*:local) that do not exist yet — built now, so that
+# install day pays for them, never class day. `up` builds only the ACTIVE
+# mode's missing build, so an abp install would otherwise meet jupyterhub's
+# `pip install` on its first `kingo mode`. Present images are never rebuilt:
+# a USB `kingo load` brings the images but no build cache, and a rebuild
+# there re-runs every Dockerfile step — offline that fails. (Forced rebuilds
+# after a Dockerfile change are `update`'s job.)
+local_builds() { # "service image" for every service with a build: — from compose's normalized
+                 # config, because `config --images <svc>` also lists the images of its depends_on
+  compose_all config 2>/dev/null | awk '
+    function flush() { if (svc != "" && b && img != "") print svc, img; svc=""; b=0; img="" }
+    /^services:/ { s=1; next }
+    s && /^[^ ]/ { flush(); s=0 }
+    s && /^  [A-Za-z0-9_.-]+:$/ { flush(); svc=$1; sub(/:$/, "", svc); next }
+    s && /^    build:/ { b=1 }
+    s && /^    image: / { img=$2 }
+    END { flush() }'
+}
+build_missing() {
+  local svc img
+  while read -r svc img; do
+    [ -n "$svc" ] || continue
+    if $ENGINE image inspect "$img" >/dev/null 2>&1; then
+      echo "== $img already built — skipping"
+      continue
+    fi
+    echo "== building $img (first time: downloads its Python packages)"
+    compose_all build "$svc"
+  done <<EOT
+$(local_builds)
+EOT
 }
 
 # ── bundle/load: offline image transfer (classroom Wi-Fi fallback) ───────────
@@ -710,8 +952,8 @@ cmd_pull() {
 # starts without downloading anything. The bundle includes the locally-BUILT
 # images (jupyterhub, langflow — not just their bases), so the builds need no
 # network either.
-bundle_images() { # every image the stack needs, one per line
-  { compose config --images 2>/dev/null; \
+bundle_images() { # every image the stack needs, one per line — every mode's
+  { compose_all config --images 2>/dev/null; \
     awk '/^FROM/{print $2; exit}' jupyterhub/Dockerfile; \
     awk '/^FROM/{print $2; exit}' langflow/Dockerfile; } || true
 }
@@ -1020,7 +1262,7 @@ cmd_bundle() {
   else
     echo "Making sure every image is present and the local builds exist ..."
     cmd_pull
-    compose build
+    compose_all build
     imgs="$(bundle_images)"
   fi
   # shellcheck disable=SC2086
@@ -1092,7 +1334,7 @@ cmd_load() {
   local want got
   want="$(host_docker_arch)"
   got="$($ENGINE image inspect kingo-jupyterhub:local --format '{{.Architecture}}' 2>/dev/null || true)"
-  [ -n "$got" ] || got="$($ENGINE image inspect "$(compose config --images 2>/dev/null | head -n1)" --format '{{.Architecture}}' 2>/dev/null || true)"
+  [ -n "$got" ] || got="$($ENGINE image inspect "$(compose_all config --images 2>/dev/null | head -n1)" --format '{{.Architecture}}' 2>/dev/null || true)"
   if [ -n "$got" ] && [ "$got" != "$want" ]; then
     die "this bundle holds $got images but your machine is $want — you loaded the wrong stick.
    Use the $want tar instead:  kingo-images-$want.tar
@@ -1125,6 +1367,8 @@ image and survive everything.
 EOF
     return 0
   fi
+  service_active Langflow \
+    || die "Langflow is off in $KINGO_MODE mode — ./kingo mode abp (or full) turns it on"
   [ -n "$($ENGINE ps -q --filter name=kingo-langflow 2>/dev/null)" ] \
     || die "the Langflow container is not running — start the stack first:  ./kingo up"
   $ENGINE exec kingo-langflow sh -c 'command -v uv >/dev/null 2>&1' \
@@ -1138,6 +1382,296 @@ EOF
 # no .git, and those are exactly the installs whose age you cannot otherwise
 # tell. Never fatal, and never calls select_engine — a student whose engine is
 # broken must still be able to report what they are running.
+# ── Memory: host, budget, machine ────────────────────────────────────────────
+gb()     { awk -v m="$1" 'BEGIN{g=m/1024; if (g==int(g)) printf "%d GB", g; else printf "%.1f GB", g}'; }
+gb_num() { awk -v m="$1" 'BEGIN{g=m/1024; if (g==int(g)) printf "%d", g; else printf "%.1f", g}'; }
+host_mem_mb() { # RAM of the laptop — on WSL: what Windows gives Ubuntu (half the laptop by default)
+  case "$(uname -s)" in
+    Darwin) sysctl -n hw.memsize 2>/dev/null | awk '{printf "%d", $1/1048576}' ;;
+    *) awk '/^MemTotal/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null ;;
+  esac
+}
+host_phrase() { # "this Mac has 8 GB" / "Windows gives Ubuntu 3.9 GB"
+  local h; h=$(host_mem_mb); [ -n "$h" ] || { echo "this computer"; return; }
+  if [ "$(uname -s)" = Darwin ]; then echo "this Mac has $(gb "$h")"
+  elif is_wsl; then echo "Windows gives Ubuntu $(gb "$h")"
+  else echo "this computer has $(gb "$h")"; fi
+}
+machine_mem_mb() { # nothing printed = no machine. `|| true`: inspect exits 125 without a machine, and
+                   # this is assigned under errexit in `version` and `doctor` — which must never die
+  { podman machine inspect --format '{{.Resources.Memory}}' 2>/dev/null || true; } | head -1 | tr -d '[:space:]'
+}
+podman_mac() { [ "$ENGINE" = podman ] && [ "$(uname -s)" = Darwin ]; }
+modes_that_fit() { # $1: MiB — the modes whose floor fits in it, comma-separated (abp first: it is the default)
+  local m out=""
+  for m in abp full bi langflow n8n; do
+    [ "$(mode_floor_mb "$m")" -le "$1" ] && out="${out:+$out, }$m"
+  done
+  echo "$out"
+}
+wsl_memory_note() { # Windows: the memory is Windows' own business — name the default, then the modes that fit
+  local budget fits
+  budget=$(host_mem_mb); fits=$(modes_that_fit "${budget:-0}")
+  echo "       Windows lets WSL use up to half of the laptop's memory by default${budget:+ ($(gb "$budget") here)} and takes back what"
+  echo "       the containers do not use. kingo leaves that setting alone — the lever is the mode."
+  if [ -z "$fits" ]; then echo "       → even the lightest mode, n8n ($(gb "$(mode_floor_mb n8n)")), is more than that — expect it to be slow"
+  else case ", $fits, " in
+    *", $KINGO_MODE, "*) echo "       → modes that fit: $fits — $KINGO_MODE, the current one, is among them" ;;
+    *) echo "       → modes that fit: $fits   (switch with ./kingo mode ${fits%%,*})" ;;
+  esac; fi
+}
+budget_mb() { # memory the containers can use under $ENGINE (nothing printed = unknown)
+  local m=""
+  case "$ENGINE" in
+    podman) if [ "$(uname -s)" = Darwin ]; then m=$(machine_mem_mb); else m=$(host_mem_mb); fi ;;
+    docker) m=$(docker info --format '{{.MemTotal}}' 2>/dev/null || true)
+            case "$m" in ''|*[!0-9]*) m="" ;; *) m=$((m / 1048576)) ;; esac ;;
+  esac
+  case "$m" in ''|*[!0-9]*|0) return 0 ;; esac   # 0: `docker info` with the daemon down
+  echo "$m"
+}
+budget_name() {
+  case "$ENGINE" in
+    podman) if [ "$(uname -s)" = Darwin ]; then echo "the podman machine"; elif is_wsl; then echo "WSL"; else echo "this computer"; fi ;;
+    docker) if [ "$(uname -s)" = Darwin ] || is_wsl; then echo "Docker Desktop"; else echo "this computer"; fi ;;
+  esac
+}
+containers_mem() { # "TOTAL_MB|name MB, name MB, ..." of the running kingo-* containers, largest first
+  $ENGINE stats --no-stream --format '{{.Name}} {{.MemUsage}}' 2>/dev/null \
+    | awk '$1 ~ /^kingo-/ {
+        v=$2; u=v; gsub(/[0-9.]/,"",u); gsub(/[^0-9.]/,"",v)
+        if (u=="GiB"||u=="GB") v*=1024; else if (u=="KiB"||u=="kB"||u=="KB") v/=1024; else if (u=="B") v/=1048576
+        n=$1; sub(/^kingo-/,"",n); printf "%d %s\n", v, n }' \
+    | sort -rn | awk '{t+=$1; l=l (l?", ":"") $2 " " $1} END{printf "%d|%s", t, l}'
+}
+memory_advice() { # $1: MiB the mode wants — how to get there on this setup
+  local want=$1
+  if podman_mac; then
+    echo "       → ./kingo memory $(gb_num "$want")   (resizes the podman machine; stops ALL containers on this Mac for a minute)"
+  elif is_wsl; then
+    # Both engines (Docker Desktop's WSL 2 backend is sized by Windows too). No .wslconfig recipe, deliberately:
+    # on an 8 GB laptop a higher ceiling only starves Windows, so the mode is the lever (Frank's call, 2026-09-05).
+    wsl_memory_note
+  elif [ "$ENGINE" = docker ] && [ "$(uname -s)" = Darwin ]; then
+    echo "       → Docker Desktop → Settings → Resources → Memory → $(gb "$want") → Apply & restart (that stops ALL your containers)"
+  else
+    echo "       → this computer has too little memory for $KINGO_MODE mode — a lighter one: ./kingo mode"
+  fi
+}
+mem_report() { # doctor / memory: budget vs the mode's need, then live use
+  local budget host floor target label total list
+  budget=$(budget_mb); host=$(host_mem_mb)
+  floor=$(mode_floor_mb "$KINGO_MODE"); target=$(mode_cap_mb "$KINGO_MODE"); label=$(budget_name)
+  if [ -z "$budget" ]; then
+    echo "  [??] memory: could not read how much memory $ENGINE has"
+  elif [ "$budget" -ge "$floor" ]; then
+    echo "  [ok] memory: $label gives containers ${budget} MB; $KINGO_MODE mode wants $(gb "$floor") or more ($(host_phrase))"
+  else
+    echo "  [!!] memory: $label gives containers only ${budget} MB, but $KINGO_MODE mode wants $(gb "$floor") or more ($(host_phrase))"
+    if podman_mac && [ "$budget" -ge "$target" ]; then   # the machine already has all this Mac can spare
+      echo "       → this Mac cannot spare more (macOS keeps 3 GB) — a lighter mode: ./kingo mode   (abp wants $(gb "$(mode_floor_mb abp)"))"
+    else
+      memory_advice "$target"
+    fi
+  fi
+  if podman_mac && [ -n "$budget" ] && [ -n "$host" ] && [ "$host" -le 8192 ] && [ "$budget" -gt "$target" ] && [ -z "${KINGO_MEMORY_MB:-}" ]; then
+    echo "  [!!] the podman machine still has ${budget} MB although $KINGO_MODE mode needs only $(gb "$target") — on this $(gb "$host") Mac the rest is better left to macOS"
+    echo "       → ./kingo memory $(gb_num "$target")   (stops ALL containers on this Mac for a minute)"
+  fi
+  IFS='|' read -r total list <<<"$(containers_mem)"
+  if [ -n "$list" ]; then echo "       in use right now: ${total} MB ($list)"
+  elif [ -n "$( { $ENGINE ps -q --filter name=kingo- 2>/dev/null || true; } | head -1)" ]; then
+    echo "       in use right now: could not read it ($ENGINE stats failed)"   # containers run, stats did not
+  else echo "       in use right now: nothing — the stack is down"; fi
+}
+small_host() { # an 8 GB laptop? (WSL: Windows gives Ubuntu under 5 GB, i.e. an 8 GB laptop at the default split)
+  local h; h=$(host_mem_mb); [ -n "$h" ] || return 1
+  if [ "$(uname -s)" = Darwin ]; then [ "$h" -le 8192 ]; else [ "$h" -lt 5000 ]; fi
+}
+small_host_hint() { # one nudge, only where it helps — the end of up / update / doctor
+  small_host || return 0
+  case "$KINGO_MODE" in
+    full|bi)
+      echo
+      echo "NOTE: $(host_phrase) of memory and runs $KINGO_MODE mode ($(mode_describe "$KINGO_MODE")) — that is why it feels slow."
+      echo "      Lighter: ./kingo mode abp   (keeps Langflow, n8n, CloudBeaver and the database; Jupyter, Metabase"
+      echo "      and Qdrant go off — ./kingo mode full brings them back; nothing is deleted)" ;;
+    abp)
+      echo
+      echo "NOTE: still slow? $(host_phrase) of memory. One tool at a time needs less:"
+      echo "      ./kingo mode langflow ($(gb "$(mode_mem_mb langflow)"))   or   ./kingo mode n8n ($(gb "$(mode_mem_mb n8n)"))" ;;
+  esac
+}
+set_local() { # $1: VAR  $2: value ('' = remove) — rewrite ONE line of .env.local and export it now
+  { [ -f .env.local ] && grep -v "^$1=" .env.local || true; } > .env.local.tmp
+  [ -n "$2" ] && echo "$1=$2" >> .env.local.tmp
+  mv .env.local.tmp .env.local
+  if [ -n "$2" ]; then export "$1=$2"; else unset "$1"; fi
+}
+resize_machine() { # $1: MiB — Podman on a Mac only. Stops ALL containers on the Mac for about a minute.
+  local want=$1 cur all others a
+  cur=$(machine_mem_mb)
+  [ "$cur" = "$want" ] && return 0
+  echo "Podman machine: $(gb "$cur") → $(gb "$want")."
+  echo "This stops ALL containers on this Mac for about a minute — Kingo comes back by itself."
+  if ! all=$(podman ps --format '{{.Names}}' 2>/dev/null); then all="?"; fi
+  others=$(printf '%s\n' "$all" | grep -v '^kingo-' | grep -v '^$' || true)
+  if [ -n "$others" ]; then
+    if [ "$all" = "?" ]; then echo "Could not list the containers on this Mac — there may be others besides Kingo's."
+    else echo "Containers that are not Kingo's are running on this Mac:"; printf '%s\n' "$others" | sed 's/^/  - /'; fi
+    echo "Resizing the Podman machine stops them too, and they do not restart by themselves."
+    read -r -p "Type 'yes' to continue, anything else to keep the current memory: " a || a=""
+    [ "$a" = yes ] || { echo "Keeping $(gb "$cur")."; return 1; }
+  fi
+  podman machine stop >/dev/null 2>&1 || true   # already stopped is fine
+  # Never die here: the callers roll back (memory unpins, mode goes on with the
+  # old size), and a machine left stopped or at a size it cannot boot with would
+  # break every later `up`. So a failed start puts the old size back.
+  if ! podman machine set --memory "$want"; then
+    warn "could not resize the Podman machine — keeping $(gb "$cur")"
+    podman machine start >/dev/null 2>&1 || warn "and it did not start again. Try: podman machine start — then ./kingo up"
+    return 1
+  fi
+  if ! podman machine start >/dev/null; then
+    warn "the Podman machine did not start with $(gb "$want") — putting it back to $(gb "$cur")"
+    podman machine set --memory "$cur" >/dev/null 2>&1 || true
+    podman machine start >/dev/null 2>&1 || warn "and it did not start with $(gb "$cur") either. Try: podman machine start — then ./kingo up"
+    return 1
+  fi
+  echo "Podman machine now has $(gb "$want")."
+}
+mode_cap_mb() { # mode $1's target, capped on a Mac so that macOS keeps at least 3 GB (a pin is ignored).
+                # The ONE sizing rule: setup's `machine init`, doctor's advice and `mode` all use it — two
+                # rules made an 8 GB Mac's first `./kingo mode full` resize a machine that was already right.
+  local want host
+  want=$(mode_mem_mb "$1")
+  if [ "$(uname -s)" = Darwin ]; then
+    host=$(host_mem_mb)
+    if [ -n "$host" ] && [ "$want" -gt $((host - 3072)) ]; then want=$((host - 3072)); fi
+  fi
+  echo "$want"
+}
+mode_target_mb() { # what the machine should have in mode $1 on THIS Mac: a pin wins, else the capped target
+  if [ -n "${KINGO_MEMORY_MB:-}" ]; then echo "$KINGO_MEMORY_MB"; else mode_cap_mb "$1"; fi
+}
+mode_memory_step() { # $1: mode — Podman on a Mac resizes the machine; every other setup only warns
+  local want floor budget
+  want=$(mode_target_mb "$1"); floor=$(mode_floor_mb "$1")
+  if podman_mac; then
+    if [ "$want" -lt "$floor" ]; then
+      if [ -n "${KINGO_MEMORY_MB:-}" ]; then warn "memory is pinned to $(gb "$want") (./kingo memory) but $1 mode wants $(gb "$floor") or more — expect it to be slow"
+      else warn "$1 mode wants $(gb "$floor") or more, but this Mac cannot spare that (the machine gets $(gb "$want")) — expect it to be slow; lighter: ./kingo mode"; fi
+    fi
+    resize_machine "$want" || true
+    return 0
+  fi
+  budget=$(budget_mb)
+  if [ -n "$budget" ] && [ "$budget" -lt "$floor" ]; then
+    echo "Heads-up: $(budget_name) gives containers ${budget} MB and $1 mode wants $(gb "$floor") or more — it will run, but slowly."
+    memory_advice "$(mode_cap_mb "$1")"
+    echo "Switching anyway ..."
+  fi
+}
+
+# ── mode / memory: the two dials students learn ──────────────────────────────
+cmd_mode() {
+  local target="${1:-}" m
+  if [ -z "$target" ]; then
+    echo "Mode: $KINGO_MODE — $(mode_describe "$KINGO_MODE")"
+    [ -n "$(off_services)" ] && echo "Off:  $(off_services)"
+    echo
+    echo "Modes (and the container memory each one wants):"
+    for m in $MODES; do printf '  %-9s %-7s %s\n' "$m" "$(gb "$(mode_mem_mb "$m")")" "$(mode_describe "$m")"; done
+    echo
+    echo "Switch with: ./kingo mode <name>   — nothing is deleted, every mode keeps your data."
+    return 0
+  fi
+  case " $MODES " in *" $target "*) ;; *) die "unknown mode '$target' — the modes are: $MODES" ;; esac
+  [ "$MODE_FROM_ENV" = 1 ] && die "KINGO_MODE is set in your shell environment (to '$KINGO_MODE') and would override what this command writes. Run:  unset KINGO_MODE  — then try again."
+  select_engine; ensure_ready
+  if [ "$target" = "$KINGO_MODE" ] && { ! podman_mac || [ "$(machine_mem_mb)" = "$(mode_target_mb "$target")" ]; }; then
+    echo "Already in $target mode ($(mode_describe "$target")) — nothing to change."
+    cmd_up
+    return 0
+  fi
+  # 1. Everything the target needs must be local BEFORE anything changes, so a
+  #    failed download can never leave a half-switched stack. pull is
+  #    mode-agnostic and builds only MISSING local images (build_missing), so
+  #    this is normally a few seconds of "already present" — never a rebuild,
+  #    which on a USB install (images, no build cache) would need the network.
+  echo "Checking that every image for $target mode is present ..."
+  cmd_pull
+  #    The same for its ports: a foreign listener on a port only the target
+  #    publishes is tolerated in the current mode, and `up` would refuse it —
+  #    after the stack is down and the machine resized. (A subshell: preflight
+  #    judges by KINGO_MODE and may die.) Its messages speak of the target.
+  ( KINGO_MODE="$target"; preflight_ports ) \
+    || die "not switching to $target mode — fix the ports first (./kingo fixports), then run: ./kingo mode $target"
+  # 2. persist  3. down (every service)  4. memory  5. up (the new mode's services)
+  set_local KINGO_MODE "$target"
+  export COMPOSE_PROFILES="$target"
+  echo
+  echo "Switching to $target mode ($(mode_describe "$target")) ..."
+  cmd_down
+  mode_memory_step "$target"
+  cmd_up
+  echo
+  echo "Mode: $target. On: $(mode_describe "$target")."
+  [ -n "$(off_services)" ] && echo "Off: $(off_services). Your data is kept — ./kingo mode full brings everything back."
+  return 0
+}
+
+cmd_memory() {
+  local arg="${1:-}" want host floor b
+  case "$arg" in
+    target) mode_target_mb "$KINGO_MODE"; return 0 ;;   # what setup-mac.sh gives `podman machine init` (no engine needed)
+  esac
+  select_engine
+  case "$arg" in
+    '')
+      mem_report
+      echo
+      [ -n "${KINGO_MEMORY_MB:-}" ] && echo "Pinned to $(gb "$KINGO_MEMORY_MB") in .env.local — './kingo memory auto' lets each mode choose again."
+      if podman_mac; then echo "Change it: ./kingo memory 5   (resizes the podman machine — stops ALL containers on this Mac for a minute)"
+      elif is_wsl; then b=$(budget_mb); { [ -n "$b" ] && [ "$b" -lt "$(mode_floor_mb "$KINGO_MODE")" ]; } || wsl_memory_note   # else mem_report said it
+      elif [ "$ENGINE" = docker ] && [ "$(uname -s)" = Darwin ]; then echo "Change it in Docker Desktop → Settings → Resources → Memory (Apply & restart stops ALL your containers)."
+      else echo "All of this computer's memory is available to the containers — nothing to set."; fi
+      return 0 ;;
+    auto)
+      set_local KINGO_MEMORY_MB ""
+      echo "Memory follows the mode again ($KINGO_MODE mode: $(gb "$(mode_cap_mb "$KINGO_MODE")")). Apply it with: ./kingo mode $KINGO_MODE"
+      return 0 ;;
+  esac
+  want=$(awk -v g="$arg" 'BEGIN{ if (g ~ /^[0-9]+(\.[0-9]+)?$/ && g > 0) { if (g > 64) printf "%d", g; else printf "%d", g*1024 } }')
+  [ -n "$want" ] || die "say how much, in GB — e.g.:  ./kingo memory 5   (or 4.5)"
+  [ "$want" -ge 2048 ] || die "$(gb "$want") is less than any mode can run in — choose at least 2 GB (the lightest mode, n8n, wants $(gb "$(mode_floor_mb n8n)"))"
+  if is_wsl; then
+    echo "On Windows kingo does not set the containers' memory:"
+    wsl_memory_note
+    return 0
+  fi
+  floor=$(mode_floor_mb "$KINGO_MODE"); host=$(host_mem_mb)
+  [ "$want" -lt "$floor" ] && warn "$KINGO_MODE mode wants $(gb "$floor") or more — with $(gb "$want") it will be slow or crash under load"
+  if [ -n "$host" ] && [ "$want" -gt $((host - 2048)) ]; then
+    die "$(gb "$want") would leave this computer ($(gb "$host")) less than 2 GB for itself — choose at most $(gb "$((host - 2048))")"
+  fi
+  if podman_mac; then
+    ensure_ready
+    cmd_down
+    # Pin only once the machine really has that size: a pin that outlives a
+    # failed resize would make every later `mode` aim at the wrong number.
+    if ! resize_machine "$want"; then cmd_up; return 1; fi
+    set_local KINGO_MEMORY_MB "$want"
+    cmd_up
+  elif [ "$(uname -s)" = Darwin ]; then
+    echo "On this setup kingo cannot change the memory itself — this is how:"
+    memory_advice "$want"
+  else
+    echo "On Linux the containers already share all of this computer's memory ($(gb "$(host_mem_mb)")) — there is no ceiling to set."
+    echo "If that is too little for $KINGO_MODE mode, a lighter one helps: ./kingo mode"
+  fi
+}
+
 kingo_version() {
   if [ -f ./VERSION ]; then
     tr -d ' \t\r\n' < ./VERSION
@@ -1164,6 +1698,12 @@ cmd_version() {
     echo "  engine: ${ver:-$eng}${KINGO_ENGINE:+$([ "$KINGO_ENGINE" = "$eng" ] && printf '  (pinned via KINGO_ENGINE)')}"
   done
   echo "  system: $(uname -s) $(uname -m)${WSL_DISTRO_NAME:+  (WSL: $WSL_DISTRO_NAME)}"
+  echo "  mode:   $KINGO_MODE ($(mode_describe "$KINGO_MODE"))$([ "$MODE_FROM_ENV" = 1 ] && printf '  (from the shell environment)')"
+  local mem; mem="$(host_phrase)"
+  if [ "$(uname -s)" = Darwin ] && command -v podman >/dev/null 2>&1; then
+    local mm; mm=$(machine_mem_mb); [ -n "$mm" ] && mem="podman machine $(gb "$mm"); $mem"
+  fi
+  echo "  memory: $mem${KINGO_MEMORY_MB:+  (pinned via ./kingo memory)}"
 }
 
 # ── doctor: preflight before setup ───────────────────────────────────────────
@@ -1171,6 +1711,7 @@ cmd_doctor() {
   select_engine
   echo "== kingo doctor =="
   echo "kingo-pod $(kingo_version)"
+  echo "Mode: $KINGO_MODE — $(mode_describe "$KINGO_MODE")$([ -n "$(off_services)" ] && printf '   (off: %s)' "$(off_services)")"
   echo "Selected engine: $ENGINE${KINGO_ENGINE:+  (pinned via KINGO_ENGINE)}"
   command -v "$ENGINE" >/dev/null 2>&1 && echo "  [ok] $ENGINE is installed" || echo "  [!!] $ENGINE not on PATH"
 
@@ -1198,25 +1739,9 @@ cmd_doctor() {
   command -v curl >/dev/null 2>&1 \
     || echo "  [!!] curl is not installed — kingo cannot check service health. Linux/WSL: sudo apt-get install -y curl"
 
-  # Memory — the stack needs ~5 GB wherever the containers actually run
-  # (measured 2026-08-21: ~3 GB idle + headroom for notebooks/flows).
-  # Threshold 4800, not 5120: a VM given "5 GB" reports slightly less inside.
-  local mem=""
-  case "$ENGINE" in
-    podman) mem=$(podman machine inspect --format '{{.Resources.Memory}}' 2>/dev/null | head -1 || true) ;;             # MB
-    docker) mem=$(docker info --format '{{.MemTotal}}' 2>/dev/null || true)
-            case "$mem" in ''|*[!0-9]*) mem="" ;; *) mem=$((mem / 1048576)) ;; esac ;;  # bytes → MB
-  esac
-  case "$mem" in ''|*[!0-9]*) mem="" ;; esac
-  if [ -n "$mem" ] && [ "$mem" -gt 0 ]; then
-    if [ "$mem" -ge 4800 ]; then
-      echo "  [ok] $ENGINE memory: ${mem} MB"
-    else
-      echo "  [!!] $ENGINE has only ${mem} MB (the stack needs ~5 GB)."
-      if [ "$ENGINE" = podman ]; then echo "       → podman machine set --memory 5120   (or re-run setup)"
-      else echo "       → Docker Desktop → Settings → Resources → raise Memory to 5 GB+."; fi
-    fi
-  fi
+  # Memory — judged against what the CURRENT MODE needs (measured 2026-09-05
+  # under classroom use; the table is next to SERVICE_TABLE), plus live use.
+  mem_report
 
   # A broken Docker credential helper (gcloud with an expired token, ECR, …
   # from another course) breaks even anonymous pulls. kingo neutralizes it on
@@ -1259,17 +1784,24 @@ cmd_doctor() {
   count_busy_ports
   if [ "$OTHER_ENGINE_N" -gt 0 ]; then
     other_engine_hint | sed -e '1s/^/  [??] /' -e '2,$s/^/       /'
-  elif [ "$FOREIGN_N" = "${#SERVICE_TABLE[@]}" ]; then
+  elif all_active_busy; then
     all_busy_hint | sed -e '1s/^/  [??] /' -e '2,$s/^/       /'
-  elif [ "$FOREIGN_N" -gt 0 ]; then
-    printf '%s' "$FOREIGN_LIST" | sed 's/^  - /  [!!] busy: /'
+  elif [ "$FOREIGN_ACTIVE_N" -gt 0 ]; then
+    # Judged like `up` does: only a port the CURRENT MODE publishes is a problem.
+    printf '%s' "$FOREIGN_ACTIVE_LIST" | sed 's/^  - /  [!!] busy: /'
     echo "       → run './kingo fixports' to move Kingo to free ports automatically."
+    [ "$FOREIGN_N" -gt "$FOREIGN_ACTIVE_N" ] && echo "  [ok] other software also sits on ports of services that are off in $KINGO_MODE mode — fixports moves those too."
+    [ "$OURS_N" -gt 0 ] && echo "  [ok] the other busy ports belong to the running Kingo stack itself."
+  elif [ "$FOREIGN_N" -gt 0 ]; then
+    echo "  [ok] other software sits on ports of services that are off in $KINGO_MODE mode — fine today ('./kingo fixports' moves them if you ever want):"
+    printf '%s' "$FOREIGN_LIST" | sed 's/^  - /       - /'
     [ "$OURS_N" -gt 0 ] && echo "  [ok] the other busy ports belong to the running Kingo stack itself."
   elif [ "$OURS_N" -gt 0 ]; then
     echo "  [ok] the Kingo stack is running — its ports are in use by kingo, not a collision."
   else
     echo "  [ok] all ${#SERVICE_TABLE[@]} host ports are free."
   fi
+  small_host_hint
   echo "== done =="
 }
 
@@ -1285,8 +1817,10 @@ case "${1:-help}" in
   credentials|creds) cmd_credentials ;;
   version|--version) cmd_version ;;
   mcp)               cmd_mcp ;;
-  logs)              select_engine; shift; compose logs --tail=100 -f "$@" ;;
-  restart)           select_engine; ensure_ready; shift; compose restart "$@" ;;
+  logs)              select_engine; shift; inactive_hint "$@"; compose logs --tail=100 -f "$@" ;;
+  restart)           select_engine; ensure_ready; shift; inactive_hint "$@"; compose restart "$@" ;;
+  mode)              shift; cmd_mode "${1:-}" ;;
+  memory|mem)        shift; cmd_memory "${1:-}" ;;
   pull)              cmd_pull ;;
   langflow)          shift; cmd_langflow "$@" ;;
   bundle)            shift; cmd_bundle "${1:-}" ;;
@@ -1322,8 +1856,10 @@ case "${1:-help}" in
                      else
                        warn "this folder was installed from a ZIP (no git) and rsync is missing — updating images only. For new class files, download the ZIP again (see the student guide)."
                      fi
+                     # Images and builds for EVERY mode, so a later
+                     # './kingo mode full' in class never downloads.
                      cmd_pull
-                     compose build
+                     compose_all build
                      compose up -d
                      # Name the version students landed on: it is what support
                      # asks for, and it makes "did the update take?" answerable.
@@ -1332,17 +1868,22 @@ case "${1:-help}" in
                        echo "Stack updated — kingo-pod $_v_after (unchanged; images may still be newer)."
                      else
                        echo "Stack updated — kingo-pod $_v_before → $_v_after."
-                     fi ;;
+                     fi
+                     small_host_hint ;;
   reset)             select_engine; ensure_ready
                      echo "This DELETES all data (databases, notebooks, workflows) and starts fresh."
                      read -r -p "Type 'yes' to continue: " a
                      if [ "$a" = "yes" ]; then
-                       compose down -v
+                       compose_all down -v
                        cmd_up
                      else
                        echo "Cancelled."
                      fi ;;
-  help|*)            cat <<'EOF'
+  help|*)            case "${1:-help}" in
+                       help|-h|--help) ;;
+                       *) echo "unknown command '$1' — if the guide or an announcement names it, first run:  ./kingo update" >&2; echo >&2 ;;
+                     esac
+                     cat <<'EOF'
 kingo — classroom stack helper (Podman or Docker, no VM)
 
   kingo up            start everything (+ first-run setup), then show status
@@ -1353,6 +1894,10 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo fixports      a port is taken (e.g. your own Postgres)? move Kingo
                       to free ports automatically (saved in .env.local)
   kingo credentials   print all URLs and logins
+  kingo mode [name]   which services run: full, abp, bi, langflow, n8n
+                      (no name: show the current mode and the list)
+  kingo memory [GB]   how much memory the containers may use — show it; Podman
+                      on a Mac can also set it (kingo memory 5 / 'auto' = by mode)
   kingo version       which stack am I running? (ask students for this)
   kingo mcp           print the Jupyter MCP endpoint + bearer token
   kingo logs [svc]    follow logs (e.g. kingo logs langflow)

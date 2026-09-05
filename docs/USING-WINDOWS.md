@@ -9,7 +9,8 @@ Everything with a `./kingo` in it is typed in the **Ubuntu** app, inside the
 `kingo-pod` folder.
 
 > **Jump to:** [Your services](#your-services) ·
-> [Everyday use](#everyday-use) · [Your files](#your-own-files--the-shared-folder) ·
+> [Everyday use](#everyday-use) · [Modes](#modes-which-services-run) ·
+> [Your files](#your-own-files--the-shared-folder) ·
 > [Update](#keeping-up-to-date) ·
 > [If something breaks](#if-something-breaks) · [FAQ](#faq)
 
@@ -30,6 +31,11 @@ laptop:
 | CloudBeaver | <http://localhost:8978> | `student` / `Kingo2026!` — [how to connect](CLOUDBEAVER.md) |
 | Qdrant | <http://localhost:6333/dashboard> | none |
 | PostgreSQL | `localhost:5432` | `student` / `kingo2026` (db: `classroom`) |
+
+Not all of these run at the same time: in **abp mode** — what setup installs —
+only Langflow, n8n, CloudBeaver and PostgreSQL are on, and
+`./kingo credentials` marks the others as *off*. See [Modes](#modes-which-services-run)
+for switching.
 
 > **CloudBeaver looks empty at first** ("No Connections") — you have to log in
 > via the **gear icon → Login** before the class database shows up, and give it
@@ -68,17 +74,51 @@ then one command per job:
 | `./kingo down` | stop everything |
 | `./kingo status` | which services are up? |
 | `./kingo credentials` | my addresses + logins |
+| `./kingo mode` | which services run — and `./kingo mode full` / `abp` / … switches (see [Modes](#modes-which-services-run)) |
+| `./kingo memory` | how much memory the containers have and use |
 | `./kingo doctor` | something's wrong? start here |
 | `./kingo version` | which version am I running? (send this when you ask for help) |
 | `./kingo update` | get the newest class files + images (run it when the instructor announces an update) |
 
 > **What if I just close the Ubuntu window?** Nothing breaks — the stack
 > keeps running in the background: your services stay reachable in the
-> browser, and it keeps using ~5 GB RAM. It stops only when you run
+> browser, and it keeps using its memory (about 3 GB in abp mode, up to 6 GB
+> in full mode). It stops only when you run
 > `./kingo down` or shut down / restart Windows. Your data survives all of
 > these — closed windows, `down`, reboots. After a reboot, open Ubuntu and
 > run `./kingo up` again. (Docker Desktop users: the stack may come back by
 > itself when Docker starts — `./kingo status` shows what's up.)
+
+### Modes: which services run
+
+Not every class week needs all nine services, and an 8 GB laptop cannot run
+them all comfortably. A **mode** is the set of services that runs — the
+others are simply off (nothing is deleted; every mode keeps your data):
+
+| Mode | What runs | Memory it wants |
+|---|---|---|
+| `abp` (what setup installs) | Langflow, n8n, CloudBeaver, PostgreSQL | 4 GB |
+| `full` | all nine services | 6 GB |
+| `bi` | JupyterLab, JupyterHub, Jupyter MCP, Metabase, CloudBeaver, Qdrant, PostgreSQL | 4.5 GB |
+| `langflow` | Langflow, PostgreSQL | 3.5 GB |
+| `n8n` | n8n, PostgreSQL | 2.5 GB |
+
+`./kingo mode` shows the current one. Switching is one line, for example:
+
+```
+cd ~/kingo-pod && ./kingo mode full
+```
+
+It takes about a minute: the stack stops and comes back with the new set of
+services. Your notebooks, dashboards, flows and workflows are all still
+there — switch back any time with `./kingo mode abp`.
+
+On Windows there is no memory setting to make: Windows lets WSL use up to
+half of the laptop's memory by default (4 GB on an 8 GB laptop) and takes
+back whatever the containers do not use. `abp`, `langflow` and `n8n` fit that
+default; `bi` and `full` on an 8 GB laptop will run, but slowly — `kingo`
+says so when you switch. `./kingo memory` shows what the containers have and
+use, and which modes fit.
 
 ### Your own files — the `shared` folder
 
@@ -166,7 +206,7 @@ the usual suspects and tells you what to do:
 | `The Kingo stack is ALREADY RUNNING under your other engine` | Nothing is broken — the stack is up under your other container engine. Follow the two commands the message prints. |
 | `ALL of Kingo's ports are busy` | The stack is most likely **already running** (possibly under your other engine). Run `./kingo status` — if services show `up`, you're done, nothing is wrong. |
 | I have Docker Desktop, but setup installed Podman | Docker wasn't running or its WSL integration was off during setup. Both engines work — no need to change anything. To switch anyway: turn on WSL integration for Ubuntu, then `./kingo down` (stops the Podman stack **first**), then `echo KINGO_ENGINE=docker >> .env.local`, then `./kingo up`. |
-| Laptop feels slow (8 GB machines) | The stack needs ~5 GB RAM. Close other apps. If it stays bad, create the file `C:\Users\<you>\.wslconfig` **in Windows** containing `[wsl2]` on one line and `memory=5GB` on the next, run `wsl --shutdown` in PowerShell, then start the stack again. |
+| Laptop feels slow (8 GB machines) | Run a lighter [mode](#modes-which-services-run): `./kingo mode abp` — or, for one tool at a time, `./kingo mode langflow` or `./kingo mode n8n`. `./kingo down` when you are not using the stack also helps. |
 | Ubuntu terminal says `./kingo: No such file or directory` | You're in the wrong folder. Run `cd ~/kingo-pod` first. |
 | Anything else | `./kingo down`, then `./kingo up`. If it persists: screenshot the error and ask the instructor / TA. |
 
@@ -193,8 +233,21 @@ shares an n8n encryption key, so **never put a real API key into an n8n
 workflow you share or export.**
 
 **Where is my data?** Databases, notebooks, and workflows live in container
-volumes inside WSL2 and survive `./kingo down` and reboots. Only
-`./kingo reset` deletes them (it asks first).
+volumes inside WSL2 and survive `./kingo down`, reboots and mode switches.
+Only `./kingo reset` deletes them (it asks first).
+
+**Where did Jupyter and Metabase go?** They are off in `abp` mode, which is
+what setup installs — `./kingo status` and `./kingo credentials` say so.
+`./kingo mode full` turns everything on (about a minute; see
+[Modes](#modes-which-services-run)); the instructor announces when a class
+week needs it.
+
+**Can I give the containers more memory?** Not through `kingo`, and on an
+8 GB laptop it would not help: whatever WSL takes, Windows no longer has, so
+the fix is a lighter mode (`./kingo mode abp`). The half-of-the-laptop limit
+is Windows' own setting (a `.wslconfig` file). If you know your way around
+that file, changing it is your own project — `kingo` neither needs it nor
+touches it.
 
 **Can I use extra Python packages (say, statsmodels)?**
 

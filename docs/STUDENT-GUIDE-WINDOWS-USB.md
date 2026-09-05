@@ -20,7 +20,9 @@ the normal path.
 
 ## Before you start
 
-- **Windows 10 or 11**, with **8 GB RAM** (16 GB recommended).
+- **Windows 10 or 11**, with **8 GB RAM** (16 GB recommended). Setup installs
+  the class's *abp* set of services (Langflow, n8n, CloudBeaver, database);
+  the everyday guide explains how to switch sets later.
 - About **30 GB free disk space** during setup: the ~14 GB image file and the
   ~14 GB of images it loads sit side by side for a few minutes. The file is
   deleted at the end, leaving **~20 GB** in use. Tighter than that? See

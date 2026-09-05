@@ -29,6 +29,10 @@ kingo doctor      preflight: engine ready? memory? ports free?
 kingo fixports    move Kingo off ports taken by other software (e.g. your
                   own Postgres on 5432) — saved to gitignored .env.local
 kingo credentials print all URLs and logins
+kingo mode        which services run: full, abp (new installs start here), bi,
+                  langflow, n8n — `kingo mode full` switches; nothing is deleted
+kingo memory      how much memory the containers may use; on a Mac with
+                  Podman, `kingo memory 5` sets it
 kingo version     which stack is this? (the line to ask a student for)
 kingo mcp         print the Jupyter MCP endpoint + bearer token
 kingo pull        download all images, one at a time with retries

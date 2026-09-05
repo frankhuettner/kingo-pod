@@ -40,6 +40,60 @@ pin_engine() {
   mv .env.local.tmp .env.local
 }
 
+
+# ── 0. Mode: which services this install runs ────────────────────────────────
+# A FRESH install gets abp (Langflow, n8n, CloudBeaver, PostgreSQL — the class
+# default, a 4 GB machine). An existing install keeps whatever it runs: a
+# re-run is the guides' repair step and must never take Jupyter or Metabase
+# away from anyone. "Existing" = a .env.local is there (every setup run pins
+# the engine into it, and a fresh clone has none), or kingo-* containers or
+# kingo_* volumes exist (a stack that is merely `down` keeps its volumes).
+# A preset KINGO_MODE wins on a fresh install — that is how a colleague's
+# course installs Langflow-only:  KINGO_MODE=langflow bash setup/setup-mac.sh
+# The mode is written to .env.local together with the engine (after step 1):
+# a run that stops early — no Homebrew yet, say — must leave no half-made
+# .env.local that turns the re-run into an "existing" install.
+pin_local() { # VAR value — rewrite one line of .env.local (the same way pin_engine does)
+  { [ -f .env.local ] && grep -v "^$1=" .env.local || true; } > .env.local.tmp
+  echo "$1=$2" >> .env.local.tmp
+  mv .env.local.tmp .env.local
+}
+existing_install() {
+  [ -f .env.local ] && return 0
+  local e
+  # A stopped Podman machine (after a reboot) hides its containers and volumes;
+  # start it — step 1 would anyway.
+  if command -v podman >/dev/null 2>&1 && podman machine list --format '{{.Name}}' 2>/dev/null | grep -q .; then
+    podman info >/dev/null 2>&1 || podman machine start >/dev/null 2>&1 || true
+  fi
+  for e in docker podman; do
+    command -v "$e" >/dev/null 2>&1 || continue
+    [ -n "$("$e" ps -a --filter name=kingo- -q 2>/dev/null || true)" ] && return 0
+    [ -n "$("$e" volume ls -q --filter name=kingo_ 2>/dev/null || true)" ] && return 0
+  done
+  return 1
+}
+MODES="full abp bi langflow n8n"
+FRESH_INSTALL=0
+if existing_install; then
+  # `|| true`: under pipefail a .env.local without the line (every install from
+  # before modes) makes grep exit 1, which would end the script right here.
+  MODE="$(grep '^KINGO_MODE=' .env.local 2>/dev/null | tail -1 | cut -d= -f2 || true)"
+  [ -n "$MODE" ] || MODE=full
+  if [ -n "${KINGO_MODE:-}" ] && [ "$KINGO_MODE" != "$MODE" ]; then
+    say "This install already exists — keeping its mode ($MODE), not KINGO_MODE=$KINGO_MODE from the command line. Switch afterwards with: ./kingo mode $KINGO_MODE"
+  else
+    say "This install already exists — keeping its mode ($MODE). Lighter or heavier: ./kingo mode"
+  fi
+  unset KINGO_MODE   # from here on .env.local decides (kingo lets the environment override it)
+else
+  FRESH_INSTALL=1
+  MODE="${KINGO_MODE:-abp}"
+  case " $MODES " in *" $MODE "*) ;; *) echo "ERROR: KINGO_MODE=$MODE is not a mode — the modes are: $MODES"; exit 1 ;; esac
+  say "Mode: $MODE — $(KINGO_MODE=$MODE ./kingo mode 2>/dev/null | head -1 | sed 's/^Mode: [a-z0-9]* — //')   (change it later: ./kingo mode)"
+fi
+MODE_MEM="$(KINGO_MODE=$MODE ./kingo memory target 2>/dev/null || echo 4096)"
+
 # ── 1. Engine: keep a running stack's engine; else use a running Docker
 #      Desktop; else install Podman ──────────────────────────────────────────
 # Many students arrive with Docker Desktop from another course. That is fine:
@@ -48,7 +102,11 @@ pin_engine() {
 #
 # Re-running setup must never flip a working install to the other engine —
 # that would strand the class data in the old engine's volumes. So if the
-# stack is already running somewhere, that engine wins, full stop.
+# stack is already running somewhere, that engine wins, full stop — and an
+# engine .env.local already names is kept even while its stack is down (a
+# downed Podman stack next to a running Docker Desktop must not be re-created
+# under Docker, with empty volumes).
+PINNED_ENGINE="$(grep '^KINGO_ENGINE=' .env.local 2>/dev/null | tail -1 | cut -d= -f2 || true)"
 RUNNING_ENGINE=""
 for eng in docker podman; do
   if command -v "$eng" >/dev/null 2>&1 \
@@ -60,12 +118,17 @@ done
 if [ -n "$RUNNING_ENGINE" ]; then
   say "The Kingo stack is already running under ${RUNNING_ENGINE} — keeping it. Nothing to install."
   pin_engine "$RUNNING_ENGINE"
-elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 \
+elif [ "$PINNED_ENGINE" = docker ] && command -v docker >/dev/null 2>&1; then
+  { docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; } \
+    || { echo "ERROR: this install uses Docker (see .env.local), but Docker is not running. Start Docker Desktop, wait until it says 'running', then re-run this script."; exit 1; }
+  say "This install uses Docker Desktop — keeping it. Nothing to install."
+  pin_engine docker
+elif [ -z "$PINNED_ENGINE" ] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 \
    && docker compose version >/dev/null 2>&1; then
   say "Docker Desktop is already running — using it. Nothing to install."
   pin_engine docker
 else
-  if command -v docker >/dev/null 2>&1; then
+  if [ -z "$PINNED_ENGINE" ] && command -v docker >/dev/null 2>&1; then
     say "Note: Docker is installed but not running, so this script sets up Podman instead."
     echo "     (Prefer Docker? Quit this script (Ctrl+C), start Docker Desktop, re-run.)"
   fi
@@ -93,21 +156,25 @@ else
   brew list podman         >/dev/null 2>&1 || brew install podman
   brew list docker-compose >/dev/null 2>&1 || brew install docker-compose
 
-  # Podman machine (4 CPU / 5 GB / 40 GB) — the default machine (2 CPU / 2 GB)
-  # is far too small. Measured (2026-08-21): the full stack idles at ~3 GB, so
-  # 5120 MB leaves ~2 GB for notebooks/flows while keeping ~3 GB of an 8-GB
-  # Mac for macOS + browser.
+  # Podman machine (4 CPU / the mode's memory / 40 GB) — the default machine
+  # (2 CPU / 2 GB) is far too small. The memory follows the mode chosen above
+  # (abp: 4096 MB; measured 2026-09-05 under classroom use — see
+  # docs/INSTRUCTOR.md "Modes"). An existing machine is never resized here:
+  # that is './kingo mode' / './kingo memory', which warn that it stops every
+  # container on the Mac.
   if podman machine list --format '{{.Name}}' 2>/dev/null | grep -q .; then
     say "A Podman machine already exists — making sure it is running ..."
     podman info >/dev/null 2>&1 || podman machine start
   else
-    say "Creating the Podman machine (4 CPU, 5 GB RAM, 40 GB disk) ..."
-    podman machine init --cpus 4 --memory 5120 --disk-size 40 --now
+    say "Creating the Podman machine (4 CPU, ${MODE_MEM} MB RAM for $MODE mode, 40 GB disk) ..."
+    podman machine init --cpus 4 --memory "$MODE_MEM" --disk-size 40 --now
   fi
   podman info >/dev/null 2>&1 || { echo "ERROR: Podman machine did not come up. Try: podman machine start"; exit 1; }
 
   pin_engine podman
 fi
+# The mode from step 0, written next to the engine pin (see there for why not earlier).
+if [ "$FRESH_INSTALL" = 1 ]; then pin_local KINGO_MODE "$MODE"; fi
 
 # ── 2. Ports, then images (USB bundle or download), then up and verify ───────
 say "Checking that no other software sits on Kingo's ports ..."
@@ -163,7 +230,7 @@ if [ -n "$BUNDLE" ]; then
   esac
 fi
 
-say "Making sure all container images are present (~10 GB download on a first run without the USB bundle) ..."
+say "Making sure all container images are present (~10 GB download on a first run without the USB bundle — every mode's images, so switching modes later never downloads) ..."
 ./kingo pull
 
 say "Starting the Kingo stack ..."
