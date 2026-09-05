@@ -17,6 +17,9 @@ script checks itself and tells you if something needs fixing.
 
 - An **Apple-Silicon Mac** (M1 or newer — any Mac from 2021 on).
 - **8 GB RAM** (16 GB recommended) and about **20 GB free disk space**.
+  Setup installs the class's *abp* set of services (Langflow, n8n,
+  CloudBeaver, database), which needs 4 GB; the everyday guide explains how
+  to switch sets later.
 - **Do this at home, before class.** The first start downloads about **10 GB**
   of images. On classroom Wi-Fi that is slow and painful; at home it is a
   one-time wait. After that, starting is quick and works offline.

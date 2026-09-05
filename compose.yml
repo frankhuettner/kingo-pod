@@ -7,6 +7,14 @@
 # on the same Wi-Fi reach a classmate's n8n/Postgres with the well-known class
 # credentials. Each port is also overridable via KINGO_PORT_* (see .env) for
 # collisions with existing software. `kingo smoke` asserts these bindings.
+# MODES: compose profiles are NAMED after kingo's modes (full, abp, bi,
+# langflow, n8n) and every service lists the modes it runs in; postgres has no
+# profile and is always on. `kingo` exports COMPOSE_PROFILES=<mode>, and its
+# compose_all() uses `--profile full` where EVERY service must be in view
+# (down, reset, bundle, the loopback/drift guard) — the flag replaces the
+# exported profile, so every profiled service MUST list `full` (`kingo smoke`
+# asserts it). Keep this list and kingo's service_modes() identical — smoke
+# checks that they agree, for every mode.
 name: kingo
 
 services:
@@ -34,6 +42,7 @@ services:
     image: qdrant/qdrant:v1.19.0
     container_name: kingo-qdrant
     restart: unless-stopped
+    profiles: [full, bi]
     ports:
       - "127.0.0.1:${KINGO_PORT_QDRANT:-6333}:6333"
       - "127.0.0.1:${KINGO_PORT_QDRANT_GRPC:-6334}:6334"
@@ -44,6 +53,7 @@ services:
     image: quay.io/jupyter/scipy-notebook:2026-08-17
     container_name: kingo-jupyterlab
     restart: unless-stopped
+    profiles: [full, bi]
     # Token/password disabled and XSRF relaxed so the classroom MCP server can
     # drive the kernel. Safe because the port is published on 127.0.0.1 only.
     command: >
@@ -66,6 +76,7 @@ services:
     image: kingo-jupyterhub:local
     container_name: kingo-jupyterhub
     restart: unless-stopped
+    profiles: [full, bi]
     environment:
       DUMMY_PASSWORD: ${KINGO_PASSWORD}
       TZ: ${TZ}
@@ -78,6 +89,9 @@ services:
     image: datalayer/jupyter-mcp-server:1.4.5
     container_name: kingo-jupyter-mcp
     restart: unless-stopped
+    # Same profiles as jupyterlab (depends_on must never cross into an
+    # inactive profile).
+    profiles: [full, bi]
     # Serves streamable-HTTP MCP at http://localhost:4040/mcp.
     # Env names verified against 1.4.5 (`python -m jupyter_mcp_server start
     # --help`): TRANSPORT must be set (default is stdio, which serves nothing
@@ -106,6 +120,7 @@ services:
     image: kingo-langflow:local
     container_name: kingo-langflow
     restart: unless-stopped
+    profiles: [full, abp, langflow]
     # Run as root: the image's default non-root user cannot write the fresh
     # named volume at /app/data (the engine creates it root-owned because the
     # path does not exist in the image), which crash-loops langflow on its
@@ -146,6 +161,7 @@ services:
     image: n8nio/n8n:2.35.5
     container_name: kingo-n8n
     restart: unless-stopped
+    profiles: [full, abp, n8n]
     environment:
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
@@ -156,6 +172,12 @@ services:
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       N8N_SECURE_COOKIE: "false"
       N8N_RUNNERS_ENABLED: "true"
+      # Cap the task runner's Node heap. Without it V8 takes half of the
+      # VISIBLE memory (up to 2 GiB) per process, so a runaway Code node ends
+      # with the guest kernel killing the biggest process on the machine
+      # (Langflow) instead of n8n reporting "ran out of memory" for that one
+      # task. 512 MB is 3x the largest run measured (2026-09-05).
+      N8N_RUNNERS_MAX_OLD_SPACE_SIZE: "512"
       N8N_DIAGNOSTICS_ENABLED: "false"
       GENERIC_TIMEZONE: ${TZ}
       TZ: ${TZ}
@@ -171,6 +193,7 @@ services:
     image: metabase/metabase:v0.60.25
     container_name: kingo-metabase
     restart: unless-stopped
+    profiles: [full, bi]
     environment:
       MB_DB_TYPE: postgres
       MB_DB_HOST: postgres
@@ -190,9 +213,15 @@ services:
     image: dbeaver/cloudbeaver:26.1.5
     container_name: kingo-cloudbeaver
     restart: unless-stopped
+    profiles: [full, abp, bi]
     # CB_ADMIN_* skips the first-run admin wizard; the mounted data-sources
     # file pre-registers the classroom PostgreSQL connection.
     environment:
+      # The image sets no heap cap, so the JVM takes 25% of whatever memory it
+      # can see — 1.5 GB on a 6 GB machine — for a service that uses ~75 MB of
+      # heap in class (measured 2026-09-05). A fixed cap keeps its ceiling the
+      # same on every machine size; the launcher passes JAVA_OPTS through.
+      JAVA_OPTS: -Xmx512m
       CB_SERVER_NAME: Kingo Classroom
       CB_SERVER_URL: http://localhost:${KINGO_PORT_CLOUDBEAVER:-8978}
       CB_ADMIN_NAME: ${KINGO_USER}

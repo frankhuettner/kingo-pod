@@ -24,10 +24,9 @@ that second page is the one students come back to (addresses and logins, the
   those still setting up.
 - **Minimum specs**: 8 GB RAM (16 GB recommended), ~20 GB free disk — ~30 GB
   during a USB setup, where the ~14 GB file and the images it loads coexist.
-  The stack
-  gets a ~5 GB budget and idles at ~3 GB (measured 2026-08-21; biggest single
-  consumer: Metabase at ~1.2 GB). If 8-GB laptops still struggle, the planned
-  `--lite` profile (drop Metabase + CloudBeaver, saves ~1.5 GB) is the next lever.
+  Fresh installs run the **abp mode** (Langflow, n8n, CloudBeaver, PostgreSQL)
+  in a 4 GB machine; the full stack needs 6 GB under real use, which an 8 GB
+  laptop cannot give. See "Modes" below for the numbers and the announcement.
 - **Classroom Wi-Fi fallback (USB bundle)**: if students show up without having
   pulled the images, hand them a USB stick instead of hammering the room's
   Wi-Fi — see the next section.
@@ -136,7 +135,8 @@ class regardless of engine.
   into `~/kingo-pod` + `bash setup/setup-mac.sh` — the same line is install,
   repair, and update; the script also self-updates on re-runs). Setup
   installs Podman + the docker-compose provider via brew, creates a Podman
-  machine (4 CPU / 5 GB / 40 GB), then brings the stack up and smoke-tests
+  machine (4 CPU / the mode's memory, 4 GB for abp / 40 GB), then brings the
+  stack up and smoke-tests
   it. (Installs from before 2026-08-29 used a ZIP download instead — no
   `.git`; `kingo update` covers those via a repo-tarball fetch, and the guide
   tells them how to migrate to the clone.)
@@ -323,6 +323,87 @@ One real rule to teach: the shared `N8N_ENCRYPTION_KEY` means anyone can decrypt
 a shared n8n workflow export — **never put a real API key into a workflow you
 share.**
 
+## Modes: which services run, and how much memory each needs
+
+Since v1.1.0 a **mode** selects the services that run (compose profiles named
+after the modes; `KINGO_MODE=<mode>` in the student's `.env.local`, written by
+setup or by `./kingo mode`). Nothing is ever deleted by a switch: every mode
+keeps the volumes, and `./kingo mode full` brings a service back with its data.
+
+| Mode | Services | Containers, typical / peak | Machine floor / target |
+|---|---|---|---|
+| `abp` (fresh installs) | Langflow, n8n, CloudBeaver, PostgreSQL | 2.8 / 4.1 GB | 3.5 / **4 GB** |
+| `full` | all 9 | 5.0 / 7.6 GB | 6 / **6 GB** |
+| `bi` | JupyterLab, JupyterHub, Jupyter MCP, Metabase, CloudBeaver, Qdrant, PostgreSQL | 2.8 / 4.6 GB | 4 / **4.5 GB** |
+| `langflow` | Langflow, PostgreSQL | 1.8 / 2.5 GB | 3 / **3.5 GB** |
+| `n8n` | n8n, PostgreSQL | 0.8 / 1.5 GB | 2 / **2.5 GB** |
+
+Where the numbers come from (2026-09-05, one Mac, podman machine): idle is
+measured; *typical* and *peak* add what the services do in class — a pandas
+kernel is 235 MB of libraries plus 3–4× its data (measured), an n8n Code node
+run of 50k items peaked at 867 MB (measured), Langflow grows from 611 MB cold
+to 1.3 GB after a few days of use (measured; upstream's minimum is 2 GB),
+Metabase holds a fixed 1 GB heap. The guest itself (kernel, podman, conmon)
+takes ~0.8 GB on top, and the machine has **no swap**: below the floor the
+kernel kills the Langflow worker or Metabase outright. The floors live in one
+table in `kingo` (`mode_mem_mb` / `mode_floor_mb`) — re-measure with
+`./kingo memory` (budget + live use per container) before changing them.
+
+- **An 8 GB Mac**: the podman machine's memory is a fixed reservation once
+  warmed up (no balloon device), so only a smaller machine gives macOS anything
+  back — `./kingo mode abp` resizes it to 4 GB (one machine restart, which
+  stops every container on the Mac; `kingo` says so and asks first when
+  foreign containers run). `full` is not sensible there.
+- **An 8 GB Windows laptop**: WSL2 caps Ubuntu at half the RAM (4 GB) and hands
+  back what is unused; `abp`, `langflow`, `n8n` fit that cap, `bi`/`full` run
+  but slowly. Nothing to resize, and `kingo` deliberately hands out no
+  `.wslconfig` recipe (Frank, 2026-09-05): on WSL every memory message states
+  the half-of-the-laptop default and lists the modes that fit it. The old
+  "raise the WSL cap to 5 GB" advice is gone from the guide because it starves
+  Windows; a student who edits `.wslconfig` anyway is on their own, and it
+  does no harm.
+- **Docker Desktop**: VM defaults to half the host RAM; `kingo` cannot resize
+  it. On a Mac it prints the Settings path; on Windows the same WSL message
+  as above (the WSL 2 backend is sized by Windows, and Docker Desktop's own
+  Resources page is read-only there).
+- **Every mode's images are always present**: `pull`, `update` and the USB
+  bundle are mode-agnostic (~10 GB to download on a first internet install,
+  14.7 GB on disk), and `pull` also builds the two local images if they are
+  missing — never rebuilds them — so a class-day `./kingo mode full` neither
+  downloads nor builds anything. Announce mode switches freely, even on
+  classroom Wi-Fi.
+- `./kingo memory` shows budget and live use; `./kingo memory 5` pins a size
+  (Mac/Podman resizes right away; Docker on a Mac gets the Settings path;
+  Windows is told the mode is the lever); `auto` unpins. `./kingo version` and `doctor` print the mode — ask for either.
+- Two heap caps ship with the modes: CloudBeaver `-Xmx512m` (it used to take
+  25 % of the VM by JVM default) and the n8n task runner at 512 MB (a runaway
+  Code node now fails as one task instead of getting Langflow OOM-killed).
+  Metabase's heap could drop from 1 GB to 512 MB (≈ −0.5 GB in `bi`/`full`) —
+  reported to boot on 0.60, not yet measured here. The Langflow upgrade is NOT
+  a memory lever: 1.11.6 idles at 1.36 GB against 1.8.0's 0.6–1.3 GB with one
+  worker (measured 2026-09-05; upstream's −85 % is per additional worker).
+
+**Announcing it to a running cohort** (they are on full mode, 5 GB machines;
+`./kingo update` changes nothing by itself — an unset mode means full):
+
+```
+Everyone: cd ~/kingo-pod && ./kingo update
+Then: ./kingo mode abp   — about a minute; Jupyter and Metabase go off until a class needs them (I will say when to run ./kingo mode full). Nothing is deleted.
+```
+
+`update`, `up` and `doctor` also print a one-line nudge on 8 GB laptops.
+
+**A colleague's Langflow-only (or n8n-only) course** needs no separate guide:
+the same setup one-liner with a `KINGO_MODE=` prefix on the script — on a Mac
+
+```
+cd ~ && { git clone https://github.com/frankhuettner/kingo-pod.git 2>/dev/null || true; } && cd ~/kingo-pod && git pull --ff-only && KINGO_MODE=langflow bash setup/setup-mac.sh
+```
+
+and `bash setup/setup-linux.sh` inside WSL Ubuntu. Setup pins the mode on a
+fresh install (an existing install keeps its mode); the everyday guides are
+already mode-aware because `credentials`/`status` mark what is off.
+
 ## Verifying a machine
 
 - `./kingo doctor` — preflight (engine ready? memory? ports free?).
@@ -337,8 +418,8 @@ share.**
 2. ~~**Docker Desktop**: blessed as a fallback, or Podman-only?~~ **Settled**:
    Docker is a first-class engine — the setup scripts auto-detect a running
    Docker Desktop and use it (see "Setup paths"), CI tests both engines.
-3. **Minimum laptop**: 8 GB RAM / Windows Home supported? Decides whether a
-   `kingo up --lite` profile (drop Metabase/CloudBeaver) is worth adding.
+3. ~~**Minimum laptop**: 8 GB RAM / Windows Home supported?~~ **Settled**
+   (v1.1.0): modes — fresh installs run `abp` in 4 GB; see "Modes".
 4. **USB offline bundle** wanted for day 1?
 
 Full design and rationale: `PLAN-NATIVE-STACK.md` (ported from the old

@@ -19,8 +19,11 @@ It was ported from the old `kingo-vm` repo.
   (it lacks `depends_on: condition: service_healthy` + build semantics). (plan §4)
 - **JupyterHub is built locally** (`jupyterhub/Dockerfile`, tag
   `kingo-jupyterhub:local`): no published image runs hub+Lab standalone. So
-  `update` uses `pull --ignore-buildable` + an explicit `build`, and `smoke`
-  checks the hub can actually launch a Lab. (plan §9.3)
+  `pull` skips the `*:local` tags and builds them only when MISSING
+  (`build_missing` — `up` builds only the active mode's, and a USB `load`
+  brings images without build cache, so a forced rebuild would need the
+  network), `update` alone forces a `build`, and `smoke` checks the hub can
+  actually launch a Lab whenever the mode runs it. (plan §9.3)
 - **JupyterLab (:8888) stays** even though JupyterHub exists — the Jupyter MCP
   server points at it. (plan §9.5)
 - **Langflow is ALSO built locally** (`langflow/Dockerfile`, tag
@@ -39,7 +42,7 @@ It was ported from the old `kingo-vm` repo.
   kind; don't tell ZIP-era students to re-download by hand, and don't remove
   the tarball fallback while any of those folders may still exist.
 - **Metabase pre-setup is idempotent** via the setup-token check and non-fatal
-  on failure; it runs on every `kingo up`. (plan §9.4)
+  on failure; it runs on every `kingo up` in a mode that has Metabase. (plan §9.4)
 - **Credentials are public by design** and committed (`.env`); they are safe
   only because everything is loopback-bound. Keep the "no real keys in shared
   n8n exports" warning.
@@ -50,10 +53,11 @@ It was ported from the old `kingo-vm` repo.
   moved ports there.
 - **Port collisions are auto-resolved, never fatal mid-boot**: `kingo up`
   preflights all 10 host ports (incl. Qdrant gRPC 6334) and points at
-  `kingo fixports`, which remaps busy ports into `.env.local`. When ALL 10
-  ports are busy at once, doctor/fixports/up must refuse and say "the stack is
-  probably already running under the other engine" — remapping would be
-  exactly wrong then (happens for real when both engines are installed).
+  `kingo fixports`, which remaps busy ports into `.env.local`. When ALL the
+  ports of the current mode are busy at once (10 in full, 4 in abp),
+  doctor/fixports/up must refuse and say "the stack is probably already
+  running under the other engine" — remapping would be exactly wrong then
+  (happens for real when both engines are installed).
 - **Port attribution must expand podman's port RANGES**: podman collapses
   adjacent published ports into ONE range mapping
   (`127.0.0.1:6333-6334->6333-6334/tcp`) — Qdrant's 6333+6334 is exactly
@@ -162,6 +166,59 @@ It was ported from the old `kingo-vm` repo.
   on an Apple-Silicon Mac. Do NOT collapse back to a single `kingo-images.tar`
   name (kept only as an auto-detect fallback).
 
+- **Modes are compose profiles NAMED after the modes** (`full abp bi langflow
+  n8n`; every service lists the modes it runs in, postgres has no profile).
+  `kingo` exports `COMPOSE_PROFILES=$KINGO_MODE`, so the plain `compose()`
+  wrapper sees only the current mode's services; `compose_all()` adds
+  `--profile full` and MUST be used by `down`, `reset`, `pull`, `bundle`,
+  `assert_loopback` and the CI diagnostics — a `down` without it exits 0 and
+  leaves the inactive profiles' containers attached, after which podman
+  cannot remove the network, and `reset -v` cannot remove volumes. The flag
+  REPLACES the exported profile (docker-compose does not union them): it
+  shows every service only because EVERY profiled service lists `full`,
+  which `assert_modes` enforces. `service_modes()` in kingo mirrors
+  compose.yml's `profiles:` and `smoke` asserts they agree for every mode.
+  Compose never stops what a disabled profile owns, so `up` removes the
+  containers of services that are off in the mode (`stop_off_services`), and
+  `status`/`smoke` flag any that still run. UNSET mode = `full`: the cohort
+  that installed before modes must keep every service across `kingo update`
+  — and the committed `.env` carries `COMPOSE_PROFILES=full` for exactly one
+  reader, the pre-modes `kingo` that keeps running after its own `git pull`
+  (its `compose up -d` would otherwise see postgres alone and still say
+  "Stack updated"); the new script overrides it. The SETUP SCRIPTS pin `abp`
+  on a fresh install only (a `.env.local`, kingo-* containers or kingo_*
+  volumes mean "existing — keep the mode"; a stopped Mac machine is started
+  to look); the pin is written next to the engine pin AFTER the engine step,
+  so a run that dies early leaves no half-made `.env.local`; a `KINGO_MODE`
+  from the environment is validated on a fresh install and dropped on an
+  existing one; an engine `.env.local` already names is kept even while its
+  stack is down. `pull`/`update`/`build` stay MODE-AGNOSTIC: every image is
+  always local (`pull` builds MISSING `*:local` images, never rebuilds), so a
+  class-day `mode full` never downloads on classroom Wi-Fi. `mode` checks
+  the target's images AND ports (a subshell `preflight_ports` in the target
+  mode) before it writes anything. `mode` never refuses a machine that ran
+  yesterday — it warns below a mode's floor; on Podman-on-Mac it resizes the
+  machine to the mode's target (the ONLY setup where fewer containers give
+  the host nothing back until the VM shrinks — applehv has no balloon) and
+  asks for a typed `yes` only when foreign containers are running. ONE sizing
+  rule, `mode_cap_mb` (the mode's target, capped so macOS keeps 3 GB): setup's
+  `machine init` (`kingo memory target`), doctor's advice and `mode`'s resize
+  all use it — two rules made an 8 GB Mac's first `mode full` resize a
+  machine that was already right. A memory pin is written only after the
+  resize succeeded, and `resize_machine` never dies (a failed start puts the
+  old size back). The all-ports-busy refusal counts the ports the CURRENT
+  MODE publishes (`all_active_busy`): both engines share `.env.local`, so an
+  invisible copy holds exactly those. A `KINGO_MODE` from the environment
+  beats the file (the `_cli_overrides` rule), so `cmd_mode` refuses then;
+  CI never exports it. The memory table
+  (`mode_mem_mb`/`mode_floor_mb`, measured 2026-09-05 under real use — see
+  INSTRUCTOR.md "Modes") is the one place to retune. The Langflow upgrade is
+  NOT a memory lever (1.11.6 idles at 1.36 GB with one worker; measured).
+  On WSL `kingo memory` never hands out a `.wslconfig` recipe (Frank's call,
+  2026-09-05): it states the half-of-the-laptop default and lists the modes
+  that fit — raising the cap on an 8 GB laptop only starves Windows.
+  Never `case` textually inside `$( )` in kingo — macOS ships bash 3.2.
+
 - **The guides in `docs/` ARE the website**: `site/` is a small Astro project
   that publishes them at <https://huettner.io/kingo-pod/> (GitHub Pages project
   site; it inherits the custom domain of `frankhuettner.github.io`). Edit the
@@ -216,7 +273,8 @@ student whose engine is broken still has to be able to say what they run.
 
 ## Layout
 
-- `compose.yml` — the 9-service stack (ports overridable via `KINGO_PORT_*`).
+- `compose.yml` — the 9-service stack (ports overridable via `KINGO_PORT_*`;
+  profiles = modes, see the invariant above).
 - `kingo` (bash) — the ONE CLI, used on Mac, Linux, and Windows-in-WSL2, and
   CI-tested on Linux with both engines.
 - `jupyterhub/`, `cloudbeaver/`, `postgres-init/` — service config, ported as-is.
@@ -239,7 +297,8 @@ student whose engine is broken still has to be able to say what they run.
   Dockerfile and that table moves with it, or it starts lying.
 - `site/` — the Astro build that publishes `docs/` to huettner.io/kingo-pod
   (`npm run dev` to preview; deployed by `.github/workflows/pages.yml`).
-- `.github/workflows/ci.yml` — both engines, two boot cycles.
+- `.github/workflows/ci.yml` — both engines, two boot cycles plus a mode
+  cycle (Boot 3).
 
 ## Windows = WSL2, one CLI
 

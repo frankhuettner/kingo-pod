@@ -18,7 +18,9 @@ fixing.
 
 ## Before you start
 
-- **Windows 10 or 11**, with **8 GB RAM** (16 GB recommended) and about
+- **Windows 10 or 11**, with **8 GB RAM** (16 GB recommended) — setup installs
+  the class's *abp* set of services (Langflow, n8n, CloudBeaver, database);
+  the everyday guide explains how to switch sets later — and about
   **20 GB free disk space**.
 - **Do this at home, before class.** Enabling WSL2 may need **one reboot**,
   and the first start downloads about **10 GB** of images. Get both done at

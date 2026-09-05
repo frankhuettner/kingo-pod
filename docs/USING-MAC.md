@@ -6,7 +6,8 @@ to get your own files in and out, how to update, and what to do when something
 goes wrong. Bookmark it — you won't need the setup guide again.
 
 > **Jump to:** [Your services](#your-services) ·
-> [Everyday use](#everyday-use) · [Your files](#your-own-files--the-shared-folder) ·
+> [Everyday use](#everyday-use) · [Modes](#modes-which-services-run) ·
+> [Your files](#your-own-files--the-shared-folder) ·
 > [Update](#keeping-up-to-date) ·
 > [If something breaks](#if-something-breaks) · [FAQ](#faq)
 
@@ -26,6 +27,11 @@ for your own Mac:
 | CloudBeaver | <http://localhost:8978> | `student` / `Kingo2026!` — [how to connect](CLOUDBEAVER.md) |
 | Qdrant | <http://localhost:6333/dashboard> | none |
 | PostgreSQL | `localhost:5432` | `student` / `kingo2026` (db: `classroom`) |
+
+Not all of these run at the same time: in **abp mode** — what setup installs —
+only Langflow, n8n, CloudBeaver and PostgreSQL are on, and
+`./kingo credentials` marks the others as *off*. See [Modes](#modes-which-services-run)
+for switching.
 
 > **CloudBeaver looks empty at first** ("No Connections") — you have to log in
 > via the **gear icon → Login** before the class database shows up, and give it
@@ -64,17 +70,56 @@ then one command per job:
 | `./kingo down` | stop everything |
 | `./kingo status` | which services are up? |
 | `./kingo credentials` | my addresses + logins |
+| `./kingo mode` | which services run — and `./kingo mode full` / `abp` / … switches (see [Modes](#modes-which-services-run)) |
+| `./kingo memory` | how much memory the containers may use; `./kingo memory 5` changes it |
 | `./kingo doctor` | something's wrong? start here |
 | `./kingo version` | which version am I running? (send this when you ask for help) |
 | `./kingo update` | get the newest class files + images (run it when the instructor announces an update) |
 
 > **What if I just close the Terminal window?** Nothing breaks — the stack
 > keeps running in the background: your services stay reachable in the
-> browser, and it keeps using ~5 GB RAM. It stops only when you run
+> browser, and it keeps using its memory (4 GB in abp mode, up to 6 GB in
+> full mode). It stops only when you run
 > `./kingo down` or shut down / restart the Mac. Your data survives all of
 > these — closed windows, `down`, reboots. After a reboot, run `./kingo up`
 > again. (Docker Desktop users: the stack may come back by itself when
 > Docker starts — `./kingo status` shows what's up.)
+
+### Modes: which services run
+
+Not every class week needs all nine services, and an 8 GB Mac cannot run
+them all comfortably. A **mode** is the set of services that runs — the
+others are simply off (nothing is deleted; every mode keeps your data):
+
+| Mode | What runs | Memory it wants |
+|---|---|---|
+| `abp` (what setup installs) | Langflow, n8n, CloudBeaver, PostgreSQL | 4 GB |
+| `full` | all nine services | 6 GB |
+| `bi` | JupyterLab, JupyterHub, Jupyter MCP, Metabase, CloudBeaver, Qdrant, PostgreSQL | 4.5 GB |
+| `langflow` | Langflow, PostgreSQL | 3.5 GB |
+| `n8n` | n8n, PostgreSQL | 2.5 GB |
+
+`./kingo mode` shows the current one. Switching is one line, for example:
+
+```
+cd ~/kingo-pod && ./kingo mode full
+```
+
+It takes about a minute: the stack stops, the Podman machine is resized to
+what the new mode wants, and the stack comes back with the new set of
+services. Your notebooks, dashboards, flows and workflows are all still
+there — switch back any time with `./kingo mode abp`.
+
+> **On a Mac with Podman, resizing the machine stops ALL containers on the
+> Mac for about a minute** — Kingo's come back by themselves, containers from
+> other courses do not. If any are running, `kingo` lists them and asks you to
+> type `yes` first. (Docker Desktop: nothing is resized; only the services
+> change.)
+
+Want a different amount of memory than the mode asks for? `./kingo memory`
+shows what the containers have and use right now; `./kingo memory 5` sets
+5 GB (same one-minute restart); `./kingo memory auto` lets the mode decide
+again.
 
 ### Your own files — the `shared` folder
 
@@ -149,7 +194,7 @@ what to do:
 | I have Docker Desktop, but setup installed Podman | Docker wasn't running during setup. Both work — no need to change anything. To switch to Docker anyway: `./kingo down` (stops the Podman stack **first**), then `echo KINGO_ENGINE=docker >> .env.local`, then `./kingo up`. |
 | `Podman has no ready machine` / Podman won't start | Run `podman machine start`, then `./kingo up`. Still broken: `podman machine stop`, then `podman machine start`. |
 | `Docker is installed but not running` | Open the Docker Desktop app, wait until it says "running", try again. |
-| Mac feels slow / fans spin (8 GB Macs) | The stack needs ~5 GB RAM while running. Close other apps and browser tabs, or `./kingo down` when not using it. |
+| Mac feels slow / fans spin (8 GB Macs) | Run a lighter [mode](#modes-which-services-run): `./kingo mode abp` (4 GB) — or, for one tool at a time, `./kingo mode langflow` (3.5 GB) or `./kingo mode n8n` (2.5 GB). `./kingo down` when you are not using the stack also helps. |
 | Anything else | `./kingo down`, then `./kingo up`. If it persists: screenshot the error and ask the instructor / TA. |
 
 ## FAQ
@@ -174,8 +219,21 @@ The one real rule: the class shares an n8n encryption key, so **never put a
 real API key into an n8n workflow you share or export.**
 
 **Where is my data?** Databases, notebooks, and workflows live in container
-volumes on your Mac and survive `./kingo down` and reboots. Only
-`./kingo reset` deletes them (it asks first).
+volumes on your Mac and survive `./kingo down`, reboots and mode switches.
+Only `./kingo reset` deletes them (it asks first).
+
+**Where did Jupyter and Metabase go?** They are off in `abp` mode, which is
+what setup installs — `./kingo status` and `./kingo credentials` say so.
+`./kingo mode full` turns everything on (about a minute; see
+[Modes](#modes-which-services-run)); the instructor announces when a class
+week needs it.
+
+**Can I give the containers more or less memory myself?** Yes:
+`./kingo memory 5` (or any number of GB). On a Mac with Podman that resizes
+the Podman machine right away — and, like every machine restart, **stops ALL
+containers on the Mac for about a minute**, not only Kingo's. With Docker
+Desktop the memory slider is in Docker Desktop → Settings → Resources; the
+same warning applies to its *Apply & restart*.
 
 **Can I use extra Python packages (say, statsmodels)?**
 

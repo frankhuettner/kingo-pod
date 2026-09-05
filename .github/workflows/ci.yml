@@ -43,9 +43,9 @@ jobs:
     runs-on: ubuntu-latest
     # The GitHub default is 360 min — a hang should fail fast with diagnostics
     # instead. Step-level timeouts below are tighter still; this must stay
-    # ABOVE their sum (40+30+25+15 + setup), or a slow-but-legit run gets
+    # ABOVE their sum (40+30+25+45+15 + setup), or a slow-but-legit run gets
     # killed as a cancellation, which would skip the diagnostics step.
-    timeout-minutes: 130
+    timeout-minutes: 175
     strategy:
       fail-fast: false
       matrix:
@@ -144,6 +144,53 @@ jobs:
           ./kingo up
           ./kingo smoke
 
+      - name: Boot 3 — mode cycle (abp → n8n → langflow → bi → full)
+        timeout-minutes: 45
+        # Every mode boots and passes smoke (which also asserts compose.yml's
+        # profiles agree with kingo's table for all modes); the containers of
+        # the modes left behind are really gone; the read-only commands work in
+        # every mode; `pull` still sees every image from inside a partial mode
+        # (a class-day `mode full` must never download); `down` from a partial
+        # mode leaves no container and no network behind (that was the trap:
+        # `down` without the full profile exits 0 and keeps the network); and
+        # the colleague's path — the mode from the environment — boots too.
+        run: |
+          set -euo pipefail
+          for m in abp n8n langflow bi full; do
+            echo "=== mode $m"
+            ./kingo mode "$m"
+            ./kingo smoke
+            ./kingo status
+            ./kingo credentials >/dev/null
+            ./kingo version
+            ./kingo mcp >/dev/null
+            ./kingo mode >/dev/null
+            ./kingo memory >/dev/null
+            [ "$(grep '^KINGO_MODE=' .env.local | cut -d= -f2)" = "$m" ] || { echo "FAIL: .env.local does not say KINGO_MODE=$m"; cat .env.local; exit 1; }
+            case "$m" in
+              abp|n8n|langflow)
+                if ${{ matrix.engine }} ps -a --format '{{.Names}}' | grep -q '^kingo-metabase$'; then
+                  echo "FAIL: the Metabase container survived the switch to $m"; exit 1
+                fi ;;
+            esac
+            if [ "$m" = abp ]; then
+              n=$(./kingo pull | grep -c 'already present' || true)
+              [ "$n" -ge 9 ] || { echo "FAIL: pull sees only $n images from inside abp mode"; exit 1; }
+            fi
+          done
+          ./kingo mode abp
+          ./kingo down
+          n=$(${{ matrix.engine }} ps -a --filter name=kingo- -q | wc -l | tr -d ' ')
+          [ "$n" = 0 ] || { echo "FAIL: $n kingo containers left after down from abp"; ${{ matrix.engine }} ps -a; exit 1; }
+          if ${{ matrix.engine }} network ls --format '{{.Name}}' | grep -q '^kingo_default$'; then
+            echo "FAIL: the kingo_default network survived down"; exit 1
+          fi
+          KINGO_MODE=n8n ./kingo up
+          KINGO_MODE=n8n ./kingo smoke
+          KINGO_MODE=n8n ./kingo down
+          # leave the runner in full mode for the USB step (it needs the hub image)
+          ./kingo mode full
+
       - name: Offline USB path — bundle, verify, wipe, load back
         timeout-minutes: 15
         # Issue #5: bundle/load were the only student-facing commands no
@@ -196,8 +243,8 @@ jobs:
         # and those are exactly the runs whose logs we need most.
         if: failure() || cancelled()
         run: |
-          ${{ matrix.engine }} compose ps || true
-          ${{ matrix.engine }} compose logs --tail=80 || true
+          ${{ matrix.engine }} compose --profile full ps || true
+          ${{ matrix.engine }} compose --profile full logs --tail=80 || true
 
       - name: Tear down
         if: always()

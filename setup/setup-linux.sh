@@ -50,6 +50,56 @@ pin_engine() {
   mv .env.local.tmp .env.local
 }
 
+# ── 0. Mode: which services this install runs ────────────────────────────────
+# A FRESH install gets abp (Langflow, n8n, CloudBeaver, PostgreSQL — the class
+# default, 4 GB of memory). An existing install keeps whatever it runs: a
+# re-run is the guides' repair step and must never take Jupyter or Metabase
+# away from anyone. "Existing" = a .env.local is there (every setup run pins
+# the engine into it, and a fresh clone has none), or kingo-* containers or
+# kingo_* volumes exist (a stack that is merely `down` keeps its volumes).
+# A preset KINGO_MODE wins on a fresh install — that is how a colleague's
+# course installs Langflow-only:  KINGO_MODE=langflow bash setup/setup-linux.sh
+# (On WSL nothing is resized: Windows gives Ubuntu half the laptop's memory,
+# and hands back what the containers do not use.)
+# The mode is written to .env.local together with the engine (after step 1):
+# a run that stops early — no Homebrew yet, say — must leave no half-made
+# .env.local that turns the re-run into an "existing" install.
+pin_local() { # VAR value — rewrite one line of .env.local (the same way pin_engine does)
+  { [ -f .env.local ] && grep -v "^$1=" .env.local || true; } > .env.local.tmp
+  echo "$1=$2" >> .env.local.tmp
+  mv .env.local.tmp .env.local
+}
+existing_install() {
+  [ -f .env.local ] && return 0
+  local e
+  for e in docker podman; do
+    command -v "$e" >/dev/null 2>&1 || continue
+    [ -n "$("$e" ps -a --filter name=kingo- -q 2>/dev/null || true)" ] && return 0
+    [ -n "$("$e" volume ls -q --filter name=kingo_ 2>/dev/null || true)" ] && return 0
+  done
+  return 1
+}
+MODES="full abp bi langflow n8n"
+FRESH_INSTALL=0
+if existing_install; then
+  # `|| true`: under pipefail a .env.local without the line (every install from
+  # before modes) makes grep exit 1, which would end the script right here.
+  MODE="$(grep '^KINGO_MODE=' .env.local 2>/dev/null | tail -1 | cut -d= -f2 || true)"
+  [ -n "$MODE" ] || MODE=full
+  if [ -n "${KINGO_MODE:-}" ] && [ "$KINGO_MODE" != "$MODE" ]; then
+    say "This install already exists — keeping its mode ($MODE), not KINGO_MODE=$KINGO_MODE from the command line. Switch afterwards with: ./kingo mode $KINGO_MODE"
+  else
+    say "This install already exists — keeping its mode ($MODE). Lighter or heavier: ./kingo mode"
+  fi
+  unset KINGO_MODE   # from here on .env.local decides (kingo lets the environment override it)
+else
+  FRESH_INSTALL=1
+  MODE="${KINGO_MODE:-abp}"
+  case " $MODES " in *" $MODE "*) ;; *) echo "ERROR: KINGO_MODE=$MODE is not a mode — the modes are: $MODES"; exit 1 ;; esac
+  say "Mode: $MODE — $(KINGO_MODE=$MODE ./kingo mode 2>/dev/null | head -1 | sed 's/^Mode: [a-z0-9]* — //')   (change it later: ./kingo mode)"
+fi
+
+
 # ── 1. Engine: keep a running stack's engine; else use a running Docker;
 #      else install Podman ───────────────────────────────────────────────────
 # Many students arrive with Docker Desktop from another course. That is fine:
@@ -58,7 +108,11 @@ pin_engine() {
 #
 # Re-running setup must never flip a working install to the other engine —
 # that would strand the class data in the old engine's volumes. So if the
-# stack is already running somewhere, that engine wins, full stop.
+# stack is already running somewhere, that engine wins, full stop — and an
+# engine .env.local already names is kept even while its stack is down (a
+# downed Podman stack next to a running Docker Desktop must not be re-created
+# under Docker, with empty volumes).
+PINNED_ENGINE="$(grep '^KINGO_ENGINE=' .env.local 2>/dev/null | tail -1 | cut -d= -f2 || true)"
 RUNNING_ENGINE=""
 for eng in docker podman; do
   if command -v "$eng" >/dev/null 2>&1 \
@@ -71,7 +125,13 @@ if [ -n "$RUNNING_ENGINE" ]; then
   say "The Kingo stack is already running under ${RUNNING_ENGINE} — keeping it. Nothing to install."
   command -v curl >/dev/null 2>&1 || { $SUDO apt-get update; $SUDO apt-get install -y curl; }
   pin_engine "$RUNNING_ENGINE"
-elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 \
+elif [ "$PINNED_ENGINE" = docker ] && command -v docker >/dev/null 2>&1; then
+  { docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; } \
+    || { echo "ERROR: this install uses Docker (see .env.local), but Docker is not running. Start Docker Desktop, wait until it says 'running', then re-run this script."; exit 1; }
+  say "This install uses Docker — keeping it. Nothing to install."
+  command -v curl >/dev/null 2>&1 || { $SUDO apt-get update; $SUDO apt-get install -y curl; }
+  pin_engine docker
+elif [ -z "$PINNED_ENGINE" ] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 \
    && docker compose version >/dev/null 2>&1; then
   say "Docker is already running — using it. Nothing to install."
   # kingo's health checks need curl; the Docker path installs nothing else.
@@ -184,6 +244,8 @@ else
 
   pin_engine podman
 fi
+# The mode from step 0, written next to the engine pin (see there for why not earlier).
+if [ "$FRESH_INSTALL" = 1 ]; then pin_local KINGO_MODE "$MODE"; fi
 
 # CI hook: stop after the engine + compose install. Lets ci.yml run this real
 # code on stock Ubuntu 24.04 (the field failed exactly here, 2026-08) without
@@ -192,6 +254,7 @@ if [ -n "${KINGO_SETUP_ENGINE_ONLY:-}" ]; then
   say "KINGO_SETUP_ENGINE_ONLY set — engine and compose are ready, stopping here."
   exit 0
 fi
+
 
 # ── 2. Ports, then images (USB bundle or download), then up and verify ───────
 say "Checking that no other software sits on Kingo's ports ..."
@@ -247,7 +310,7 @@ if [ -n "$BUNDLE" ]; then
   esac
 fi
 
-say "Making sure all container images are present (~10 GB download on a first run without the USB bundle) ..."
+say "Making sure all container images are present (~10 GB download on a first run without the USB bundle — every mode's images, so switching modes later never downloads) ..."
 ./kingo pull
 
 say "Starting the Kingo stack ..."
