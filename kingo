@@ -1562,7 +1562,9 @@ mode_memory_step() { # $1: mode — Podman on a Mac resizes the machine; every o
       if [ -n "${KINGO_MEMORY_MB:-}" ]; then warn "memory is pinned to $(gb "$want") (./kingo memory) but $1 mode wants $(gb "$floor") or more — expect it to be slow"
       else warn "$1 mode wants $(gb "$floor") or more, but this Mac cannot spare that (the machine gets $(gb "$want")) — expect it to be slow; lighter: ./kingo mode"; fi
     fi
-    resize_machine "$want" || true
+    if ! resize_machine "$want"; then   # declined (foreign containers) or failed — both already said so
+      echo "$1 mode goes on with the memory the machine has — './kingo memory' shows the effect; './kingo mode $1' later asks again."
+    fi
     return 0
   fi
   budget=$(budget_mb)
@@ -1632,7 +1634,13 @@ cmd_memory() {
       mem_report
       echo
       [ -n "${KINGO_MEMORY_MB:-}" ] && echo "Pinned to $(gb "$KINGO_MEMORY_MB") in .env.local — './kingo memory auto' lets each mode choose again."
-      if podman_mac; then echo "Change it: ./kingo memory 5   (resizes the podman machine — stops ALL containers on this Mac for a minute)"
+      if podman_mac; then
+        # Below the floor mem_report has just named the number to type — a second, different example next to it misleads.
+        b=$(budget_mb); floor=$(mode_floor_mb "$KINGO_MODE"); host=$(host_mem_mb)
+        if [ -z "$b" ] || [ "$b" -ge "$floor" ]; then
+          want=$((floor + 1024)); if [ -n "$host" ] && [ "$want" -gt $((host - 3072)) ]; then want=$((host - 3072)); fi
+          echo "Change it: ./kingo memory $(gb_num "$want")   (any number of GB; resizes the podman machine — stops ALL containers on this Mac for a minute)"
+        fi
       elif is_wsl; then b=$(budget_mb); { [ -n "$b" ] && [ "$b" -lt "$(mode_floor_mb "$KINGO_MODE")" ]; } || wsl_memory_note   # else mem_report said it
       elif [ "$ENGINE" = docker ] && [ "$(uname -s)" = Darwin ]; then echo "Change it in Docker Desktop → Settings → Resources → Memory (Apply & restart stops ALL your containers)."
       else echo "All of this computer's memory is available to the containers — nothing to set."; fi
