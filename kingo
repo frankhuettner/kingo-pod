@@ -406,7 +406,7 @@ cmd_down() {
 
 cmd_status() {
   select_engine
-  local all_up=1 any_up=0 s name suffix port path want st off
+  local n_up=0 n_starting=0 n_down=0 starting="" running s name suffix port path want st off
   off="$(off_services)"
   if [ -n "$off" ]; then
     echo "Mode: $KINGO_MODE — $(services_on) services on. Off: $off   (./kingo mode full turns them on)"
@@ -416,26 +416,37 @@ cmd_status() {
     echo "Mode: full — all 9 services."
   fi
   printf '%-14s %-8s %s\n' "SERVICE" "STATUS" "URL"
+  # A container that runs but does not answer yet is "starting", not DOWN: the
+  # pre-modes `update` returned before the services were healthy, and "DOWN —
+  # try ./kingo restart" a few seconds later sent a student (and Frank) into a
+  # restart loop that took everything down again. DOWN = no running container.
+  running=" $( { $ENGINE ps --filter name=kingo- --format '{{.Names}}' 2>/dev/null || true; } | tr '\n' ' ') "
   for s in "${SERVICE_TABLE[@]}"; do
     IFS='|' read -r name suffix port path want <<<"$s"
     [ "$path" = "-" ] && continue
     service_active "$name" || continue
     # status is lenient (any answer = up); smoke enforces exact codes.
-    if [ "$path" = "tcp" ]; then
-      if check "$port" tcp; then st="up"; any_up=1; else st="DOWN"; all_up=0; fi
-      printf '%-14s %-8s localhost:%s\n' "$name" "$st" "$port"
+    if { [ "$path" = tcp ] && check "$port" tcp; } || { [ "$path" != tcp ] && check "$port" "$path" '[0-9]{3}'; }; then
+      st="up"; n_up=$((n_up + 1))
     else
-      if check "$port" "$path" '[0-9]{3}'; then st="up"; any_up=1; else st="DOWN"; all_up=0; fi
-      printf '%-14s %-8s http://localhost:%s\n' "$name" "$st" "$port"
+      case "$running" in
+        *" kingo-$(compose_name "$name") "*) st="starting"; n_starting=$((n_starting + 1)); starting="${starting:+$starting, }$name" ;;
+        *) st="DOWN"; n_down=$((n_down + 1)) ;;
+      esac
     fi
+    if [ "$path" = tcp ]; then printf '%-14s %-8s localhost:%s\n' "$name" "$st" "$port"
+    else printf '%-14s %-8s http://localhost:%s\n' "$name" "$st" "$port"; fi
   done
-  if [ "$all_up" != 1 ]; then
+  if [ "$n_starting" -gt 0 ] || [ "$n_down" -gt 0 ]; then
     echo
-    if [ "$any_up" = 0 ]; then
+    if [ "$n_down" = 0 ]; then
+      echo "Still starting: $starting — give them a minute, then: ./kingo status   (not up after a few minutes? ./kingo logs)"
+    elif [ "$n_up" = 0 ] && [ "$n_starting" = 0 ]; then
       # 'restart' after 'down' is a silent no-op — a stopped stack needs 'up'.
       echo "Everything is down — the stack is probably just stopped. Start it: ./kingo up"
     else
-      echo "Something is down. Try: ./kingo restart   (details: ./kingo logs)"
+      # `up` starts a stopped container and recreates a missing one; `restart` does neither.
+      echo "Some services are not running. Start them: ./kingo up   (details: ./kingo logs)"
     fi
   fi
 }
