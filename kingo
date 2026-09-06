@@ -1511,7 +1511,9 @@ small_host_hint() { # one nudge, only where it helps — the end of up / update 
       echo
       echo "NOTE: still slow? $(host_phrase) of memory. One tool at a time needs less:"
       echo "      ./kingo mode langflow ($(gb "$(mode_mem_mb langflow)"))   or   ./kingo mode n8n ($(gb "$(mode_mem_mb n8n)"))" ;;
+    *) return 0 ;;
   esac
+  echo "      Everything else competes for the same memory — a browser with dozens of tabs alone takes 2–3 GB: close what you do not need."
 }
 set_local() { # $1: VAR  $2: value ('' = remove) — rewrite ONE line of .env.local and export it now
   { [ -f .env.local ] && grep -v "^$1=" .env.local || true; } > .env.local.tmp

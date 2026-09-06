@@ -194,7 +194,7 @@ what to do:
 | I have Docker Desktop, but setup installed Podman | Docker wasn't running during setup. Both work — no need to change anything. To switch to Docker anyway: `./kingo down` (stops the Podman stack **first**), then `echo KINGO_ENGINE=docker >> .env.local`, then `./kingo up`. |
 | `Podman has no ready machine` / Podman won't start | Run `podman machine start`, then `./kingo up`. Still broken: `podman machine stop`, then `podman machine start`. |
 | `Docker is installed but not running` | Open the Docker Desktop app, wait until it says "running", try again. |
-| Mac feels slow / fans spin (8 GB Macs) | Run a lighter [mode](#modes-which-services-run): `./kingo mode abp` (4 GB) — or, for one tool at a time, `./kingo mode langflow` (3.5 GB) or `./kingo mode n8n` (2.5 GB). `./kingo down` when you are not using the stack also helps. |
+| Mac feels slow / fans spin (8 GB Macs) | Run a lighter [mode](#modes-which-services-run): `./kingo mode abp` (4 GB) — or, for one tool at a time, `./kingo mode langflow` (3.5 GB) or `./kingo mode n8n` (2.5 GB). The containers keep their memory no matter what, so everything else on the Mac shares the rest — above all a browser with dozens of tabs, which alone can take 2–3 GB (the Langflow and n8n tabs count too): close what you do not need. `./kingo down` when you are not using the stack also helps. |
 | Anything else | `./kingo down`, then `./kingo up`. If it persists: screenshot the error and ask the instructor / TA. |
 
 ## FAQ

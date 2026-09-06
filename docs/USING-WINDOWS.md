@@ -206,7 +206,7 @@ the usual suspects and tells you what to do:
 | `The Kingo stack is ALREADY RUNNING under your other engine` | Nothing is broken — the stack is up under your other container engine. Follow the two commands the message prints. |
 | `ALL of Kingo's ports are busy` | The stack is most likely **already running** (possibly under your other engine). Run `./kingo status` — if services show `up`, you're done, nothing is wrong. |
 | I have Docker Desktop, but setup installed Podman | Docker wasn't running or its WSL integration was off during setup. Both engines work — no need to change anything. To switch anyway: turn on WSL integration for Ubuntu, then `./kingo down` (stops the Podman stack **first**), then `echo KINGO_ENGINE=docker >> .env.local`, then `./kingo up`. |
-| Laptop feels slow (8 GB machines) | Run a lighter [mode](#modes-which-services-run): `./kingo mode abp` — or, for one tool at a time, `./kingo mode langflow` or `./kingo mode n8n`. `./kingo down` when you are not using the stack also helps. |
+| Laptop feels slow (8 GB machines) | Run a lighter [mode](#modes-which-services-run): `./kingo mode abp` — or, for one tool at a time, `./kingo mode langflow` or `./kingo mode n8n`. Windows, the containers and everything you run share the same 8 GB — above all a browser with dozens of tabs, which alone can take 2–3 GB (the Langflow and n8n tabs count too): close what you do not need. `./kingo down` when you are not using the stack also helps. |
 | Ubuntu terminal says `./kingo: No such file or directory` | You're in the wrong folder. Run `cd ~/kingo-pod` first. |
 | Anything else | `./kingo down`, then `./kingo up`. If it persists: screenshot the error and ask the instructor / TA. |
 
