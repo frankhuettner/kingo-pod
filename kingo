@@ -1493,7 +1493,7 @@ mem_report() { # doctor / memory: budget vs the mode's need, then live use
   if [ -n "$list" ]; then echo "       in use right now: ${total} MB ($list)"
   elif [ -n "$( { $ENGINE ps -q --filter name=kingo- 2>/dev/null || true; } | head -1)" ]; then
     echo "       in use right now: could not read it ($ENGINE stats failed)"   # containers run, stats did not
-  else echo "       in use right now: nothing — the stack is down"; fi
+  else echo "       in use right now: nothing — no Kingo container runs under $ENGINE"; fi   # down, or running under the other engine
 }
 small_host() { # an 8 GB laptop? (WSL: Windows gives Ubuntu under 5 GB, i.e. an 8 GB laptop at the default split)
   local h; h=$(host_mem_mb); [ -n "$h" ] || return 1
