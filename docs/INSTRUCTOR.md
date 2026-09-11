@@ -24,7 +24,7 @@ that second page is the one students come back to (addresses and logins, the
   those still setting up.
 - **Minimum specs**: 8 GB RAM (16 GB recommended), ~20 GB free disk — ~30 GB
   during a USB setup, where the ~14 GB file and the images it loads coexist.
-  Fresh installs run the **abp mode** (Langflow, n8n, CloudBeaver, PostgreSQL)
+  Fresh installs run the **abp mode** (Langflow, n8n, CloudBeaver, Qdrant, PostgreSQL)
   in a 4 GB machine; the full stack needs 6 GB under real use, which an 8 GB
   laptop cannot give. See "Modes" below for the numbers and the announcement.
 - **Classroom Wi-Fi fallback (USB bundle)**: if students show up without having
@@ -332,7 +332,7 @@ keeps the volumes, and `./kingo mode full` brings a service back with its data.
 
 | Mode | Services | Containers, typical / peak | Machine floor / target |
 |---|---|---|---|
-| `abp` (fresh installs) | Langflow, n8n, CloudBeaver, PostgreSQL | 2.8 / 4.1 GB | 3.5 / **4 GB** |
+| `abp` (fresh installs) | Langflow, n8n, CloudBeaver, Qdrant, PostgreSQL | 2.8 / 4.1 GB | 3.5 / **4 GB** |
 | `full` | all 9 | 5.0 / 7.6 GB | 6 / **6 GB** |
 | `bi` | JupyterLab, JupyterHub, Jupyter MCP, Metabase, CloudBeaver, Qdrant, PostgreSQL | 2.8 / 4.6 GB | 4 / **4.5 GB** |
 | `langflow` | Langflow, PostgreSQL | 1.8 / 2.5 GB | 3 / **3.5 GB** |
@@ -348,6 +348,11 @@ takes ~0.8 GB on top, and the machine has **no swap**: below the floor the
 kernel kills the Langflow worker or Metabase outright. The floors live in one
 table in `kingo` (`mode_mem_mb` / `mode_floor_mb`) — re-measure with
 `./kingo memory` (budget + live use per container) before changing them.
+Qdrant joined `abp` on 2026-09-11 (the BioFuture RAG flow runs in Langflow,
+which `abp` runs, so its retrieval half has to run there too); measured the
+same day it holds 31 MB (a 270-chunk collection — `./kingo memory`), so it
+rides in `abp`'s existing budget and the floor / target are unchanged from
+v1.1.0.
 
 - **An 8 GB Mac**: the podman machine's memory is a fixed reservation once
   warmed up (no balloon device), so only a smaller machine gives macOS anything

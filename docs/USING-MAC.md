@@ -29,7 +29,7 @@ for your own Mac:
 | PostgreSQL | `localhost:5432` | `student` / `kingo2026` (db: `classroom`) |
 
 Not all of these run at the same time: in **abp mode** — what setup installs —
-only Langflow, n8n, CloudBeaver and PostgreSQL are on, and
+only Langflow, n8n, CloudBeaver, Qdrant and PostgreSQL are on, and
 `./kingo credentials` marks the others as *off*. See [Modes](#modes-which-services-run)
 for switching.
 
@@ -93,7 +93,7 @@ others are simply off (nothing is deleted; every mode keeps your data):
 
 | Mode | What runs | Memory it wants |
 |---|---|---|
-| `abp` (what setup installs) | Langflow, n8n, CloudBeaver, PostgreSQL | 4 GB |
+| `abp` (what setup installs) | Langflow, n8n, CloudBeaver, Qdrant, PostgreSQL | 4 GB |
 | `full` | all nine services | 6 GB |
 | `bi` | JupyterLab, JupyterHub, Jupyter MCP, Metabase, CloudBeaver, Qdrant, PostgreSQL | 4.5 GB |
 | `langflow` | Langflow, PostgreSQL | 3.5 GB |

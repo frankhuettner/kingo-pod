@@ -211,7 +211,7 @@ mode_floor_mb() { case "$1" in full) echo 6144 ;; abp) echo 3584 ;; bi) echo 409
 mode_describe() {
   case "$1" in
     full)     echo "all 9 services" ;;
-    abp)      echo "Langflow, n8n, CloudBeaver, PostgreSQL" ;;
+    abp)      echo "Langflow, n8n, CloudBeaver, Qdrant, PostgreSQL" ;;
     bi)       echo "JupyterLab, JupyterHub, Jupyter MCP, Metabase, CloudBeaver, Qdrant, PostgreSQL" ;;
     langflow) echo "Langflow, PostgreSQL" ;;
     n8n)      echo "n8n, PostgreSQL" ;;
@@ -224,8 +224,9 @@ service_modes() {
     Langflow)    echo "full abp langflow" ;;
     n8n)         echo "full abp n8n" ;;
     CloudBeaver) echo "full abp bi" ;;
+    Qdrant|"Qdrant gRPC") echo "full abp bi" ;;
     PostgreSQL)  echo "$MODES" ;;
-    *)           echo "full bi" ;;   # JupyterLab, JupyterHub, Jupyter MCP, Metabase, Qdrant (+ its gRPC port)
+    *)           echo "full bi" ;;   # JupyterLab, JupyterHub, Jupyter MCP, Metabase
   esac
 }
 service_active() { case " $(service_modes "$1") " in *" $KINGO_MODE "*) return 0 ;; esac; return 1; }
@@ -1505,8 +1506,8 @@ small_host_hint() { # one nudge, only where it helps — the end of up / update 
     full|bi)
       echo
       echo "NOTE: $(host_phrase) of memory and runs $KINGO_MODE mode ($(mode_describe "$KINGO_MODE")) — that is why it feels slow."
-      echo "      Lighter: ./kingo mode abp   (keeps Langflow, n8n, CloudBeaver and the database; Jupyter, Metabase"
-      echo "      and Qdrant go off — ./kingo mode full brings them back; nothing is deleted)" ;;
+      echo "      Lighter: ./kingo mode abp   (keeps Langflow, n8n, CloudBeaver, Qdrant and the database; Jupyter"
+      echo "      and Metabase go off — ./kingo mode full brings them back; nothing is deleted)" ;;
     abp)
       echo
       echo "NOTE: still slow? $(host_phrase) of memory. One tool at a time needs less:"

@@ -18,7 +18,7 @@ never had Homebrew) — nothing near the 10 GB of the normal path.
 
 - An **Apple-Silicon Mac** (M1 or newer — any Mac from 2021 on).
 - **8 GB RAM** (16 GB recommended) — setup installs the class's *abp* set of
-  services (Langflow, n8n, CloudBeaver, database), which needs 4 GB; the
+  services (Langflow, n8n, CloudBeaver, Qdrant, database), which needs 4 GB; the
   everyday guide explains how to switch sets later — and about **30 GB free
   disk space** during
   setup: the ~14 GB image file and the ~14 GB of images it loads sit side by

@@ -42,7 +42,7 @@ services:
     image: qdrant/qdrant:v1.19.0
     container_name: kingo-qdrant
     restart: unless-stopped
-    profiles: [full, bi]
+    profiles: [full, abp, bi]
     ports:
       - "127.0.0.1:${KINGO_PORT_QDRANT:-6333}:6333"
       - "127.0.0.1:${KINGO_PORT_QDRANT_GRPC:-6334}:6334"

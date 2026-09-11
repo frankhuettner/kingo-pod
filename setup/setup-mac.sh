@@ -42,7 +42,7 @@ pin_engine() {
 
 
 # ── 0. Mode: which services this install runs ────────────────────────────────
-# A FRESH install gets abp (Langflow, n8n, CloudBeaver, PostgreSQL — the class
+# A FRESH install gets abp (Langflow, n8n, CloudBeaver, Qdrant, PostgreSQL — the class
 # default, a 4 GB machine). An existing install keeps whatever it runs: a
 # re-run is the guides' repair step and must never take Jupyter or Metabase
 # away from anyone. "Existing" = a .env.local is there (every setup run pins
