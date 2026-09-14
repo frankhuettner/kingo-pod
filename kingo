@@ -358,11 +358,47 @@ setup_metabase() {
 }
 
 # ── Commands ─────────────────────────────────────────────────────────────────
+# A "ghost" container: its name is still reserved in podman's storage layer
+# although podman itself no longer knows it — left behind when Ubuntu/WSL was
+# shut down or rebooted while podman was mid-write. Seen 2026-09-14: a
+# student's `up` died with 'creating container storage: the container name
+# "kingo-jupyter-mcp" is already in use', and the error survived an Ubuntu
+# reinstall (the storage lived on in a second WSL distro). A ghost can never
+# run or be started; all it does is block its name, so compose refuses to
+# create the service. Podman-only — Docker has no separate storage layer with
+# this failure mode. Provably safe: we act only on kingo-* names that are
+# ABSENT from `podman ps -a` (a name podman still manages is never touched)
+# and PRESENT in `podman ps -a --external` (so it really is in storage). Since
+# podman 3.0 `rm -f` removes such "unusable" containers itself (the old
+# `rm --storage` is gone). If podman cannot list containers we cannot prove
+# anything: touch nothing, and let `up` fail with its normal message.
+heal_ghost_containers() { # prints the kingo-* names it freed, one per line
+  [ "$ENGINE" = podman ] || return 0
+  local known all id name
+  known="$(podman ps -a --format '{{.Names}}' 2>/dev/null)" || return 0
+  all="$(podman ps -a --external --format '{{.ID}} {{.Names}}' 2>/dev/null)" || return 0
+  known=" $(printf '%s\n' "$known" | tr '\n' ' ') "
+  printf '%s\n' "$all" | while read -r id name; do
+    [ -n "$id" ] || continue
+    case "$name" in kingo-*) ;; *) continue ;; esac   # only our own containers, never another course's
+    case "$known" in *" $name "*) continue ;; esac    # podman still manages it — hands off
+    # Matched by name, removed by ID: the ID is what podman itself names in
+    # its error ("already in use by <id>"), and it cannot be ambiguous.
+    podman rm -f "$id" >/dev/null 2>&1 && printf '%s\n' "$name"
+  done
+  return 0
+}
+heal_ghosts_report() { # run the healing and tell the student what it freed
+  local freed; freed="$(heal_ghost_containers)"
+  [ -z "$freed" ] || echo "Cleared stale container storage left by an unclean shutdown: $(printf '%s\n' "$freed" | tr '\n' ' ')"
+}
+
 cmd_up() {
   select_engine; ensure_ready
   preflight_ports
   echo "Engine: $ENGINE. Starting the Kingo stack ..."
   stop_off_services
+  heal_ghosts_report
   # `up` builds the local jupyterhub image only if it's missing (first run);
   # use `kingo update` to force a rebuild after changing the Dockerfile.
   compose up -d
@@ -1882,6 +1918,7 @@ case "${1:-help}" in
                      # './kingo mode full' in class never downloads.
                      cmd_pull
                      compose_all build
+                     heal_ghosts_report
                      compose up -d
                      # Name the version students landed on: it is what support
                      # asks for, and it makes "did the update take?" answerable.

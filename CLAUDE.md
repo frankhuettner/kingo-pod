@@ -80,6 +80,18 @@ It was ported from the old `kingo-vm` repo.
   deliberately NOT auto-healed. Never advise a blanket engine/machine restart
   in guides or error text without the "stops ALL your containers" warning —
   students may run containers from other courses.
+- **Ghost containers are healed before every `up`/`update`**
+  (`heal_ghost_containers`): podman can keep a `kingo-*` NAME reserved in its
+  storage layer after an unclean shutdown (a reboot / `wsl --shutdown`
+  mid-write) while the container is gone from `podman ps -a` — `compose up`
+  then dies with `creating container storage: the container name "kingo-…" is
+  already in use`, and the ghost even survives an Ubuntu reinstall when the
+  storage lives on in a second WSL distro (a student, 2026-09-14). The healing
+  removes ONLY names that are absent from `podman ps -a` AND present in
+  `podman ps -a --external`, via `podman rm -f` (`rm --storage` was removed in
+  podman 3.0 — never reintroduce it); a name podman still manages is never
+  touched, and if podman cannot list containers it touches nothing. Podman-only;
+  a no-op on Docker.
 - **`langflow-data` is mounted `:z`** (`compose.yml`): Langflow copies its
   avatar SVGs out of the image into `LANGFLOW_CONFIG_DIR` with
   `shutil.copytree`, which copies extended attributes — `security.selinux`
