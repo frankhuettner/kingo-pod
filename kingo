@@ -59,7 +59,14 @@ esac
 # refuses to run then: the line it writes would be silently overridden.
 MODES="full abp bi langflow n8n"
 MODE_FROM_ENV=0
-printf '%s\n' "$_cli_overrides" | grep -q '^KINGO_MODE=' && MODE_FROM_ENV=1
+# Matched with `case`, never `printf | grep -q`: grep -q exits at its first
+# match and SIGPIPEs the printf, which `set -o pipefail` then turns into a
+# FAILED pipeline — so a large enough environment makes a present marker read
+# as absent (reproduced on bash 3.2 and 5). The leading newline anchors the
+# pattern to the start of a line, as grep's '^' did.
+case $'\n'"$_cli_overrides"$'\n' in
+  *$'\n'KINGO_MODE=*) MODE_FROM_ENV=1 ;;
+esac
 KINGO_MODE="${KINGO_MODE:-full}"
 case " $MODES " in
   *" $KINGO_MODE "*) ;;
@@ -359,38 +366,88 @@ setup_metabase() {
 
 # ── Commands ─────────────────────────────────────────────────────────────────
 # A "ghost" container: its name is still reserved in podman's storage layer
-# although podman itself no longer knows it — left behind when Ubuntu/WSL was
-# shut down or rebooted while podman was mid-write. Seen 2026-09-14: a
-# student's `up` died with 'creating container storage: the container name
-# "kingo-jupyter-mcp" is already in use', and the error survived an Ubuntu
-# reinstall (the storage lived on in a second WSL distro). A ghost can never
-# run or be started; all it does is block its name, so compose refuses to
-# create the service. Podman-only — Docker has no separate storage layer with
-# this failure mode. Provably safe: we act only on kingo-* names that are
-# ABSENT from `podman ps -a` (a name podman still manages is never touched)
-# and PRESENT in `podman ps -a --external` (so it really is in storage). Since
-# podman 3.0 `rm -f` removes such "unusable" containers itself (the old
-# `rm --storage` is gone). If podman cannot list containers we cannot prove
-# anything: touch nothing, and let `up` fail with its normal message.
-heal_ghost_containers() { # prints the kingo-* names it freed, one per line
+# although podman itself no longer manages it — left behind when Ubuntu/WSL or
+# the podman machine was shut down while podman was mid-write. Seen 2026-09-14:
+# a student's `up` died with 'creating container storage: the container name
+# "kingo-jupyter-mcp" is already in use ... by an external entity', repeatedly,
+# and reinstalling Ubuntu did not help (the distro, and podman's storage in it,
+# survive a Store reinstall). A ghost can never run; all it does is block its
+# name, so compose refuses to create the service. Podman-only — Docker has no
+# separate storage layer with this failure mode. Provably safe: we act only on
+# kingo-* names that are ABSENT from `podman ps -a` (a name podman still
+# manages is never touched, ours or anyone's) and PRESENT in
+# `podman ps -a --external` (so it really is in storage). Since podman 3.0 a
+# plain `rm` removes such external containers itself; `rm --storage` survives
+# only as a hidden no-op kept for compatibility (Linux only — the macOS remote
+# client rejects the flag), so it adds nothing over `rm`. If podman cannot list
+# containers we cannot prove anything: touch nothing, and let `up` fail with
+# its normal message.
+heal_ghost_containers() { # frees what it can; what it cannot goes to GHOSTS_STUCK
+  GHOSTS_FREED=""; GHOSTS_STUCK=""; GHOSTS_STUCK_ERR=""
   [ "$ENGINE" = podman ] || return 0
-  local known all id name
+  local known all id name err line
   known="$(podman ps -a --format '{{.Names}}' 2>/dev/null)" || return 0
   all="$(podman ps -a --external --format '{{.ID}} {{.Names}}' 2>/dev/null)" || return 0
   known=" $(printf '%s\n' "$known" | tr '\n' ' ') "
-  printf '%s\n' "$all" | while read -r id name; do
+  # Fed by <<< and NOT by a pipe: a `while` on the right-hand side of a pipe
+  # runs in a subshell, and everything collected here would be lost at `done`.
+  while read -r id name; do
     [ -n "$id" ] || continue
     case "$name" in kingo-*) ;; *) continue ;; esac   # only our own containers, never another course's
     case "$known" in *" $name "*) continue ;; esac    # podman still manages it — hands off
-    # Matched by name, removed by ID: the ID is what podman itself names in
-    # its error ("already in use by <id>"), and it cannot be ambiguous.
-    podman rm -f "$id" >/dev/null 2>&1 && printf '%s\n' "$name"
-  done
+    # Matched by name, removed by ID: the ID is what podman itself names in its
+    # error ("already in use by <id>"), and an ID cannot be ambiguous.
+    # Plain `rm` first, `rm -f` second — they fail in different places, so
+    # together they clear more than either alone. Plain `rm` refuses when
+    # podman's own mount count says the layer is mounted (the usual ghost: a
+    # shutdown mid-mount) and otherwise deletes the whole layer directory,
+    # leftovers included. `rm -f` forces the mount count down but then rmdir's
+    # the mount point, which fails with "directory not empty" on exactly those
+    # leftovers (a student, 2026-09-15: `rm -f` failed the same way every time).
+    # Neither touches a volume; the layer directory holds no class data.
+    if podman rm "$id" >/dev/null 2>&1 || err="$(podman rm -f "$id" 2>&1 >/dev/null)"; then
+      GHOSTS_FREED="${GHOSTS_FREED:+$GHOSTS_FREED }$name"
+    else
+      # podman found it but could not delete its storage either way — leftover
+      # FILES in a dead container's mount point that its own mount count still
+      # calls mounted, not a live mount. podman never rm -rf's inside its
+      # storage graph, and neither do we: report it precisely instead.
+      GHOSTS_STUCK="${GHOSTS_STUCK:+$GHOSTS_STUCK }$name"
+      if [ -z "$GHOSTS_STUCK_ERR" ]; then
+        # podman's stderr can carry logrus noise before the real line.
+        line="$(printf '%s\n' "$err" | LC_ALL=C grep -m1 '^Error:' || true)"
+        [ -n "$line" ] || line="$(printf '%s\n' "$err" | tail -1)"
+        GHOSTS_STUCK_ERR="$line"
+      fi
+    fi
+  done <<<"$all"
   return 0
 }
-heal_ghosts_report() { # run the healing and tell the student what it freed
-  local freed; freed="$(heal_ghost_containers)"
-  [ -z "$freed" ] || echo "Cleared stale container storage left by an unclean shutdown: $(printf '%s\n' "$freed" | tr '\n' ' ')"
+heal_ghosts_report() { # ONE report for the whole stack, however many ghosts there are
+  heal_ghost_containers
+  [ -z "$GHOSTS_FREED" ] || echo "Cleared stale container storage left by an unclean shutdown: $GHOSTS_FREED"
+  [ -n "$GHOSTS_STUCK" ] || return 0
+  local blocking="" active n
+  # Only a ghost whose service runs in THIS mode can stop the boot: a
+  # kingo-jupyter-mcp ghost blocks nothing while abp mode is on.
+  active=" $(mode_services_expected "$KINGO_MODE") "
+  for n in $GHOSTS_STUCK; do
+    case "$active" in *" ${n#kingo-} "*) blocking="${blocking:+$blocking }$n" ;; esac
+  done
+  warn "podman cannot remove stale container storage for: $GHOSTS_STUCK"
+  echo "       podman says: $GHOSTS_STUCK_ERR" >&2
+  echo "       Those are leftover files in a dead container's own directory, not anything still running:" >&2
+  echo "       restarting WSL or the podman machine does NOT clear it, and deleting it loses none of your work." >&2
+  echo "       Send this message to your instructor — the fix is a one-line cleanup of the directory named" >&2
+  echo "       above (docs/INSTRUCTOR.md, \"Stale container storage\")." >&2
+  echo "       Do NOT run 'podman system reset' or 'podman machine reset': they delete every image, container" >&2
+  echo "       and volume on this machine — your flows, workflows, notebooks and databases included." >&2
+  # Say it here or not at all: compose would fail on this very name seconds
+  # later, and its generic error would bury everything above.
+  if [ -n "$blocking" ]; then
+    die "$blocking cannot start while that name is taken — the stack was not started. The cleanup above is the fix."
+  fi
+  return 0
 }
 
 cmd_up() {
@@ -411,6 +468,150 @@ cmd_up() {
   echo
   echo "Ready. Run 'kingo credentials' for all URLs and logins."
   small_host_hint
+}
+
+# `update` runs in two stages. Stage 1 (this process — the OLD script) fetches
+# the class files; but bash goes on executing the copy it already opened, so a
+# fix to kingo ITSELF would never run in the update that fetched it — a student
+# needed a second command for exactly that (2026-09-14). So when the fetch
+# really REPLACED this script, the process re-execs into the new one (stage 2),
+# which finishes the job. CLAUDE.md lists the guarantees this must keep; the
+# short version is that every step degrades to "images only" and is never fatal.
+update_env_keys() { # every name .env / .env.local assign, plus our own KINGO_*
+  local f
+  # The names the files carried BEFORE the fetch count too. This process
+  # sourced the OLD files with auto-export; a name the NEW .env no longer
+  # defines is therefore in our environment and in no list read from disk, so
+  # without this it would survive the exec and — shell env beating .env in
+  # compose — start the containers on a value the fetched files dropped.
+  [ -z "${_env_keys_before:-}" ] || printf '%s\n' "$_env_keys_before"
+  for f in ./.env ./.env.local; do
+    [ -f "$f" ] || continue
+    # `export NAME=` counts: bash sources it happily, so it reaches stage 2.
+    LC_ALL=C grep -oE '^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=' "$f" \
+      | LC_ALL=C sed -E 's/^[[:space:]]*(export[[:space:]]+)?//; s/=$//' || true
+  done
+  env | LC_ALL=C grep -oE '^KINGO_[A-Z0-9_]+' || true
+}
+update_scrub_env() { # leave exactly the environment a FRESH ./kingo update would see
+  # This process sourced .env/.env.local with auto-export (see the preamble), so
+  # every value from those files now sits in the environment looking like
+  # something the student typed — and they were read BEFORE the fetch. Handed on
+  # as-is, those stale values would beat the freshly fetched files (and
+  # MODE_FROM_ENV would fire for a mode nobody typed). So drop everything the
+  # files define and restore only what the shell really had at startup.
+  local k
+  for k in $(update_env_keys | sort -u); do
+    case "$k" in PATH|HOME|USER|SHELL|TERM|LANG|LC_ALL|PWD) continue ;; esac
+    unset "$k" 2>/dev/null || true
+  done
+  while IFS= read -r k; do
+    if [ -n "$k" ]; then export "$k"; fi
+  done <<<"$_cli_overrides"
+}
+update_is_stage2() { # a marker counts ONLY from the real environment, never from .env*
+  # `case`, not `printf | grep -q` — see the MODE_FROM_ENV note in the
+  # preamble: under pipefail a matching grep -q still reports failure once the
+  # producer is SIGPIPEd. Both newlines are part of the pattern, so the value
+  # must be exactly "2" (plain '^KINGO_UPDATE_STAGE=2' also matched "=20").
+  case $'\n'"$_cli_overrides"$'\n' in
+    *$'\n'KINGO_UPDATE_STAGE=2$'\n'*) return 0 ;;
+  esac
+  return 1
+}
+update_probe_ok() { # does the fetched script RUN? (`bash -n` only parses — the
+                    # preamble can still die on a value it no longer accepts)
+  local t="$KINGO_DIR/kingo"
+  ( update_scrub_env; bash "$t" help ) >/dev/null 2>&1
+}
+update_reexec() { # $1: the version seen BEFORE the fetch — stage 2 reports it as the "from"
+  local target="$KINGO_DIR/kingo"     # resolve before the scrub unsets KINGO_DIR
+  update_scrub_env
+  KINGO_UPDATE_STAGE=2 KINGO_UPDATE_FROM="$1" exec bash "$target" update
+}
+cmd_update() {
+  # Deliberately NO engine check before the fetch: a student whose engine is
+  # broken must still be able to pull the fix for it. cmd_pull gates the engine.
+  local _v_before _v_after _sig _tmp _git_err _git_say _pulled=""
+  if update_is_stage2; then
+    _v_before="${KINGO_UPDATE_FROM:-$(kingo_version)}"   # the fetch happened in stage 1
+  else
+    _v_before="$(kingo_version)"
+    _sig="$(cksum < "$KINGO_DIR/kingo" 2>/dev/null || true)"
+    # Read the env-file names while they are still the ones we sourced: after
+    # the fetch these files may define fewer, and update_scrub_env must unset
+    # what the OLD ones exported. (Global on purpose — update_env_keys reads it.)
+    _env_keys_before="$(update_env_keys | sort -u)"
+    # Newest class files first. git installs fetch+merge (split, so a network
+    # failure is never reported as a local edit); ZIP installs (the documented
+    # Mac path, no .git) sync the repo tarball over this folder — rsync replaces
+    # files by rename, so overwriting the running script is safe.
+    if [ -d .git ]; then
+      if ! git fetch --quiet 2>/dev/null; then
+        warn "could not reach GitHub (no network?) — updating images only"
+      elif _git_err="$(git merge --ff-only FETCH_HEAD 2>&1)"; then
+        _pulled=1
+      elif [ -n "$(git status --porcelain 2>/dev/null || true)" ]; then
+        warn "the newest class files could not be applied: this folder has local changes. Undo them (git checkout -- .) and re-run './kingo update' — updating images only for now"
+      else
+        # Clean tree, so the history diverged instead: a local commit, or main
+        # was rewritten. 'git checkout -- .' is a no-op then, and telling a
+        # student to run it would repeat the same advice on every future
+        # update while the folder can never take class files again. Give git's
+        # own reason — which is why the merge no longer runs --quiet 2>/dev/null
+        # — and route to the instructor, who has the recipe.
+        # git leads with several 'hint:' lines and names the cause last, so
+        # take the fatal/error line and fall back to the first non-empty one.
+        _git_say="$(printf '%s\n' "$_git_err" | LC_ALL=C grep -m1 -E '^(fatal|error):' || true)"
+        [ -n "$_git_say" ] || _git_say="$(printf '%s\n' "$_git_err" | LC_ALL=C grep -m1 . || true)"
+        warn "the newest class files could not be applied — updating images only for now."
+        [ -z "$_git_say" ] || echo "       git says: $_git_say" >&2
+        echo "       Your notebooks, flows and workflows are not affected. Send this message to your" >&2
+        echo "       instructor (docs/INSTRUCTOR.md, \"A folder that cannot update\")." >&2
+      fi
+    elif command -v rsync >/dev/null 2>&1; then
+      echo "Fetching the newest class files (this folder came from a ZIP, no git) ..."
+      _tmp="$(mktemp -d)"
+      if curl -fsSL -m 120 https://github.com/frankhuettner/kingo-pod/archive/refs/heads/main.tar.gz \
+           | tar xz -C "$_tmp" --strip-components=1 2>/dev/null; then
+        rsync -a "$_tmp"/ ./
+        echo "Class files updated."
+        _pulled=1
+      else
+        warn "could not download the class files (no network?) — updating images only"
+      fi
+      rm -rf "$_tmp"
+    else
+      warn "this folder was installed from a ZIP (no git) and rsync is missing — updating images only. For new class files, download the ZIP again (see the student guide)."
+    fi
+    # Re-exec ONLY when the fetch actually replaced this script. An up-to-date
+    # folder fetches fine and changes nothing, and restarting then would print a
+    # confusing second start on every single update.
+    if [ -n "$_pulled" ] && [ "$_sig" != "$(cksum < "$KINGO_DIR/kingo" 2>/dev/null || true)" ]; then
+      if update_probe_ok; then
+        echo "kingo itself was updated — continuing with the new version ..."
+        update_reexec "$_v_before"
+      else
+        warn "the updated kingo ($(kingo_version)) does not run on this machine — finishing this update with the current one. Please report this to your instructor."
+      fi
+    fi
+  fi
+  # Images and builds for EVERY mode, so a later './kingo mode full' in class
+  # never downloads.
+  cmd_pull
+  compose_all build
+  # Finish exactly like `up`: port preflight, off-mode cleanup, ghost healing,
+  # the health wait, first-run init and the status table. Ending at a bare
+  # `compose up -d` let an update report success while a service was still down.
+  cmd_up
+  # Name the version students landed on: it is what support asks for, and it
+  # makes "did the update take?" answerable.
+  _v_after="$(kingo_version)"
+  if [ "$_v_before" = "$_v_after" ]; then
+    echo "Stack updated — kingo-pod $_v_after (unchanged; images may still be newer)."
+  else
+    echo "Stack updated — kingo-pod $_v_before → $_v_after."
+  fi
 }
 
 # Tear the stack down WITHOUT the compose provider, using the engine CLI's own
@@ -1883,52 +2084,7 @@ case "${1:-help}" in
   langflow)          shift; cmd_langflow "$@" ;;
   bundle)            shift; cmd_bundle "${1:-}" ;;
   load)              shift; cmd_load "${1:-}" ;;
-  update)            select_engine; ensure_ready
-                     _v_before="$(kingo_version)"
-                     # Newest class files first. git installs pull; ZIP
-                     # installs (the documented Mac path, no .git) fetch the
-                     # repo tarball and sync it over this folder. rsync
-                     # replaces files via rename, so overwriting the very
-                     # script that is running here is safe (bash keeps
-                     # reading its already-open old copy). Never fatal:
-                     # offline just means "updating images only".
-                     if [ -d .git ]; then
-                       if ! git pull --ff-only 2>/dev/null; then
-                         if git status --porcelain 2>/dev/null | grep -qv '^??'; then
-                           warn "git pull could not update: files in this folder were changed locally — updating images only. To get the newest class files, undo the local edits (git checkout -- .) and re-run: ./kingo update"
-                         else
-                           warn "git pull failed (no network?) — updating images only"
-                         fi
-                       fi
-                     elif command -v rsync >/dev/null 2>&1; then
-                       echo "Fetching the newest class files (this folder came from a ZIP, no git) ..."
-                       _tmp="$(mktemp -d)"
-                       if curl -fsSL -m 120 https://github.com/frankhuettner/kingo-pod/archive/refs/heads/main.tar.gz \
-                            | tar xz -C "$_tmp" --strip-components=1 2>/dev/null; then
-                         rsync -a "$_tmp"/ ./
-                         echo "Class files updated."
-                       else
-                         warn "could not download the class files (no network?) — updating images only"
-                       fi
-                       rm -rf "$_tmp"
-                     else
-                       warn "this folder was installed from a ZIP (no git) and rsync is missing — updating images only. For new class files, download the ZIP again (see the student guide)."
-                     fi
-                     # Images and builds for EVERY mode, so a later
-                     # './kingo mode full' in class never downloads.
-                     cmd_pull
-                     compose_all build
-                     heal_ghosts_report
-                     compose up -d
-                     # Name the version students landed on: it is what support
-                     # asks for, and it makes "did the update take?" answerable.
-                     _v_after="$(kingo_version)"
-                     if [ "$_v_before" = "$_v_after" ]; then
-                       echo "Stack updated — kingo-pod $_v_after (unchanged; images may still be newer)."
-                     else
-                       echo "Stack updated — kingo-pod $_v_before → $_v_after."
-                     fi
-                     small_host_hint ;;
+  update)            cmd_update ;;
   reset)             select_engine; ensure_ready
                      echo "This DELETES all data (databases, notebooks, workflows) and starts fresh."
                      read -r -p "Type 'yes' to continue: " a

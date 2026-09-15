@@ -41,6 +41,56 @@ It was ported from the old `kingo-vm` repo.
   fatal offline (degrades to images-only). One command updates EVERY install
   kind; don't tell ZIP-era students to re-download by hand, and don't remove
   the tarball fallback while any of those folders may still exist.
+- **`kingo update` is two-stage: it re-execs ONCE when the fetch actually
+  replaced `kingo` itself** (`cmd_update` / `update_reexec`): bash keeps
+  executing the copy of the script it opened, so a fix living in `update`'s own
+  path (the ghost healing) would never run in the update that fetched it — a
+  student needed a second command for exactly that (2026-09-14). Properties,
+  keep ALL of them: re-exec only after a successful fetch AND only when
+  `cksum` of `kingo` CHANGED (a pull that is already up to date exits 0 and
+  changes nothing — re-execing then printed a confusing second start on every
+  update); only if the fetched script actually RUNS (`update_probe_ok` runs
+  `bash <new> help` in the scrubbed env — `bash -n` merely parses and misses a
+  preamble `die`, and its old warning told students to run a `./kingo version`
+  that could not parse); the pre-fetch version travels in `KINGO_UPDATE_FROM`
+  so the "X → Y" line support asks for survives; stage 2 is recognised ONLY by
+  a `KINGO_UPDATE_STAGE=2` in `_cli_overrides` (the REAL environment) — read
+  from the plain variable it could come from `.env.local` and silently disable
+  every future fetch; identical for git and ZIP/rsync installs. **Stage 2 must
+  get the environment a FRESH run would see** (`update_scrub_env`): stage 1
+  sourced `.env`/`.env.local` with auto-export BEFORE the fetch, so passing its
+  environment on would let those stale values outrank the freshly fetched files
+  via the `_cli_overrides` rule — so unset every name those files assign (not
+  just `KINGO_*`; `TZ`, `LANGFLOW_SECRET_KEY`, `COMPOSE_PROFILES` leak too) and
+  re-export only `_cli_overrides`, so a typed `KINGO_MODE=x ./kingo update`
+  still wins. That name list must be taken BEFORE the fetch as well
+  (`_env_keys_before`): a name the OLD `.env` exported and the NEW one DROPS
+  appears in no file afterwards, so a list read only from the fetched files
+  leaves it set, and compose gives the shell environment precedence over
+  `.env` — the containers would start once on a value the update deleted. It
+  matches `export NAME=` too, since bash sources that just as happily. The
+  exec targets `$KINGO_DIR/kingo`, resolved BEFORE the scrub
+  unsets `KINGO_DIR`, never `$0` (the preamble has cd'ed). No engine check runs
+  before the fetch — a student whose engine is broken must still be able to
+  fetch the fix; `cmd_pull` gates it. `update` ENDS BY CALLING `cmd_up`, not a
+  bare `compose up -d`: the old tail skipped the port preflight, off-mode
+  cleanup, the health wait, first-run init and the status table, so an update
+  could report success while a service was down. The guard is deliberately NOT
+  setup's `KINGO_NO_SELFUPDATE`. The git path SPLITS `fetch` from `merge
+  --ff-only` and distinguishes the two ways the merge can fail: a dirty tree
+  gets the `git checkout -- .` advice, a CLEAN tree means the history diverged
+  (a student's own commit, or `main` was rewritten) and gets git's own
+  `fatal:`/`error:` line plus a pointer to docs/INSTRUCTOR.md "A folder that
+  cannot update" — which is why the merge no longer runs `--quiet 2>/dev/null`.
+  Telling a clean-tree student to run `git checkout -- .` is advice that can
+  never work, and `update` would repeat it forever.
+- **Test a marker line with `case`, never `printf | grep -q`** (`MODE_FROM_ENV`,
+  `update_is_stage2`): `grep -q` exits at its first match and SIGPIPEs the
+  `printf`, which `set -o pipefail` then reports as a FAILED pipeline — so a
+  present marker reads as absent once the environment exceeds a pipe buffer
+  (reproduced on bash 3.2 and 5). `case $'\n'"$var"$'\n' in *$'\n'NAME=…)`
+  anchors to a line start the way `^` did, and closing the pattern with `$'\n'`
+  pins the whole value (`^KINGO_UPDATE_STAGE=2` also matched `=20`).
 - **Metabase pre-setup is idempotent** via the setup-token check and non-fatal
   on failure; it runs on every `kingo up` in a mode that has Metabase. (plan §9.4)
 - **Credentials are public by design** and committed (`.env`); they are safe
@@ -82,16 +132,44 @@ It was ported from the old `kingo-vm` repo.
   students may run containers from other courses.
 - **Ghost containers are healed before every `up`/`update`**
   (`heal_ghost_containers`): podman can keep a `kingo-*` NAME reserved in its
-  storage layer after an unclean shutdown (a reboot / `wsl --shutdown`
-  mid-write) while the container is gone from `podman ps -a` — `compose up`
-  then dies with `creating container storage: the container name "kingo-…" is
-  already in use`, and the ghost even survives an Ubuntu reinstall when the
-  storage lives on in a second WSL distro (a student, 2026-09-14). The healing
-  removes ONLY names that are absent from `podman ps -a` AND present in
-  `podman ps -a --external`, via `podman rm -f` (`rm --storage` was removed in
-  podman 3.0 — never reintroduce it); a name podman still manages is never
-  touched, and if podman cannot list containers it touches nothing. Podman-only;
-  a no-op on Docker.
+  storage layer after an unclean shutdown while the container is gone from
+  `podman ps -a` — `compose up` then dies with `creating container storage: the
+  container name "kingo-…" is already in use … by an external entity`, and
+  `doctor` truthfully reports nothing running (a student, 2026-09-14; a Store
+  "reinstall" of Ubuntu does NOT wipe the distro, so it survived that too). The
+  healing removes ONLY names absent from `podman ps -a` AND present in
+  `podman ps -a --external`, by ID, via a plain `podman rm` and then `podman
+  rm -f` — they fail in different places: plain `rm` refuses while podman's own
+  mount count says "mounted" but otherwise deletes the layer directory,
+  leftovers and all; `rm -f` forces the count down and then rmdir's the mount
+  point, which is what fails with "directory not empty" (a student, 2026-09-15,
+  `rm -f` alone failed identically on every try). `rm --storage` is NOT a third
+  option: since podman 3.0 it is a hidden no-op kept for compatibility, and the
+  macOS remote client rejects the flag outright — `podman rm --help` on a Mac
+  shows the REMOTE client's flags, not what a student's Linux podman accepts
+  (that misread cost a support round). A name podman still manages is never
+  touched, ours or another course's, and if podman cannot list containers it
+  touches nothing. Podman-only; a no-op on Docker. The collecting loop is fed
+  by `<<<`, never a pipe (a `while` after a pipe runs in a subshell and loses
+  everything). When podman FINDS the ghost but CANNOT delete its directory
+  either way ("removing mount point …: directory not empty" = leftover FILES in
+  a dead container's own directory, not a live mount — so a WSL/machine restart
+  does NOT cure it and must not be advised), `heal_ghosts_report` prints ONE
+  block for all stuck ghosts (podman's `Error:` line only — its stderr carries
+  logrus noise) and then `die`s **only if** a stuck ghost's service runs in the
+  CURRENT mode: otherwise compose's generic error seconds later would bury the
+  message, but a `kingo-jupyter-mcp` ghost blocks nothing in `abp`. It points
+  at docs/INSTRUCTOR.md "Stale container storage" (umount → `rm -rf` → `podman
+  rm -f` → `up`; on a Mac inside `podman machine ssh`). podman names that
+  directory TWICE, in a WARN line and in the `Error:` line: anything that
+  extracts the path must take ONE match (`grep -m1`) — a `grep -o` that
+  matched both handed a student a path with an embedded newline, so `umount`,
+  `mountpoint` and `rm -rf` all acted on a name that did not exist and the
+  directory was never removed (2026-09-15). It warns AGAINST both
+  `podman system reset` and `podman machine reset` (the Mac one — `system reset`
+  does not exist in the macOS remote client): they delete every volume, i.e. the
+  student's flows, workflows, notebooks and databases. Never `rm -rf` inside the
+  storage graph from `kingo` itself — podman refuses to, and so do we.
 - **`langflow-data` is mounted `:z`** (`compose.yml`): Langflow copies its
   avatar SVGs out of the image into `LANGFLOW_CONFIG_DIR` with
   `shutil.copytree`, which copies extended attributes — `security.selinux`

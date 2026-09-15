@@ -409,6 +409,88 @@ and `bash setup/setup-linux.sh` inside WSL Ubuntu. Setup pins the mode on a
 fresh install (an existing install keeps its mode); the everyday guides are
 already mode-aware because `credentials`/`status` mark what is off.
 
+## A folder that cannot update
+
+`./kingo update` says
+
+```
+WARN: the newest class files could not be applied — updating images only for now.
+       git says: fatal: Not possible to fast-forward, aborting.
+```
+
+The student's folder has **no local edits** (`kingo` checks that first and says
+so separately) — its history has diverged instead. Either the student made a
+commit of their own, or `main` was rewritten after they cloned. A
+`git checkout -- .` changes nothing here, which is why `kingo` does not suggest
+it: the folder would be stuck on every future update.
+
+Their class data is in volumes, not in this folder, and `shared/` is
+gitignored, so throwing the folder's history away is safe. In their
+`~/kingo-pod`:
+
+| Step | Command |
+|---|---|
+| 1. see what diverged (optional) | `git log --oneline origin/main..HEAD` |
+| 2. match the class repo exactly | `git fetch && git reset --hard origin/main` |
+| 3. update as usual | `./kingo update` |
+
+Step 2 discards commits made in this folder. That is the intent; if the student
+put files of their own in it, move them out first (anything untracked, such as
+`shared/`, survives).
+
+## Stale container storage ("the container name ... is already in use")
+
+A student's `up` fails with
+
+```
+container create: creating container storage: the container name "kingo-jupyter-mcp"
+is already in use by <id> ... that name is already in use by an external entity
+```
+
+That is a **ghost**: podman's storage layer still holds the name, but podman no
+longer manages the container (it is gone from `podman ps -a`, so `doctor` says
+nothing is running). It is left behind when WSL / the podman machine is shut
+down while podman is mid-write. Since v1.3.0 `kingo up` and `kingo update`
+clear these by themselves, so the student normally never sees it.
+
+What they *can* still see is the harder case: podman finds the ghost but
+cannot delete its directory —
+
+```
+Error: removing mount point ".../overlay/<hash>/merged": directory not empty
+```
+
+Those are leftover **files** in a dead container's own directory, not anything
+running. Deleting that directory loses nothing: it is not a volume, and no
+class data lives there. `kingo` tries both a plain `podman rm` and `podman rm
+-f` (they fail in different places; `rm --storage` is a no-op since podman
+3.0 and does not exist in the Mac client), prints this case if both fail, and
+stops rather than letting compose bury it. The fix, with `<id>` and `<dir>`
+taken from the student's error message — podman prints the directory twice, in
+a `WARN` line and in the `Error:` line; it is one directory, copy it once (on
+**WSL/Linux**, in their `~/kingo-pod`):
+
+| Step | Command |
+|---|---|
+| 1. unmount it if it is still mounted (an error here is fine) | `umount "<dir>"` |
+| 2. delete the leftover directory | `rm -rf "<dir>"` |
+| 3. remove the ghost, now that its directory is gone | `podman rm -f <id>` |
+| 4. start the stack | `./kingo up` |
+
+Add `sudo` to steps 1–2 when the path starts with `/var/lib/containers`
+(rootful podman — a student running as `root`); a rootless install keeps its
+storage under `~/.local/share/containers` and needs none.
+
+On a **Mac** the storage lives inside the podman machine, not on macOS, so run
+steps 1–3 through it: `podman machine ssh` first, then the same commands, then
+`exit` and `./kingo up`.
+
+**Never tell a student to run `podman system reset` or `podman machine reset`**
+for this. Both delete every image, container *and volume* on the machine —
+their flows, workflows, notebooks and databases — and they are not needed:
+the cleanup above is surgical. If you ever must reset anyway, export the data
+first (`podman volume export kingo_<name> -o <file>.tar` per `kingo_*` volume).
+
 ## Verifying a machine
 
 - `./kingo doctor` — preflight (engine ready? memory? ports free?).
