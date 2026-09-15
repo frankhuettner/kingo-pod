@@ -47,7 +47,7 @@ It was ported from the old `kingo-vm` repo.
   path (the ghost healing) would never run in the update that fetched it — a
   student needed a second command for exactly that (2026-09-14). Properties,
   keep ALL of them: re-exec only after a successful fetch AND only when
-  `cksum` of `kingo` CHANGED (a pull that is already up to date exits 0 and
+  `update_fingerprint` CHANGED (a pull that is already up to date exits 0 and
   changes nothing — re-execing then printed a confusing second start on every
   update); only if the fetched script actually RUNS (`update_probe_ok` runs
   `bash <new> help` in the scrubbed env — `bash -n` merely parses and misses a
@@ -84,6 +84,24 @@ It was ported from the old `kingo-vm` repo.
   cannot update" — which is why the merge no longer runs `--quiet 2>/dev/null`.
   Telling a clean-tree student to run `git checkout -- .` is advice that can
   never work, and `update` would repeat it forever.
+  The merge targets the TRACKING BRANCH (`@{upstream}`), never `FETCH_HEAD`:
+  with a detached HEAD or a branch without an upstream every FETCH_HEAD line is
+  `not-for-merge`, and `git merge --ff-only FETCH_HEAD` then exits 0 with
+  "Already up to date." while the folder sits commits behind — `update` reported
+  success and silently never delivered class files again (verified; the
+  `git pull --ff-only` it replaced failed loudly). No upstream is therefore its
+  own warned case, and INSTRUCTOR.md's recipe is `git checkout -B main
+  origin/main`, NOT `git reset --hard origin/main`: a reset moves whatever ref
+  HEAD is on and re-creates the same dead end. The dirty-tree test uses
+  `--untracked-files=no` — a stray untracked file is not a local change to
+  undo, and counting it sent diverged folders back into the dead-end advice.
+  `LC_ALL=C` belongs on the `git merge` itself, not only on the greps that
+  parse its output. The re-exec fingerprint (`update_fingerprint`) covers
+  `kingo` AND `.env`: the re-exec is the ONLY caller of `update_scrub_env`, so
+  gating it on the script alone let a fetch that changed just `.env` finish in
+  a process still holding the pre-fetch values. Every step on the ZIP path
+  (`mktemp`, `rsync`) is guarded, or `set -e` aborts the function that is
+  required never to be fatal.
 - **Test a marker line with `case`, never `printf | grep -q`** (`MODE_FROM_ENV`,
   `update_is_stage2`): `grep -q` exits at its first match and SIGPIPEs the
   `printf`, which `set -o pipefail` then reports as a FAILED pipeline — so a
@@ -151,7 +169,20 @@ It was ported from the old `kingo-vm` repo.
   touched, ours or another course's, and if podman cannot list containers it
   touches nothing. Podman-only; a no-op on Docker. The collecting loop is fed
   by `<<<`, never a pipe (a `while` after a pipe runs in a subshell and loses
-  everything). When podman FINDS the ghost but CANNOT delete its directory
+  everything). **Sample `--external` BEFORE `podman ps -a`**: the two lists
+  cannot be read at one instant, and a ghost is "in `all`, not in `known`". With
+  `known` read first, a container CREATED in the gap (a second terminal running
+  `up`) is missing from the older `known` and present in the newer `all` — we
+  would force-remove a LIVE container mid-boot. The reverse race is harmless.
+  Success is judged by the NAME being free again (`ghost_name_gone`), never by
+  an exit status: `podman rm -f` exits 0 for an ID it cannot resolve, so a
+  plain `rm` that tore down the record but kept the name reserved would be
+  announced as cleared while `up` still fails on it. The stuck-ghost error line
+  is kept PER ghost — one latched line handed the student the mount point of a
+  container that was not the one blocking the boot — and the loud instructor
+  block plus the `die` fire ONLY for a ghost that blocks the CURRENT mode; a
+  ghost that blocks nothing gets one quiet line, or it would raise the full
+  alarm on every `up` and `update` forever. When podman FINDS the ghost but CANNOT delete its directory
   either way ("removing mount point …: directory not empty" = leftover FILES in
   a dead container's own directory, not a live mount — so a WSL/machine restart
   does NOT cure it and must not be advised), `heal_ghosts_report` prints ONE

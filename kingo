@@ -345,7 +345,12 @@ setup_metabase() {
   # Gate on has-user-setup, NOT the setup-token: Metabase keeps a (now useless)
   # setup-token around even after an admin exists, so the token alone would make
   # this re-run the setup call and warn every time.
-  echo "$props" | grep -q '"has-user-setup":true' && { echo "  Metabase already initialized."; return 0; }
+  # `case`, not `echo | grep -q`: grep -q exits at the first match and SIGPIPEs
+  # the producer, which `set -o pipefail` reports as a failed pipeline (see the
+  # MODE_FROM_ENV note in the preamble). cmd_update now reaches this on every
+  # run through cmd_up -> init_stack, so a false "not initialized" here would
+  # re-provision Metabase on each update.
+  case "$props" in *'"has-user-setup":true'*) echo "  Metabase already initialized."; return 0 ;; esac
   token=$(echo "$props" | grep -o '"setup-token":"[^"]*"' | cut -d'"' -f4 || true)
   [ -n "${token:-}" ] || { warn "Metabase not ready for pre-setup yet (skipping; re-run: kingo up)"; return 0; }
   sid=$(curl -s -m 15 -X POST "$mb/api/setup" -H 'Content-Type: application/json' -d "{
@@ -386,8 +391,16 @@ heal_ghost_containers() { # frees what it can; what it cannot goes to GHOSTS_STU
   GHOSTS_FREED=""; GHOSTS_STUCK=""; GHOSTS_STUCK_ERR=""
   [ "$ENGINE" = podman ] || return 0
   local known all id name err line
-  known="$(podman ps -a --format '{{.Names}}' 2>/dev/null)" || return 0
+  # ORDER MATTERS. A ghost must be in `all` and NOT in `known`, and the two
+  # lists cannot be sampled at the same instant — so sample `all` FIRST. Then a
+  # container created in the gap is missing from `all` and is never considered.
+  # Sampling `known` first inverts that: a second terminal running `kingo up`
+  # creates kingo-postgres in the gap, it is absent from the older `known` and
+  # present in the newer `all`, and we would force-remove a LIVE container
+  # mid-boot. The reverse race is harmless: a container removed in the gap is
+  # already gone, and `podman rm -f` exits 0 on an ID it cannot resolve.
   all="$(podman ps -a --external --format '{{.ID}} {{.Names}}' 2>/dev/null)" || return 0
+  known="$(podman ps -a --format '{{.Names}}' 2>/dev/null)" || return 0
   known=" $(printf '%s\n' "$known" | tr '\n' ' ') "
   # Fed by <<< and NOT by a pipe: a `while` on the right-hand side of a pipe
   # runs in a subshell, and everything collected here would be lost at `done`.
@@ -405,7 +418,13 @@ heal_ghost_containers() { # frees what it can; what it cannot goes to GHOSTS_STU
     # the mount point, which fails with "directory not empty" on exactly those
     # leftovers (a student, 2026-09-15: `rm -f` failed the same way every time).
     # Neither touches a volume; the layer directory holds no class data.
-    if podman rm "$id" >/dev/null 2>&1 || err="$(podman rm -f "$id" 2>&1 >/dev/null)"; then
+    err=""
+    podman rm "$id" >/dev/null 2>&1 || err="$(podman rm -f "$id" 2>&1 >/dev/null)" || true
+    # Trust the NAME, not the exit status. `podman rm -f` exits 0 for an ID it
+    # can no longer resolve, so a plain `rm` that tore down the record but left
+    # the name reserved would otherwise be announced as cleared while `up`
+    # still fails on that very name.
+    if ghost_name_gone "$name"; then
       GHOSTS_FREED="${GHOSTS_FREED:+$GHOSTS_FREED }$name"
     else
       # podman found it but could not delete its storage either way — leftover
@@ -413,15 +432,27 @@ heal_ghost_containers() { # frees what it can; what it cannot goes to GHOSTS_STU
       # calls mounted, not a live mount. podman never rm -rf's inside its
       # storage graph, and neither do we: report it precisely instead.
       GHOSTS_STUCK="${GHOSTS_STUCK:+$GHOSTS_STUCK }$name"
-      if [ -z "$GHOSTS_STUCK_ERR" ]; then
-        # podman's stderr can carry logrus noise before the real line.
-        line="$(printf '%s\n' "$err" | LC_ALL=C grep -m1 '^Error:' || true)"
-        [ -n "$line" ] || line="$(printf '%s\n' "$err" | tail -1)"
-        GHOSTS_STUCK_ERR="$line"
-      fi
+      # podman's stderr can carry logrus noise before the real line. Keep one
+      # line PER ghost: the report names the directory to clean, and a single
+      # latched error would hand the student the mount point of a different
+      # container than the one blocking the boot.
+      line="$(printf '%s\n' "$err" | LC_ALL=C grep -m1 '^Error:' || true)"
+      [ -n "$line" ] || line="$(printf '%s\n' "$err" | LC_ALL=C grep -m1 . || true)"
+      [ -n "$line" ] || line="podman gave no reason"
+      GHOSTS_STUCK_ERR="${GHOSTS_STUCK_ERR}${name}	${line}
+"
     fi
   done <<<"$all"
   return 0
+}
+ghost_name_gone() { # is this kingo-* name free again in podman's storage?
+  local still
+  still="$(podman ps -a --external --format '{{.Names}}' 2>/dev/null)" || return 0
+  case $'\n'"$still"$'\n' in *$'\n'"$1"$'\n'*) return 1 ;; esac
+  return 0
+}
+ghost_err_for() { # the error line collected for ghost $1
+  printf '%s' "$GHOSTS_STUCK_ERR" | LC_ALL=C awk -F'\t' -v n="$1" '$1==n {print $2; exit}'
 }
 heal_ghosts_report() { # ONE report for the whole stack, however many ghosts there are
   heal_ghost_containers
@@ -434,20 +465,26 @@ heal_ghosts_report() { # ONE report for the whole stack, however many ghosts the
   for n in $GHOSTS_STUCK; do
     case "$active" in *" ${n#kingo-} "*) blocking="${blocking:+$blocking }$n" ;; esac
   done
-  warn "podman cannot remove stale container storage for: $GHOSTS_STUCK"
-  echo "       podman says: $GHOSTS_STUCK_ERR" >&2
+  # A ghost that blocks nothing in this mode gets ONE quiet line. Raising the
+  # full instructor alarm for it would fire on every single up and update,
+  # forever, about something that is not stopping the student from working.
+  if [ -z "$blocking" ]; then
+    warn "stale container storage is stuck for: $GHOSTS_STUCK — not needed in '$KINGO_MODE' mode, so the stack still starts. Worth telling your instructor."
+    return 0
+  fi
+  warn "podman cannot remove stale container storage for: $blocking"
+  for n in $blocking; do
+    echo "       $n: $(ghost_err_for "$n")" >&2
+  done
   echo "       Those are leftover files in a dead container's own directory, not anything still running:" >&2
   echo "       restarting WSL or the podman machine does NOT clear it, and deleting it loses none of your work." >&2
-  echo "       Send this message to your instructor — the fix is a one-line cleanup of the directory named" >&2
+  echo "       Send this message to your instructor — the fix is a short cleanup of the directory named" >&2
   echo "       above (docs/INSTRUCTOR.md, \"Stale container storage\")." >&2
   echo "       Do NOT run 'podman system reset' or 'podman machine reset': they delete every image, container" >&2
   echo "       and volume on this machine — your flows, workflows, notebooks and databases included." >&2
   # Say it here or not at all: compose would fail on this very name seconds
   # later, and its generic error would bury everything above.
-  if [ -n "$blocking" ]; then
-    die "$blocking cannot start while that name is taken — the stack was not started. The cleanup above is the fix."
-  fi
-  return 0
+  die "$blocking cannot start while that name is taken — the stack was not started. The cleanup above is the fix."
 }
 
 cmd_up() {
@@ -477,6 +514,13 @@ cmd_up() {
 # really REPLACED this script, the process re-execs into the new one (stage 2),
 # which finishes the job. CLAUDE.md lists the guarantees this must keep; the
 # short version is that every step degrades to "images only" and is never fatal.
+update_fingerprint() { # what this process has ALREADY read and cannot re-read
+  # `kingo` and `.env` both: the re-exec is the only thing that calls
+  # update_scrub_env, so gating it on the script alone let a fetch that changed
+  # only .env finish in a process still holding the values it auto-exported
+  # before the fetch — and those outrank the new .env in compose.
+  cat "$KINGO_DIR/kingo" "$KINGO_DIR/.env" 2>/dev/null | cksum 2>/dev/null || true
+}
 update_env_keys() { # every name .env / .env.local assign, plus our own KINGO_*
   local f
   # The names the files carried BEFORE the fetch count too. This process
@@ -532,12 +576,12 @@ update_reexec() { # $1: the version seen BEFORE the fetch — stage 2 reports it
 cmd_update() {
   # Deliberately NO engine check before the fetch: a student whose engine is
   # broken must still be able to pull the fix for it. cmd_pull gates the engine.
-  local _v_before _v_after _sig _tmp _git_err _git_say _pulled=""
+  local _v_before _v_after _sig _tmp _git_err _git_say _git_up _pulled="" _probe_failed=""
   if update_is_stage2; then
     _v_before="${KINGO_UPDATE_FROM:-$(kingo_version)}"   # the fetch happened in stage 1
   else
     _v_before="$(kingo_version)"
-    _sig="$(cksum < "$KINGO_DIR/kingo" 2>/dev/null || true)"
+    _sig="$(update_fingerprint)"
     # Read the env-file names while they are still the ones we sourced: after
     # the fetch these files may define fewer, and update_scrub_env must unset
     # what the OLD ones exported. (Global on purpose — update_env_keys reads it.)
@@ -547,19 +591,45 @@ cmd_update() {
     # Mac path, no .git) sync the repo tarball over this folder — rsync replaces
     # files by rename, so overwriting the running script is safe.
     if [ -d .git ]; then
-      if ! git fetch --quiet 2>/dev/null; then
+      # The branch this folder tracks, e.g. origin/main. Merging THAT, not
+      # FETCH_HEAD, is what makes a broken checkout audible: with a detached
+      # HEAD or a branch without an upstream, every FETCH_HEAD line is marked
+      # `not-for-merge`, and `git merge --ff-only FETCH_HEAD` then exits 0 with
+      # "Already up to date." while the folder sits commits behind — `update`
+      # reported success and silently never delivered class files again
+      # (verified). `git pull --ff-only`, which this replaced, failed loudly.
+      _git_up="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+      # Bounded like every other network call here (curl -m 120 below, and the
+      # setup scripts' git): a stalled fetch must not hang a class.
+      if ! git -c core.askPass=true \
+             -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 \
+             fetch --quiet 2>/dev/null; then
         warn "could not reach GitHub (no network?) — updating images only"
-      elif _git_err="$(git merge --ff-only FETCH_HEAD 2>&1)"; then
+      elif [ -z "$_git_up" ]; then
+        warn "the newest class files could not be applied — updating images only for now."
+        echo "       This folder is not on the class branch (detached HEAD, or a branch that tracks" >&2
+        echo "       nothing), so git has nothing to fast-forward. Your notebooks, flows and workflows" >&2
+        echo "       are not affected. Send this message to your instructor" >&2
+        echo "       (docs/INSTRUCTOR.md, \"A folder that cannot update\")." >&2
+      elif _git_err="$(LC_ALL=C git merge --ff-only "$_git_up" 2>&1)"; then
+        # LC_ALL=C on git itself, not just on the greps below: a localized git
+        # would otherwise never match '^(fatal|error):'.
         _pulled=1
-      elif [ -n "$(git status --porcelain 2>/dev/null || true)" ]; then
+        # Say when files really arrived. Without this an applied update and the
+        # silent no-op above look identical on screen.
+        case "$_git_err" in *"Already up to date"*) ;; *) echo "Class files updated." ;; esac
+      elif [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null || true)" ]; then
+        # --untracked-files=no on purpose: a stray untracked file (.env.local.tmp,
+        # a notebook saved into the folder) is NOT a local change to undo, and
+        # counting it sent a diverged folder into the dead-end advice below.
         warn "the newest class files could not be applied: this folder has local changes. Undo them (git checkout -- .) and re-run './kingo update' — updating images only for now"
       else
-        # Clean tree, so the history diverged instead: a local commit, or main
-        # was rewritten. 'git checkout -- .' is a no-op then, and telling a
-        # student to run it would repeat the same advice on every future
-        # update while the folder can never take class files again. Give git's
-        # own reason — which is why the merge no longer runs --quiet 2>/dev/null
-        # — and route to the instructor, who has the recipe.
+        # Tracked files are clean, so the history diverged instead: a local
+        # commit, or main was rewritten. 'git checkout -- .' is a no-op then,
+        # and telling a student to run it would repeat the same advice on every
+        # future update while the folder can never take class files again. Give
+        # git's own reason — which is why the merge no longer runs
+        # --quiet 2>/dev/null — and route to the instructor, who has the recipe.
         # git leads with several 'hint:' lines and names the cause last, so
         # take the fatal/error line and fall back to the first non-empty one.
         _git_say="$(printf '%s\n' "$_git_err" | LC_ALL=C grep -m1 -E '^(fatal|error):' || true)"
@@ -571,28 +641,42 @@ cmd_update() {
       fi
     elif command -v rsync >/dev/null 2>&1; then
       echo "Fetching the newest class files (this folder came from a ZIP, no git) ..."
-      _tmp="$(mktemp -d)"
-      if curl -fsSL -m 120 https://github.com/frankhuettner/kingo-pod/archive/refs/heads/main.tar.gz \
-           | tar xz -C "$_tmp" --strip-components=1 2>/dev/null; then
-        rsync -a "$_tmp"/ ./
-        echo "Class files updated."
-        _pulled=1
+      # Both guarded: under `set -euo pipefail` a full disk (mktemp) or a
+      # failed copy (rsync) would abort cmd_update outright, where the rule for
+      # this whole function is that it degrades to images-only and is never
+      # fatal — and this is the one cohort that has no .git to fall back on.
+      if _tmp="$(mktemp -d 2>/dev/null)"; then
+        if curl -fsSL -m 120 https://github.com/frankhuettner/kingo-pod/archive/refs/heads/main.tar.gz \
+             | tar xz -C "$_tmp" --strip-components=1 2>/dev/null; then
+          if rsync -a "$_tmp"/ ./; then
+            echo "Class files updated."
+            _pulled=1
+          else
+            warn "could not write the new class files into this folder — updating images only"
+          fi
+        else
+          warn "could not download the class files (no network?) — updating images only"
+        fi
+        rm -rf "$_tmp"
       else
-        warn "could not download the class files (no network?) — updating images only"
+        warn "could not create a temporary folder (disk full?) — updating images only"
       fi
-      rm -rf "$_tmp"
     else
       warn "this folder was installed from a ZIP (no git) and rsync is missing — updating images only. For new class files, download the ZIP again (see the student guide)."
     fi
-    # Re-exec ONLY when the fetch actually replaced this script. An up-to-date
-    # folder fetches fine and changes nothing, and restarting then would print a
-    # confusing second start on every single update.
-    if [ -n "$_pulled" ] && [ "$_sig" != "$(cksum < "$KINGO_DIR/kingo" 2>/dev/null || true)" ]; then
+    # Re-exec ONLY when the fetch actually replaced what this process already
+    # read. An up-to-date folder fetches fine and changes nothing, and
+    # restarting then would print a confusing second start on every update.
+    if [ -n "$_pulled" ] && [ "$_sig" != "$(update_fingerprint)" ]; then
       if update_probe_ok; then
-        echo "kingo itself was updated — continuing with the new version ..."
+        echo "The class files this command runs from were updated — continuing with the new version ..."
         update_reexec "$_v_before"
       else
-        warn "the updated kingo ($(kingo_version)) does not run on this machine — finishing this update with the current one. Please report this to your instructor."
+        # Stage 1 goes on with the OLD script in memory, so the NEW ./VERSION on
+        # disk is not what is running: say so, and do not let the tail print a
+        # version transition that did not happen.
+        _probe_failed=1
+        warn "the fetched kingo does not run on this machine — finishing with the version that was already here. Please report this to your instructor."
       fi
     fi
   fi
@@ -607,7 +691,11 @@ cmd_update() {
   # Name the version students landed on: it is what support asks for, and it
   # makes "did the update take?" answerable.
   _v_after="$(kingo_version)"
-  if [ "$_v_before" = "$_v_after" ]; then
+  if [ -n "$_probe_failed" ]; then
+    # kingo_version reads the VERSION the fetch just wrote, but the script that
+    # ran is the old one — reporting a transition here would be a lie.
+    echo "Stack updated — still running the kingo that was already here (the fetched one does not run)."
+  elif [ "$_v_before" = "$_v_after" ]; then
     echo "Stack updated — kingo-pod $_v_after (unchanged; images may still be newer)."
   else
     echo "Stack updated — kingo-pod $_v_before → $_v_after."
@@ -908,7 +996,10 @@ release_leaked_forwards() { # $@: host ports — frees provably-orphaned ones, p
   [ "$(uname -s)" = Darwin ] || return 0
   command -v podman >/dev/null 2>&1 || return 0
   command -v curl   >/dev/null 2>&1 || return 0
-  ps ax -o command= 2>/dev/null | grep -q '[g]vproxy' || return 0
+  # Same inversion, and here it is invisible: `|| return 0` also means "gvproxy
+  # is not running, nothing to heal", so a SIGPIPE would silently disable the
+  # whole leaked-forward healing on the one platform that needs it.
+  case "$(ps ax -o command= 2>/dev/null || true)" in *gvproxy*) ;; *) return 0 ;; esac
   local live all port l
   # If podman can't even list containers we cannot PROVE a forward is orphaned
   # — touch nothing (dropping a live forward would break a running service).

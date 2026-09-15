@@ -418,11 +418,20 @@ WARN: the newest class files could not be applied — updating images only for n
        git says: fatal: Not possible to fast-forward, aborting.
 ```
 
-The student's folder has **no local edits** (`kingo` checks that first and says
-so separately) — its history has diverged instead. Either the student made a
-commit of their own, or `main` was rewritten after they cloned. A
-`git checkout -- .` changes nothing here, which is why `kingo` does not suggest
-it: the folder would be stuck on every future update.
+or
+
+```
+WARN: the newest class files could not be applied — updating images only for now.
+       This folder is not on the class branch (detached HEAD, or a branch that tracks
+       nothing), so git has nothing to fast-forward.
+```
+
+Both mean the folder can no longer fast-forward to the class repo, and neither
+is a local edit (`kingo` checks that first and says so separately). Either the
+student made a commit of their own, `main` was rewritten after they cloned, or
+their checkout ended up detached or on a branch with no upstream. A
+`git checkout -- .` changes nothing in any of these cases, which is why `kingo`
+does not suggest it: the folder would be stuck on every future update.
 
 Their class data is in volumes, not in this folder, and `shared/` is
 gitignored, so throwing the folder's history away is safe. In their
@@ -431,12 +440,21 @@ gitignored, so throwing the folder's history away is safe. In their
 | Step | Command |
 |---|---|
 | 1. see what diverged (optional) | `git log --oneline origin/main..HEAD` |
-| 2. match the class repo exactly | `git fetch && git reset --hard origin/main` |
-| 3. update as usual | `./kingo update` |
+| 2. drop local modifications | `git reset --hard HEAD` |
+| 3. re-attach to the class branch and match it | `git fetch && git checkout -B main origin/main` |
+| 4. update as usual | `./kingo update` |
 
-Step 2 discards commits made in this folder. That is the intent; if the student
-put files of their own in it, move them out first (anything untracked, such as
-`shared/`, survives).
+Step 3 is `checkout -B`, **not** `git reset --hard origin/main`. A reset moves
+whatever ref HEAD happens to be on: run on a detached HEAD it leaves it
+detached, and on a student-created branch it leaves that branch without an
+upstream. In both cases `git fetch` then marks every ref `not-for-merge` and
+the next `./kingo update` reports the same problem forever. `checkout -B main
+origin/main` re-attaches HEAD to `main` and sets it tracking `origin/main`,
+which is the state every other install is in.
+
+Steps 2–3 discard commits and edits made in this folder. That is the intent; if
+the student put files of their own in it, move them out first (anything
+untracked, such as `shared/`, survives).
 
 ## Stale container storage ("the container name ... is already in use")
 
@@ -450,7 +468,7 @@ is already in use by <id> ... that name is already in use by an external entity
 That is a **ghost**: podman's storage layer still holds the name, but podman no
 longer manages the container (it is gone from `podman ps -a`, so `doctor` says
 nothing is running). It is left behind when WSL / the podman machine is shut
-down while podman is mid-write. Since v1.3.0 `kingo up` and `kingo update`
+down while podman is mid-write. Since v1.2.1 `kingo up` and `kingo update`
 clear these by themselves, so the student normally never sees it.
 
 What they *can* still see is the harder case: podman finds the ghost but
@@ -470,6 +488,27 @@ taken from the student's error message — podman prints the directory twice, in
 a `WARN` line and in the `Error:` line; it is one directory, copy it once (on
 **WSL/Linux**, in their `~/kingo-pod`):
 
+**Which variant depends on the `<dir>` path**, because the leftover files were
+written by in-container users (`jovyan`, Langflow's user) and who may delete
+them differs:
+
+*Rootless* — path under `~/.local/share/containers` — is what both setup
+scripts produce, and what `core` runs inside a Mac podman machine. Those files
+belong to subordinate UIDs that the student's own account does not own, so a
+bare `umount`/`rm -rf` fails with *Permission denied* and `sudo` is not the
+answer either. Every command has to run **inside the user namespace**:
+
+| Step | Command |
+|---|---|
+| 1. unmount it if it is still mounted (an error here is fine) | `podman unshare umount "<dir>"` |
+| 2. delete the leftover directory | `podman unshare rm -rf "<dir>"` |
+| 3. remove the ghost, now that its directory is gone | `podman rm -f <id>` |
+| 4. start the stack | `./kingo up` |
+
+*Rootful* — path under `/var/lib/containers`, i.e. a student working as `root`
+(as a WSL Ubuntu set up that way does) — needs no `podman unshare`, and `sudo`
+only if they are not already root:
+
 | Step | Command |
 |---|---|
 | 1. unmount it if it is still mounted (an error here is fine) | `umount "<dir>"` |
@@ -477,13 +516,9 @@ a `WARN` line and in the `Error:` line; it is one directory, copy it once (on
 | 3. remove the ghost, now that its directory is gone | `podman rm -f <id>` |
 | 4. start the stack | `./kingo up` |
 
-Add `sudo` to steps 1–2 when the path starts with `/var/lib/containers`
-(rootful podman — a student running as `root`); a rootless install keeps its
-storage under `~/.local/share/containers` and needs none.
-
 On a **Mac** the storage lives inside the podman machine, not on macOS, so run
-steps 1–3 through it: `podman machine ssh` first, then the same commands, then
-`exit` and `./kingo up`.
+steps 1–3 through it: `podman machine ssh` first, then the rootless commands
+above, then `exit` and `./kingo up`.
 
 **Never tell a student to run `podman system reset` or `podman machine reset`**
 for this. Both delete every image, container *and volume* on the machine —
