@@ -2,8 +2,7 @@
 
 > **For the Claude Code instance (or human) executing this plan:** this file is
 > self-contained. The source material lives in this repo
-> (`github.com/frankhuettner/kingo-vm`, local checkout
-> `/Users/frankhuettner/Desktop/YanboVM/FrankVM`). You will create a **new
+> (`github.com/frankhuettner/kingo-vm`). You will create a **new
 > repo** (suggested name: `kingo-classroom`) and port the pieces listed below.
 > Do not modify the old repo except to archive it.
 
