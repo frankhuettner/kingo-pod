@@ -259,7 +259,7 @@ the reminder to open between cohorts.
 ## Python packages in Langflow
 
 Langflow is built locally (`langflow/Dockerfile`) on top of the upstream
-image, adding the packages in `langflow/requirements.txt` (statsmodels, …)
+image, adding the packages in `langflow/requirements.txt` (statsmodels, ragas, …)
 plus `uv`. To give the whole class a new package: add one line to
 `langflow/requirements.txt`, commit + push, and announce **"run
 `./kingo update`"** — that one command works for every install kind
@@ -267,6 +267,20 @@ plus `uv`. To give the whole class a new package: add one line to
 automatically) and rebuilds the image. A student who needs something just for themselves:
 `./kingo langflow pip install <pkg>` (ephemeral — gone after `down`+`up`,
 which is fine for one-offs).
+
+**"IpcReadOptions size changed, may indicate binary incompatibility"** when a
+flow builds (the RAGAS Metrics Evaluator, 2026-09-21): a `./kingo langflow pip
+install` upgraded a compiled package — ragas pulls pyarrow 19 → 25 — under the
+running server, which still has the old shared library mapped; the component's
+lazy `import ragas` then loads the new C extensions into the old package. Tell
+the student to run `./kingo restart langflow`: it fixes this and KEEPS their
+pip installs. `down` + `up` "fixes" it too, by wiping them. That trap is why
+ragas is in `requirements.txt` — the same upgrade inside the image build is
+harmless. The build prints pip's "dependency conflicts" notice for
+langflow-base's `datasets<4` / `pyarrow==19` pins: expected, exit 0, Langflow
+runs fine on the newer ones; do not pin pyarrow back. Not every failed build is
+this one: a plain `No such file or directory: /app/shared/...` is a misspelled
+Test Set path (`gentai` for `genai` happened).
 
 ## Did this laptop install from the stick, or from the Wi-Fi?
 

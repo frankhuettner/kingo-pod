@@ -1704,6 +1704,10 @@ Heads-up: packages installed this way disappear when the container is recreated
 (./kingo down + up, or ./kingo update) — just run the install again. Packages the
 whole class needs belong in langflow/requirements.txt: those are baked into the
 image and survive everything.
+
+Upgraded a compiled package (pyarrow, numpy, pandas)? Run  ./kingo restart langflow
+before building a flow — the running server still has the old one loaded, and the
+build would fail with "binary incompatibility".
 EOF
     return 0
   fi

@@ -241,11 +241,15 @@ same warning applies to its *Apply & restart*.
   pandas, statsmodels, scikit-learn, seaborn, and friends. For anything
   else, run `%pip install <package>` in a notebook cell (repeat it if the
   stack was restarted since).
-- **Langflow**: the class set (statsmodels, …) is built in — `import
+- **Langflow**: the class set (statsmodels, ragas, …) is built in — `import
   statsmodels` just works in Python components. Need one more?
   `./kingo langflow pip install <package>` installs it on the spot; it lasts
   until the next `./kingo down` + `up`, so run it again after that (or ask
-  the instructor to add it for everyone).
+  the instructor to add it for everyone). If the install upgraded a compiled
+  package (pyarrow, numpy, pandas — pip lists what it installed), run
+  `./kingo restart langflow` before building a flow: the running Langflow
+  still has the old one loaded, and the build would otherwise fail with
+  "size changed, may indicate binary incompatibility".
 - **JupyterHub** (`:8000`) starts a minimal Python *without* the data
   packages — use `%pip install` there too, or simply do data work in
   JupyterLab.

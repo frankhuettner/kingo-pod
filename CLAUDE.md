@@ -33,6 +33,17 @@ It was ported from the old `kingo-vm` repo.
   list, bundle, load's retag) must handle BOTH `*:local` images. Student
   installs via `kingo langflow pip install` are ephemeral by design (lost on
   container recreation) — class-wide packages go in requirements.txt instead.
+  That file knowingly overrides two pins of the base image (`datasets<4`,
+  `pyarrow==19`): ragas 0.4 needs datasets ≥ 4 → pyarrow ≥ 21, so the build
+  prints pip's "dependency conflicts" notice for langflow-base and exits 0,
+  and Langflow runs fine on them (verified 2026-09-21) — do not pin pyarrow
+  back. A COMPILED package (pyarrow, numpy, pandas) is upgraded in the build,
+  never under a running server: the venv changes on disk while the process
+  keeps the old shared library mapped, and the component's lazy `import
+  ragas` then mixes the two — "IpcReadOptions size changed … expected 112,
+  got 104" on every flow build (a student, 2026-09-21). The fix for a machine
+  already in that state is `./kingo restart langflow`, which keeps the
+  container and its pip installs; `down`+`up` "fixes" it by wiping them.
 - **`kingo update` must reach ZIP-era installs too** (Mac installs from
   before 2026-08-29 came from a ZIP download — no `.git`; since then the Mac
   guide uses the same idempotent clone-or-pull one-liner as Windows): for a
