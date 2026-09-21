@@ -41,7 +41,7 @@ It was ported from the old `kingo-vm` repo.
   never under a running server: the venv changes on disk while the process
   keeps the old shared library mapped, and the component's lazy `import
   ragas` then mixes the two — "IpcReadOptions size changed … expected 112,
-  got 104" on every flow build (a student, 2026-09-21). The fix for a machine
+  got 104" on every flow build (2026-09-21). The fix for a machine
   already in that state is `./kingo restart langflow`, which keeps the
   container and its pip installs; `down`+`up` "fixes" it by wiping them.
 - **`kingo update` must reach ZIP-era installs too** (Mac installs from
