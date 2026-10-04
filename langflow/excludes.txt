@@ -1,0 +1,10 @@
+# Kept OUT of the Langflow image although a class package depends on it
+# (`uv pip install --excludes`, see Dockerfile). One package per line.
+#
+# The image is Python 3.14 with no compiler, so a dependency without a cp314
+# wheel fails the build. Before adding one here, make sure nothing the class
+# uses imports it.
+#
+# scikit-network: no cp314 wheels; ragas imports it lazily, only for test-set
+# clustering (ragas/testset/graph.py), never for the metrics.
+scikit-network

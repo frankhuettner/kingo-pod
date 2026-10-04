@@ -9,6 +9,7 @@ statsmodels
 # on disk while the old one is still loaded, and every flow build fails with
 # "IpcReadOptions size changed" until a restart (2026-09-21). 0.4.3 is ragas'
 # last release; on Langflow 1.12's langchain 1.x it needs the one-file shim in
-# the Dockerfile. It imports langchain_openai without declaring it.
+# the Dockerfile, and its scikit-network dependency is left out (excludes.txt).
+# It imports langchain_openai without declaring it.
 ragas==0.4.3
 langchain-openai

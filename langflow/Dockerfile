@@ -4,11 +4,13 @@
 # Same local-build pattern as jupyterhub/ — pull/bundle/load know both.
 FROM langflowai/langflow:1.12.4
 COPY requirements.txt /tmp/kingo-requirements.txt
+COPY excludes.txt /tmp/kingo-excludes.txt
 COPY vertexai-stub.py /tmp/vertexai-stub.py
 # Since 1.12 the base (UBI) puts a second virtualenv on PATH, /opt/app-root
 # with its own pip, so a bare `pip install` can land where Langflow never
 # imports from. Name Langflow's interpreter explicitly.
-RUN uv pip install --no-cache --python /app/.venv/bin/python -r /tmp/kingo-requirements.txt
+RUN uv pip install --no-cache --python /app/.venv/bin/python \
+      --excludes /tmp/kingo-excludes.txt -r /tmp/kingo-requirements.txt
 # ragas 0.4.3, its last release, imports langchain_community.chat_models.vertexai,
 # which langchain-community 0.4 removed. ragas only uses ChatVertexAI in
 # isinstance checks, so an empty class is exact.

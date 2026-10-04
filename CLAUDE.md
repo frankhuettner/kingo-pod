@@ -64,7 +64,12 @@ kept short; the full incident write-ups are in this file's history
   a bare `pip` can install where Langflow never imports. ragas 0.4.3, its last
   release, imports a module langchain-community 0.4 removed;
   `langflow/vertexai-stub.py` stands in for it, and the build's closing
-  `import ragas` is the guard — keep it. A
+  `import ragas` is the guard — keep it. The image is Python 3.14 with no
+  compiler: a dependency without a cp314 wheel fails the build (scikit-network
+  did, on CI) and goes in `langflow/excludes.txt` if nothing imports it. Check
+  with `uv pip compile --python-version 3.14 --python-platform
+  x86_64-manylinux_2_28` with and without `--only-binary :all:` and DIFF the
+  two — wheels-only alone "passes" by silently picking an ancient release. A
   COMPILED package (pyarrow, numpy, pandas) is upgraded in the build, never
   under a running server: the process keeps the old shared library mapped and
   the next lazy import mixes the two ("IpcReadOptions size changed"). For a

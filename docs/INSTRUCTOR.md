@@ -318,7 +318,11 @@ harmless. ragas 0.4.3 is its last release and predates langchain 1.x, which
 Langflow uses since 1.9: it imports one module langchain-community 0.4 removed
 (`chat_models.vertexai`), so the Dockerfile drops in an empty stand-in and the
 build ends with `import ragas` — a ragas that stops importing fails the build
-and CI, not a student's flow. Not every failed build is
+and CI, not a student's flow. Its scikit-network dependency (no Python 3.14
+wheels, only used for test-set generation) is left out via
+`langflow/excludes.txt`. The same limit applies to a student's
+`./kingo langflow pip install`: a package without a Python 3.14 wheel cannot
+build in the image. Not every failed build is
 this one: a plain `No such file or directory: /app/shared/...` is a misspelled
 Test Set path (`gentai` for `genai` happened).
 
