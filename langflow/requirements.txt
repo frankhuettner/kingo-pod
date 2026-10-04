@@ -3,15 +3,12 @@
 # To add one for the whole class: add it here, commit, and have students run
 #   ./kingo update
 statsmodels
-# RAGAS evaluation (the RAGAS Metrics Evaluator component). ragas 0.4 needs
-# datasets >= 4, which needs pyarrow >= 21 — both ABOVE the base image's own
-# pins (datasets<4, pyarrow==19), so the build prints pip's "dependency
-# conflicts" notice for langflow-base and exits 0; Langflow runs fine on the
-# newer ones (verified 2026-09-21). Do NOT pin pyarrow back to 19: that only
-# moves the conflict to datasets. And the upgrade MUST happen here, in the
-# build — done with `kingo langflow pip install` under a running server it
-# loads pyarrow 25's C extensions into pyarrow 19's in-memory package, and
-# every flow build fails with "IpcReadOptions size changed" until a restart.
+# RAGAS evaluation (the RAGAS Metrics Evaluator component). It MUST be
+# installed here, in the build: done with `kingo langflow pip install` under a
+# running server, a compiled package it upgrades (pyarrow, numpy) is replaced
+# on disk while the old one is still loaded, and every flow build fails with
+# "IpcReadOptions size changed" until a restart (2026-09-21). 0.4.3 is ragas'
+# last release; on Langflow 1.12's langchain 1.x it needs the one-file shim in
+# the Dockerfile. It imports langchain_openai without declaring it.
 ragas==0.4.3
 langchain-openai
-langchain<0.4

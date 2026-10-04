@@ -202,7 +202,7 @@ jobs:
         run: |
           set -euo pipefail
           ./kingo down
-          IMGS="postgres:16 n8nio/n8n:2.35.5"
+          IMGS="postgres:16 n8nio/n8n:2.41.6"
           # KNOWN GAP, found by this very step on its first run (2026-08-30):
           # on Ubuntu 24.04's podman 4.9.3 the zstd→gzip conversion does not
           # stick — `save` still reports the zstd layers and fails. It works on

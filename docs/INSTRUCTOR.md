@@ -189,8 +189,8 @@ line of their Dockerfile:
 | JupyterLab | `quay.io/jupyter/scipy-notebook:2026-08-17` | `compose.yml` |
 | JupyterHub | `quay.io/jupyterhub/jupyterhub:5` | `jupyterhub/Dockerfile` |
 | Jupyter MCP | `datalayer/jupyter-mcp-server:1.4.5` | `compose.yml` |
-| Langflow | `langflowai/langflow:1.8.0` | `langflow/Dockerfile` |
-| n8n | `n8nio/n8n:2.35.5` | `compose.yml` |
+| Langflow | `langflowai/langflow:1.12.4` | `langflow/Dockerfile` |
+| n8n | `n8nio/n8n:2.41.6` | `compose.yml` |
 | Metabase | `metabase/metabase:v0.60.25` | `compose.yml` |
 | CloudBeaver | `dbeaver/cloudbeaver:26.1.5` | `compose.yml` |
 
@@ -212,7 +212,8 @@ the opposite of what the paragraph above promises, so pinning them exactly is
 on the list in issue #6.
 
 **Bumping one is never just an edit.** It means: rebuild and re-run
-`./kingo smoke` locally, let CI do both engines, tell every student to run
+`./kingo smoke` locally, let CI do both engines, have a TA run the class
+content on the `next` branch (below), tell every student to run
 `./kingo update` (**at home** — the download is not a classroom activity),
 and rebuild BOTH USB tars, which re-records `bundles.sha256`. So do it
 between cohorts, not during one.
@@ -256,6 +257,43 @@ The actual to-do list, with the checklist for doing it safely, lives in
 [issue #6](https://github.com/frankhuettner/kingo-pod/issues/6) — that is
 the reminder to open between cohorts.
 
+## Trying an update before the class gets it (the `next` branch)
+
+Pin bumps go to the `next` branch first. `./kingo update` fast-forwards
+whichever branch the folder tracks, so a TA whose folder is on `next` gets the
+bump while every student on `main` sees nothing. `./kingo version` on `next`
+names a release candidate (`-rc` suffix). In the TA's `~/kingo-pod`, with the
+stack running (`docker` instead of `podman` on Docker Desktop):
+
+| Step | Command |
+|---|---|
+| 1. back up the Langflow and n8n databases | `podman exec kingo-postgres pg_dump -U student -Fc langflow > ~/kingo-langflow-pre-next.dump && podman exec kingo-postgres pg_dump -U student -Fc n8n > ~/kingo-n8n-pre-next.dump` |
+| 2. switch the folder to `next` | `git fetch && git switch next` |
+| 3. update as usual | `./kingo update` |
+
+Step 1 is not optional: the first start of a new Langflow or n8n migrates its
+database, and neither app can open a migrated database again in the old
+version. While the folder is on `next`, every `./kingo update` brings the
+newest `next`.
+
+**Green light**: fast-forward `main` to `next`, drop the `-rc` from `VERSION`
+in the commit you tag, push, rebuild both USB tars. The TA goes back with
+`git switch main && ./kingo update`.
+
+**Red light**: restore the backups BEFORE the old versions start, then go back:
+
+| Step | Command |
+|---|---|
+| 1. stop the two apps | `podman stop kingo-langflow kingo-n8n` |
+| 2. restore Langflow | `podman exec kingo-postgres dropdb -U student --force langflow && podman exec kingo-postgres createdb -U student langflow && podman exec -i kingo-postgres pg_restore -U student -d langflow < ~/kingo-langflow-pre-next.dump` |
+| 3. restore n8n | `podman exec kingo-postgres dropdb -U student --force n8n && podman exec kingo-postgres createdb -U student n8n && podman exec -i kingo-postgres pg_restore -U student -d n8n < ~/kingo-n8n-pre-next.dump` |
+| 4. back to `main` | `git switch main && ./kingo update` |
+
+Fixes on `next` are new commits, never a force-push: a rewritten `next`
+strands the TA's folder exactly like a rewritten `main` strands a student's
+("A folder that cannot update", with `next` for `main`). If `main` moves in
+the meantime, merge it into `next`.
+
 ## Python packages in Langflow
 
 Langflow is built locally (`langflow/Dockerfile`) on top of the upstream
@@ -276,9 +314,11 @@ lazy `import ragas` then loads the new C extensions into the old package. Tell
 the student to run `./kingo restart langflow`: it fixes this and KEEPS their
 pip installs. `down` + `up` "fixes" it too, by wiping them. That trap is why
 ragas is in `requirements.txt` — the same upgrade inside the image build is
-harmless. The build prints pip's "dependency conflicts" notice for
-langflow-base's `datasets<4` / `pyarrow==19` pins: expected, exit 0, Langflow
-runs fine on the newer ones; do not pin pyarrow back. Not every failed build is
+harmless. ragas 0.4.3 is its last release and predates langchain 1.x, which
+Langflow uses since 1.9: it imports one module langchain-community 0.4 removed
+(`chat_models.vertexai`), so the Dockerfile drops in an empty stand-in and the
+build ends with `import ragas` — a ragas that stops importing fails the build
+and CI, not a student's flow. Not every failed build is
 this one: a plain `No such file or directory: /app/shared/...` is a misspelled
 Test Set path (`gentai` for `genai` happened).
 

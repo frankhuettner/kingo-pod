@@ -1,9 +1,19 @@
 # Langflow, built locally: the upstream image plus the Python packages the
-# class uses inside Langflow components (requirements.txt) and uv, so
-# `./kingo langflow ...` can manage packages with real uv commands.
+# class uses inside Langflow components (requirements.txt). The image ships
+# uv, which `./kingo langflow ...` uses to manage packages.
 # Same local-build pattern as jupyterhub/ — pull/bundle/load know both.
-FROM langflowai/langflow:1.8.0
+FROM langflowai/langflow:1.12.4
 COPY requirements.txt /tmp/kingo-requirements.txt
-# The image's PATH puts /app/.venv/bin first, so this pip installs into the
-# exact virtualenv Langflow imports from.
-RUN pip install --no-cache-dir uv -r /tmp/kingo-requirements.txt
+COPY vertexai-stub.py /tmp/vertexai-stub.py
+# Since 1.12 the base (UBI) puts a second virtualenv on PATH, /opt/app-root
+# with its own pip, so a bare `pip install` can land where Langflow never
+# imports from. Name Langflow's interpreter explicitly.
+RUN uv pip install --no-cache --python /app/.venv/bin/python -r /tmp/kingo-requirements.txt
+# ragas 0.4.3, its last release, imports langchain_community.chat_models.vertexai,
+# which langchain-community 0.4 removed. ragas only uses ChatVertexAI in
+# isinstance checks, so an empty class is exact.
+RUN set -e; \
+    d="$(/app/.venv/bin/python -c 'import os, langchain_community.chat_models as m; print(os.path.dirname(m.__file__))')"; \
+    if [ ! -e "$d/vertexai.py" ]; then cp /tmp/vertexai-stub.py "$d/vertexai.py"; fi
+# A class package that cannot import fails the build (and CI), not a student's flow.
+RUN /app/.venv/bin/python -c "import ragas, statsmodels.api"

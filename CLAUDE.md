@@ -58,10 +58,13 @@ kept short; the full incident write-ups are in this file's history
 - **JupyterLab (:8888) stays** although JupyterHub exists — the Jupyter MCP
   server points at it.
 - **Class-wide Python packages go in `langflow/requirements.txt`**;
-  `kingo langflow pip install` is ephemeral by design. That file knowingly
-  overrides two pins of the base image (`datasets<4`, `pyarrow==19`; ragas 0.4
-  needs newer): the build prints pip's "dependency conflicts" notice and exits
-  0, and Langflow runs fine on them (2026-09-21) — do not pin pyarrow back. A
+  `kingo langflow pip install` is ephemeral by design. The Dockerfile installs
+  them with `uv pip install --python /app/.venv/bin/python`: since 1.12 the
+  UBI base puts a second venv (`/opt/app-root`, with its own pip) on PATH, and
+  a bare `pip` can install where Langflow never imports. ragas 0.4.3, its last
+  release, imports a module langchain-community 0.4 removed;
+  `langflow/vertexai-stub.py` stands in for it, and the build's closing
+  `import ragas` is the guard — keep it. A
   COMPILED package (pyarrow, numpy, pandas) is upgraded in the build, never
   under a running server: the process keeps the old shared library mapped and
   the next lazy import mixes the two ("IpcReadOptions size changed"). For a
@@ -279,6 +282,14 @@ echoes it, `kingo update` reports the transition — "send me `./kingo version`"
 is the first question in support. `kingo_version()` stays non-fatal and never
 calls `select_engine`: a student with a broken engine must still be able to
 say what they run.
+
+**Pin bumps ride the `next` branch first** (INSTRUCTOR.md "Trying an update
+before the class gets it"): `update` follows `@{upstream}`, so a TA on `next`
+gets the bump and `main` sees nothing. `VERSION` there carries `-rc.N`; fixes
+are new commits, never a force-push (it strands the TA's folder); release =
+fast-forward `main` to `next`, then the tagged `VERSION` commit. The TA backs
+up the Langflow and n8n databases first: both migrate on first start and
+cannot downgrade.
 
 ## Layout
 
