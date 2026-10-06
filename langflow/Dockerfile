@@ -6,6 +6,7 @@ FROM langflowai/langflow:1.12.4
 COPY requirements.txt /tmp/kingo-requirements.txt
 COPY excludes.txt /tmp/kingo-excludes.txt
 COPY vertexai-stub.py /tmp/vertexai-stub.py
+COPY kingo-preload.pth /tmp/kingo-preload.pth
 # Since 1.12 the base (UBI) puts a second virtualenv on PATH, /opt/app-root
 # with its own pip, so a bare `pip install` can land where Langflow never
 # imports from. Name Langflow's interpreter explicitly.
@@ -17,5 +18,11 @@ RUN uv pip install --no-cache --python /app/.venv/bin/python \
 RUN set -e; \
     d="$(/app/.venv/bin/python -c 'import os, langchain_community.chat_models as m; print(os.path.dirname(m.__file__))')"; \
     if [ ! -e "$d/vertexai.py" ]; then cp /tmp/vertexai-stub.py "$d/vertexai.py"; fi
-# A class package that cannot import fails the build (and CI), not a student's flow.
-RUN /app/.venv/bin/python -c "import ragas, statsmodels.api, nemoguardrails"
+# Two components importing the openai SDK in parallel threads deadlock on the
+# first run after a start; the .pth imports it at interpreter start instead
+# (the file explains).
+RUN cp /tmp/kingo-preload.pth "$(/app/.venv/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')/"
+# A class package that cannot import fails the build (and CI), not a student's
+# flow — and so does a preload that stopped running (checked first: ragas
+# imports openai itself).
+RUN /app/.venv/bin/python -c "import sys; assert 'openai.resources' in sys.modules, 'kingo-preload.pth did not run'; import ragas, statsmodels.api, nemoguardrails"

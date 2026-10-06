@@ -64,7 +64,11 @@ kept short; the full incident write-ups are in this file's history
   a bare `pip` can install where Langflow never imports. ragas 0.4.3, its last
   release, imports a module langchain-community 0.4 removed;
   `langflow/vertexai-stub.py` stands in for it, and the build's closing
-  `import ragas` is the guard — keep it. The image is Python 3.14 with no
+  `import ragas` is the guard — keep it. `langflow/kingo-preload.pth` imports
+  the openai SDK at interpreter start: 1.12 builds components in parallel
+  threads, and two of them lazily importing openai deadlocked the first run
+  after every start. A `.pth`, not a wrapped CMD, because it also covers
+  whatever process Langflow forks or spawns; the guard asserts it ran. The image is Python 3.14 with no
   compiler: a dependency without a cp314 wheel fails the build (scikit-network
   did, on CI) and goes in `langflow/excludes.txt` if nothing imports it. Check
   with `uv pip compile --python-version 3.14 --python-platform

@@ -345,9 +345,20 @@ and CI, not a student's flow. Its scikit-network dependency (no Python 3.14
 wheels, only used for test-set generation) is left out via
 `langflow/excludes.txt`. The same limit applies to a student's
 `./kingo langflow pip install`: a package without a Python 3.14 wheel cannot
-build in the image. Not every failed build is
+build in the image.
+
+Not every failed build is
 this one: a plain `No such file or directory: /app/shared/...` is a misspelled
 Test Set path (`gentai` for `genai` happened).
+
+**"deadlock detected by _ModuleLock('openai.resources.embeddings')"** on the
+first run after Langflow started, in a flow with an OpenRouter model and
+OpenRouter embeddings: Langflow 1.12 builds components in parallel threads,
+and the two imported the openai SDK at the same moment. The image imports it
+at startup since 1.5.0-rc.4 (`langflow/kingo-preload.pth`), so only the
+earlier `next` candidates show it. If the same message names another
+package after a Langflow bump, that SDK races the same way: add it to the
+import line in that file.
 
 ## Did this laptop install from the stick, or from the Wi-Fi?
 

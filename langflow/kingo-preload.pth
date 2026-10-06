@@ -1,0 +1,16 @@
+# Run by Python at the start of every interpreter in Langflow's venv (the
+# Dockerfile copies it into site-packages; gunicorn's workers fork from that
+# process, so they start with it done).
+#
+# Langflow 1.12 runs a flow's components in parallel threads, and the openai
+# SDK imports its resources lazily, on first use. A flow with an
+# OpenAI-compatible model AND OpenAI-compatible embeddings (OpenRouter, in
+# class) then has two threads importing openai.resources.chat and
+# openai.resources.embeddings at the same moment, each waiting for the other:
+# "deadlock detected by _ModuleLock('openai.resources.embeddings')" on the
+# first run after every start (found by the TA on `next`; reproduced on every
+# try with the image's openai 2.48 / Python 3.14, 2026-10-06). Imported here, before any thread exists, nothing
+# is left to race. Costs about a second per interpreter start and ~70 MB that
+# such a flow loads anyway. Another SDK that deadlocks the same way goes on
+# the same line.
+import openai.resources, langchain_openai
