@@ -262,49 +262,72 @@ the reminder to open between cohorts.
 Pin bumps go to the `next` branch first. `./kingo update` fast-forwards
 whichever branch the folder tracks, so a TA whose folder is on `next` gets the
 bump while every student on `main` sees nothing. `./kingo version` on `next`
-names a release candidate (`-rc` suffix). In the TA's `~/kingo-pod`, with the
-stack running (`docker` instead of `podman` on Docker Desktop):
+names a release candidate (`-rc` suffix). In the TA's `~/kingo-pod`:
 
 | Step | Command |
 |---|---|
-| 1. back up the Langflow and n8n databases | `podman exec kingo-postgres pg_dump -U student -Fc langflow > ~/kingo-langflow-pre-next.dump && podman exec kingo-postgres pg_dump -U student -Fc n8n > ~/kingo-n8n-pre-next.dump` |
+| 1. back up the Langflow and n8n databases | `./kingo backup` |
 | 2. switch the folder to `next` | `git fetch && git switch next` |
 | 3. update as usual | `./kingo update` |
 
-Step 1 is not optional: the first start of a new Langflow or n8n migrates its
-database, and neither app can open a migrated database again in the old
-version. While the folder is on `next`, every `./kingo update` brings the
-newest `next`.
+Step 1 is not optional, and it is the one place `update` cannot do the backup
+by itself: `git switch` already changes `VERSION`, so `update` sees no version
+change (see "Going back to the previous version"). While the folder is on
+`next`, every `./kingo update` brings the newest `next` and backs up first.
 
 **Green light**: fast-forward `main` to `next`, drop the `-rc` from `VERSION`
 in the commit you tag, push, rebuild both USB tars. The TA goes back with
 `git switch main && ./kingo update`.
 
-**Red light**: restore the backups BEFORE the old versions start, then go back:
-
-| Step | Command |
-|---|---|
-| 1. stop the two apps | `podman stop kingo-langflow kingo-n8n` |
-| 2. restore Langflow | `podman exec kingo-postgres dropdb -U student --force langflow && podman exec kingo-postgres createdb -U student langflow && podman exec -i kingo-postgres pg_restore -U student -d langflow < ~/kingo-langflow-pre-next.dump` |
-| 3. restore n8n | `podman exec kingo-postgres dropdb -U student --force n8n && podman exec kingo-postgres createdb -U student n8n && podman exec -i kingo-postgres pg_restore -U student -d n8n < ~/kingo-n8n-pre-next.dump` |
-| 4. back to `main` | `git switch main && ./kingo update` |
+**Red light**: restore the backup from step 1 (its folder is named after the
+`main` version) BEFORE the old versions start — the recipe below — and go back
+with `git switch main && ./kingo update` as its last step.
 
 Fixes on `next` are new commits, never a force-push: a rewritten `next`
 strands the TA's folder exactly like a rewritten `main` strands a student's
 ("A folder that cannot update", with `next` for `main`). If `main` moves in
 the meantime, merge it into `next`.
 
+## Going back to the previous version
+
+The first start of a new Langflow or n8n migrates its database, and neither
+app can open a migrated database in the old version again. So whenever
+`./kingo update` changes the version, it first dumps both databases into
+`backups/<date-time>_kingo-<old version>/` in the student's folder
+(`langflow.dump`, `n8n.dump`; the newest three folders are kept, older ones
+deleted). `./kingo backup` does the same by hand. The folder name says which
+version the data belongs to; restore it only into that version.
+
+Order matters: the old version must not start on the migrated database, so
+restore while the two apps are stopped, and bring the folder back to the old
+version afterwards (a revert pushed to `main` plus `./kingo update`, or for a
+TA on `next`: `git switch main && ./kingo update`). In the student's
+`~/kingo-pod` (`docker` instead of `podman` on Docker Desktop; `<folder>` is
+the backup's folder name):
+
+| Step | Command |
+|---|---|
+| 1. stop the two apps | `podman stop kingo-langflow kingo-n8n` |
+| 2. restore Langflow | `podman exec kingo-postgres dropdb -U student --force langflow && podman exec kingo-postgres createdb -U student langflow && podman exec -i kingo-postgres pg_restore -U student -d langflow < backups/<folder>/langflow.dump` |
+| 3. restore n8n | `podman exec kingo-postgres dropdb -U student --force n8n && podman exec kingo-postgres createdb -U student n8n && podman exec -i kingo-postgres pg_restore -U student -d n8n < backups/<folder>/n8n.dump` |
+| 4. back to the old version | `./kingo update` (after the revert is on `main`) |
+
+The update in step 4 backs up again (the restored data, harmless). A backup is
+not a substitute for the student's own exports: three more backups (every
+version change makes one) and it is gone.
+
 ## Python packages in Langflow
 
 Langflow is built locally (`langflow/Dockerfile`) on top of the upstream
-image, adding the packages in `langflow/requirements.txt` (statsmodels, ragas, …)
-plus `uv`. To give the whole class a new package: add one line to
+image, adding the packages in `langflow/requirements.txt` (statsmodels, ragas,
+nemoguardrails, …) plus `uv`. To give the whole class a new package: add one line to
 `langflow/requirements.txt`, commit + push, and announce **"run
 `./kingo update`"** — that one command works for every install kind
 (git installs pull; leftover ZIP-era Mac folders fetch the repo tarball
 automatically) and rebuilds the image. A student who needs something just for themselves:
-`./kingo langflow pip install <pkg>` (ephemeral — gone after `down`+`up`,
-which is fine for one-offs).
+`./kingo langflow pip install <pkg>` (ephemeral — gone after `down`+`up` and
+after every update that changes the image, which is fine for one-offs; a
+package the class keeps using belongs in `requirements.txt`).
 
 **"IpcReadOptions size changed, may indicate binary incompatibility"** when a
 flow builds (the RAGAS Metrics Evaluator, 2026-09-21): a `./kingo langflow pip

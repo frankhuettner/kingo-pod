@@ -139,10 +139,26 @@ jobs:
 
       - name: Boot 2 — second cycle catches first-run-only survivors
         timeout-minutes: 25
+        # With a backup in between, on purpose: with the stack down it has to
+        # start the database alone, and the `up` after it then meets a running
+        # postgres — the order `update` produces when the version changes. The
+        # dumps must hold the apps' real tables (pg_restore reads them back),
+        # and three more runs must leave exactly three folders.
         run: |
+          set -euo pipefail
           ./kingo down
+          ./kingo backup
+          d=$(ls -1d backups/*/ | tail -1)
+          for t in "langflow flow" "n8n workflow_entity"; do
+            set -- $t
+            l=$(${{ matrix.engine }} exec -i kingo-postgres pg_restore --list < "$d$1.dump")
+            case "$l" in *" TABLE public $2 "*) ;; *) echo "FAIL: $d$1.dump has no table $2"; exit 1 ;; esac
+          done
           ./kingo up
           ./kingo smoke
+          for i in 1 2 3; do sleep 1; ./kingo backup >/dev/null; done
+          n=$(ls -1d backups/*/ | wc -l | tr -d ' ')
+          [ "$n" = 3 ] || { echo "FAIL: $n backup folders, expected 3"; ls backups; exit 1; }
 
       - name: Boot 3 — mode cycle (abp → n8n → langflow → bi → full)
         timeout-minutes: 45

@@ -134,6 +134,13 @@ kept short; the full incident write-ups are in this file's history
   NAME=` counts), collected BEFORE the fetch as well (`_env_keys_before` — a
   name the new `.env` drops appears in no file afterwards), then re-export only
   `_cli_overrides` so a typed `KINGO_MODE=x ./kingo update` still wins.
+- **A version change dumps the Langflow and n8n databases BEFORE `cmd_pull`**
+  (`backup_dbs`; by hand `kingo backup`): both apps migrate on first start and
+  cannot downgrade. It sits after the re-exec, so the fetched script runs it
+  and the release that ships it is covered. With the stack down it starts
+  postgres alone. Never fatal (warns, update goes on); a failed run never
+  prunes (`BACKUP_KEEP` folders). A `git switch` changes `VERSION` before
+  update can see it — hence the manual `kingo backup` in the `next` recipe.
 
 ## Podman storage: ghost containers (`heal_ghost_containers`, `heal_ghosts_report`)
 
@@ -293,8 +300,8 @@ before the class gets it"): `update` follows `@{upstream}`, so a TA on `next`
 gets the bump and `main` sees nothing. `VERSION` there carries `-rc.N`; fixes
 are new commits, never a force-push (it strands the TA's folder); release =
 fast-forward `main` to `next`, then the tagged `VERSION` commit. The TA backs
-up the Langflow and n8n databases first: both migrate on first start and
-cannot downgrade.
+up the Langflow and n8n databases first (`./kingo backup`): both migrate on
+first start and cannot downgrade.
 
 ## Layout
 

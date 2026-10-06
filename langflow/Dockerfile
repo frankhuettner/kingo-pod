@@ -18,4 +18,4 @@ RUN set -e; \
     d="$(/app/.venv/bin/python -c 'import os, langchain_community.chat_models as m; print(os.path.dirname(m.__file__))')"; \
     if [ ! -e "$d/vertexai.py" ]; then cp /tmp/vertexai-stub.py "$d/vertexai.py"; fi
 # A class package that cannot import fails the build (and CI), not a student's flow.
-RUN /app/.venv/bin/python -c "import ragas, statsmodels.api"
+RUN /app/.venv/bin/python -c "import ragas, statsmodels.api, nemoguardrails"

@@ -13,3 +13,8 @@ statsmodels
 # It imports langchain_openai without declaring it.
 ragas==0.4.3
 langchain-openai
+# NeMo Guardrails, for class flows. Here rather than per student: a
+# `kingo langflow pip install` is gone after every update that changes the
+# image. Pinned because it follows langchain closely — 0.24.1 was checked
+# against Langflow 1.12's langchain 1.3 (adds 8 packages, moves none).
+nemoguardrails==0.24.1

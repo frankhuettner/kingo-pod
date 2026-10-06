@@ -507,6 +507,83 @@ cmd_up() {
   small_host_hint
 }
 
+# ── backup: the Langflow and n8n databases ───────────────────────────────────
+# A new Langflow or n8n converts its database on its first start, and the old
+# version cannot open it again: a dump taken BEFORE that start is the only way
+# back. `update` takes one whenever the version changes — in stage 2, i.e. the
+# fetched script, before any new image starts, so even the update that brought
+# this code is covered — and `kingo backup` takes one by hand (a `git switch`
+# changes VERSION before `update` can see it). One folder per backup in
+# backups/ (gitignored), named by time and by the version the data belongs to;
+# the newest BACKUP_KEEP stay. Restore: docs/INSTRUCTOR.md "Going back to the
+# previous version".
+BACKUP_DBS="langflow n8n"
+BACKUP_KEEP=3
+kb_human() { awk -v k="$1" 'BEGIN{ if (k < 1024) printf "%d KB", k; else printf "%.1f MB", k/1024 }'; }
+backup_prune() { # keep the newest BACKUP_KEEP backup folders — only ours, by name
+  local all n d
+  all="$(ls -1 backups 2>/dev/null | LC_ALL=C grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}_kingo-' | LC_ALL=C sort || true)"
+  [ -n "$all" ] || return 0
+  n=$(printf '%s\n' "$all" | wc -l | tr -d ' ')
+  while IFS= read -r d; do
+    [ "$n" -gt "$BACKUP_KEEP" ] || break
+    rm -rf "backups/$d"
+    n=$((n - 1))
+  done <<<"$all"
+}
+backup_dbs() { # $1: the version the data belongs to. Never dies; non-zero = not every dump was written
+  local names dir db err size i ok="" failed=""
+  names="$($ENGINE ps --format '{{.Names}}' 2>/dev/null || true)"
+  case $'\n'"$names"$'\n' in
+    *$'\n'kingo-postgres$'\n'*) ;;
+    *)
+      # Stack down: start the database alone (no profile, so it is in every
+      # mode). Its image never changes with a release — a Postgres major is a
+      # MAJOR, with its own dump/restore.
+      echo "Starting the database for the backup ..."
+      compose up -d postgres >/dev/null 2>&1 || { warn "could not start the database, so no backup was made"; return 1; }
+      ;;
+  esac
+  i=0
+  until $ENGINE exec kingo-postgres pg_isready -q -U "$KINGO_USER" >/dev/null 2>&1; do
+    i=$((i + 1))
+    [ "$i" -lt 60 ] || { warn "the database did not answer, so no backup was made"; return 1; }
+    sleep 1
+  done
+  dir="backups/$(date +%Y-%m-%d-%H%M%S)_kingo-$1"
+  mkdir -p "$dir" || { warn "could not create $dir (disk full?), so no backup was made"; return 1; }
+  for db in $BACKUP_DBS; do
+    # A database the install never created is nothing to lose.
+    [ "$($ENGINE exec kingo-postgres psql -U "$KINGO_USER" -d postgres -tAc \
+          "SELECT 1 FROM pg_database WHERE datname = '$db'" 2>/dev/null || true)" = 1 ] || continue
+    # stdout goes to the file, so $( ) collects pg_dump's error text alone.
+    if err="$( { $ENGINE exec kingo-postgres pg_dump -U "$KINGO_USER" -Fc "$db" > "$dir/$db.dump.part"; } 2>&1 )" \
+       && [ -s "$dir/$db.dump.part" ]; then
+      mv "$dir/$db.dump.part" "$dir/$db.dump"
+      size="$(du -k "$dir/$db.dump" | cut -f1)"
+      ok="$ok${ok:+, }$db $(kb_human "$size")"
+    else
+      rm -f "$dir/$db.dump.part"
+      failed="$failed $db"
+      warn "could not back up the $db database${err:+: $(printf '%s\n' "$err" | LC_ALL=C grep -m1 . || true)}"
+    fi
+  done
+  if [ -z "$ok" ]; then
+    rmdir "$dir" 2>/dev/null || true
+    [ -n "$failed" ] && return 1
+    echo "Nothing to back up (no Langflow or n8n database yet)."
+    return 0
+  fi
+  echo "Backup saved in $dir ($ok)"
+  # A failed run never prunes: the older folders may be the only good copies.
+  [ -z "$failed" ] || return 1
+  backup_prune
+}
+cmd_backup() {
+  select_engine; ensure_ready
+  backup_dbs "$(kingo_version)" || die "the backup is incomplete — see above"
+}
+
 # `update` runs in two stages. Stage 1 (this process — the OLD script) fetches
 # the class files; but bash goes on executing the copy it already opened, so a
 # fix to kingo ITSELF would never run in the update that fetched it — a student
@@ -679,6 +756,15 @@ cmd_update() {
         warn "the fetched kingo does not run on this machine — finishing with the version that was already here. Please report this to your instructor."
       fi
     fi
+  fi
+  # A new version can bring a new Langflow or n8n, which converts its database
+  # on its first start, for good. Dump both first, while the data is still in
+  # the format of $_v_before. Never fatal, like every step here: a backup that
+  # cannot be made is said loudly, and the update goes on.
+  if [ "$_v_before" != "$(kingo_version)" ]; then
+    select_engine; ensure_ready
+    backup_dbs "$_v_before" \
+      || warn "continuing the update without a complete backup — if your flows or workflows look wrong afterwards, tell your instructor before you change anything."
   fi
   # Images and builds for EVERY mode, so a later './kingo mode full' in class
   # never downloads.
@@ -2180,6 +2266,7 @@ case "${1:-help}" in
   bundle)            shift; cmd_bundle "${1:-}" ;;
   load)              shift; cmd_load "${1:-}" ;;
   update)            cmd_update ;;
+  backup)            cmd_backup ;;
   reset)             select_engine; ensure_ready
                      echo "This DELETES all data (databases, notebooks, workflows) and starts fresh."
                      read -r -p "Type 'yes' to continue: " a
@@ -2226,7 +2313,10 @@ kingo — classroom stack helper (Podman or Docker, no VM)
                       wrong-architecture bundle, and one whose checksum does
                       not match bundles.sha256 from the class repo
   kingo update        get the newest class files + images, rebuild, restart
-  kingo reset         wipe all data and start fresh (asks first)
+                      (backs up the Langflow and n8n data first when the
+                      version changes)
+  kingo backup        save the Langflow and n8n databases into backups/
+  kingo reset        wipe all data and start fresh (asks first)
 
   Engine is auto-detected (Podman preferred). Force one with:
     KINGO_ENGINE=docker kingo up
