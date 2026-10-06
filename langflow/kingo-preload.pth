@@ -13,4 +13,10 @@
 # is left to race. Costs about a second per interpreter start and ~70 MB that
 # such a flow loads anyway. Another SDK that deadlocks the same way goes on
 # the same line.
+#
+# Temporary: openai 3.16.1 fixed this upstream (openai-python PR #3898,
+# 2026-09-18; 3.16.0 still deadlocks, 3.16.1 never did in our test), but
+# Langflow 1.12.4 cannot take it — lfx-openai 0.1.5 pins openai <3. DELETE
+# this file (and its two Dockerfile lines) once a Langflow bump brings
+# openai >= 3.16.1. Same bug, same preload: langflow-ai/openrag#2436/#2437.
 import openai.resources, langchain_openai

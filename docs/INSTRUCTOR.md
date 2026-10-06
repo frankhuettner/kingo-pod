@@ -358,7 +358,11 @@ and the two imported the openai SDK at the same moment. The image imports it
 at startup since 1.5.0-rc.4 (`langflow/kingo-preload.pth`), so only the
 earlier `next` candidates show it. If the same message names another
 package after a Langflow bump, that SDK races the same way: add it to the
-import line in that file.
+import line in that file. The file is temporary: openai 3.16.1 fixed the race
+upstream, but Langflow 1.12.4 pins openai below 3 — at each Langflow bump,
+check the image's openai (`podman exec kingo-langflow /app/.venv/bin/python
+-c "import openai; print(openai.__version__)"`), and from 3.16.1 on, delete
+the file and its two Dockerfile lines.
 
 ## Did this laptop install from the stick, or from the Wi-Fi?
 

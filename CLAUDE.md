@@ -68,7 +68,9 @@ kept short; the full incident write-ups are in this file's history
   the openai SDK at interpreter start: 1.12 builds components in parallel
   threads, and two of them lazily importing openai deadlocked the first run
   after every start. A `.pth`, not a wrapped CMD, because it also covers
-  whatever process Langflow forks or spawns; the guard asserts it ran. The image is Python 3.14 with no
+  whatever process Langflow forks or spawns; the guard asserts it ran.
+  Temporary: openai 3.16.1 fixed the race, Langflow 1.12.4 pins openai <3 —
+  delete the preload once the image has openai >= 3.16.1. The image is Python 3.14 with no
   compiler: a dependency without a cp314 wheel fails the build (scikit-network
   did, on CI) and goes in `langflow/excludes.txt` if nothing imports it. Check
   with `uv pip compile --python-version 3.14 --python-platform
