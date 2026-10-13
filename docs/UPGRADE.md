@@ -1,10 +1,12 @@
 # Kingo Classroom — the optional upgrade to Kingo 1.5
 
-Kingo 1.5 is a new version of the class stack. The main change is a newer
+Kingo 1.5 is a new version of the class stack. The only difference is
 Langflow:
 
 - **Kingo 1.4** (what you have now) comes with **Langflow 1.8**.
-- **Kingo 1.5** comes with **Langflow 1.12** (and a newer n8n).
+- **Kingo 1.5** comes with **Langflow 1.12**.
+
+Everything else, n8n included, is the same in both.
 
 **The upgrade is optional.** `./kingo update` does not do it for you.
 
@@ -15,8 +17,8 @@ Langflow:
 > [Should your team upgrade?](#should-your-team-upgrade) ·
 > [How to upgrade](#how-to-upgrade) · [After the upgrade](#after-the-upgrade)
 
-Which version do you have? Run this line. The first line it prints is
-`kingo-pod 1.4.0` or `kingo-pod 1.5.0`:
+Which version do you have? Run this line. The first line it prints starts
+with `kingo-pod 1.4` or `kingo-pod 1.5`:
 
 ```
 cd ~/kingo-pod && ./kingo version
@@ -87,11 +89,10 @@ Langflow 1.12 still **deletes and renames chats by name**:
 - you also use this stack for **another course**, and its instructor has not
   said yes: your laptop has one version for both courses
 
-**Why the whole team?** When the new Langflow and n8n start for the first
-time, they convert your data. Kingo 1.4 cannot read it anymore. Flows and
-workflows from Kingo 1.5 may not open in Kingo 1.4, so a half-upgraded team
-can't share its work. The other way round works: flows and workflows from
-Kingo 1.4 open in Kingo 1.5.
+**Why the whole team?** When the new Langflow starts for the first time, it
+converts your data. Kingo 1.4 cannot read it anymore. Flows from Kingo 1.5
+may not open in Kingo 1.4, so a half-upgraded team can't share its flows.
+The other way round works: flows from Kingo 1.4 open in Kingo 1.5.
 
 ## How to upgrade
 
@@ -112,10 +113,10 @@ cd ~/kingo-pod && ./kingo update && git branch -u origin/release-1.5 && ./kingo 
 ```
 
 It updates twice: first Kingo 1.4, then it switches to Kingo 1.5. The very
-last line should be:
+last line should end with `→ 1.5.0.`, for example:
 
 ```
-Stack updated — kingo-pod 1.4.0 → 1.5.0.
+Stack updated — kingo-pod 1.4.1 → 1.5.0.
 ```
 
 That's it. From now on, `./kingo update` keeps you on Kingo 1.5. Everything
