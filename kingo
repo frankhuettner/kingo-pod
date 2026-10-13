@@ -650,10 +650,22 @@ update_reexec() { # $1: the version seen BEFORE the fetch — stage 2 reports it
   update_scrub_env
   KINGO_UPDATE_STAGE=2 KINGO_UPDATE_FROM="$1" exec bash "$target" update
 }
+update_rejoin_main() { # sets cmd_update's _git_up; runs after a successful fetch
+  # A folder opted into a release ahead of main (`git branch -u
+  # origin/release-1.5`, INSTRUCTOR.md "Two versions at once") follows main
+  # again by itself once main contains that branch, so nobody has to undo the
+  # opt-in by hand — and until then this does nothing. Never fails: any git
+  # error leaves the folder on the branch it was on.
+  case "$_git_up" in origin/release-*) ;; *) return 0 ;; esac
+  git merge-base --is-ancestor "$_git_up" origin/main 2>/dev/null || return 0
+  git branch --quiet --set-upstream-to=origin/main 2>/dev/null || return 0
+  _git_up=origin/main
+  echo "This folder follows the class branch (main) again."
+}
 cmd_update() {
   # Deliberately NO engine check before the fetch: a student whose engine is
   # broken must still be able to pull the fix for it. cmd_pull gates the engine.
-  local _v_before _v_after _sig _tmp _git_err _git_say _git_up _pulled="" _probe_failed=""
+  local _v_before _v_after _sig _tmp _git_err _git_say _git_up _fetched _pulled="" _probe_failed=""
   if update_is_stage2; then
     _v_before="${KINGO_UPDATE_FROM:-$(kingo_version)}"   # the fetch happened in stage 1
   else
@@ -678,9 +690,12 @@ cmd_update() {
       _git_up="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
       # Bounded like every other network call here (curl -m 120 below, and the
       # setup scripts' git): a stalled fetch must not hang a class.
-      if ! git -c core.askPass=true \
-             -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 \
-             fetch --quiet 2>/dev/null; then
+      _fetched=1
+      git -c core.askPass=true \
+          -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 \
+          fetch --quiet 2>/dev/null || _fetched=""
+      [ -z "$_fetched" ] || update_rejoin_main
+      if [ -z "$_fetched" ]; then
         warn "could not reach GitHub (no network?) — updating images only"
       elif [ -z "$_git_up" ]; then
         warn "the newest class files could not be applied — updating images only for now."
