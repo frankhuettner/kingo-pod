@@ -147,6 +147,11 @@ kept short; the full incident write-ups are in this file's history
   postgres alone. Never fatal (warns, update goes on); a failed run never
   prunes (`BACKUP_KEEP` folders). A `git switch` changes `VERSION` before
   update can see it — hence the manual `kingo backup` in the `next` recipe.
+- **A folder tracking `origin/release-*` rejoins `main` by itself**
+  (`update_rejoin_main`, right after a successful fetch) once that branch is
+  an ancestor of `origin/main`. It is a no-op until then and for every
+  main-tracking folder. Do not delete a release branch from GitHub: a folder
+  that has not updated since still tracks it.
 
 ## Podman storage: ghost containers (`heal_ghost_containers`, `heal_ghosts_report`)
 
@@ -309,6 +314,14 @@ fast-forward `main` to `next`, then the tagged `VERSION` commit. The TA backs
 up the Langflow and n8n databases first (`./kingo backup`): both migrate on
 first start and cannot downgrade.
 
+**While another course must stay on the old version, the release goes on
+`release-X.Y`, not `main`** (INSTRUCTOR.md "Two versions at once"; 1.5 was
+the first, 2026-10). Nothing in `update` can keep a release on `main` away
+from a folder: the OLD script on the laptop does the merge. Students opt in
+with `git branch -u origin/release-X.Y` (docs/UPGRADE.md); the website
+builds from `main`, so guides go there and are merged into the release
+branch.
+
 ## Layout
 
 - `compose.yml` — the 9-service stack (ports via `KINGO_PORT_*`; profiles =
@@ -327,7 +340,8 @@ first start and cannot downgrade.
   by video, then run setup-linux.sh inside Ubuntu (a .ps1 was tried and
   dropped).
 - `docs/` — setup guides (Mac/Windows, internet and USB variants), the two
-  everyday guides, the CloudBeaver walkthrough, instructor notes.
+  everyday guides, the CloudBeaver walkthrough, the optional-upgrade page
+  (`UPGRADE.md`), instructor notes.
 - `site/` — the Astro build of `docs/` (`npm run dev` to preview; deployed by
   `.github/workflows/pages.yml`).
 - `.github/workflows/ci.yml` — both engines, two boot cycles plus a mode cycle.

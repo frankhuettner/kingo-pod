@@ -277,7 +277,9 @@ change (see "Going back to the previous version"). While the folder is on
 
 **Green light**: fast-forward `main` to `next`, drop the `-rc` from `VERSION`
 in the commit you tag, push, rebuild both USB tars. The TA goes back with
-`git switch main && ./kingo update`.
+`git switch main && ./kingo update`. While another course has to stay on the
+old version, the release goes on a branch of its own instead of `main`
+("Two versions at once", below).
 
 **Red light**: restore the backup from step 1 (its folder is named after the
 `main` version) BEFORE the old versions start — the recipe below — and go back
@@ -315,6 +317,55 @@ the backup's folder name):
 The update in step 4 backs up again (the restored data, harmless). A backup is
 not a substitute for the student's own exports: three more backups (every
 version change makes one) and it is gone.
+
+## Two versions at once (an opt-in release branch)
+
+Kingo 1.5 (Langflow 1.12, n8n 2.41) was ready mid-term, while another course
+still ran its class content on 1.4. A release on `main` would reach that
+course with its next `./kingo update`, and no change to `update` can stop
+that: the merge is done by the script already on the student's laptop. So
+`main` stays on 1.4.0 and the release lives on **`release-1.5`**; a folder
+opts in by tracking it instead of `main`. The student page is
+[UPGRADE.md](UPGRADE.md) (on the website as `/upgrade/`), with the line:
+
+```
+cd ~/kingo-pod && ./kingo update && git branch -u origin/release-1.5 && ./kingo update
+```
+
+- **The first `./kingo update`** brings the folder to 1.4.0 and fetches the
+  branch. It matters for folders from before 1.3.0: their script would merge
+  1.5 and finish with its own old code, without the backup.
+- **`git branch -u`** keeps the folder on its `main` branch and changes only
+  what it follows (verified on a copy of the repo).
+- **The second `./kingo update`** is the 1.4.0 script merging the release
+  branch and re-executing into the 1.5 one, which sees the version change and
+  backs up first (`backups/<date-time>_kingo-1.4.0/`).
+- **Afterwards** every `./kingo update` follows `release-1.5`.
+
+**ZIP-installed folders** (no `.git`) always download `main` and cannot opt
+in. Turn the folder into a clone first, in its `~/kingo-pod`:
+`git init -q && git remote add origin https://github.com/frankhuettner/kingo-pod.git && git fetch -q && git checkout -f -B main origin/main`.
+Untracked files (`shared/`, `.env.local`, `backups/`) stay; tracked files
+become the class version.
+
+**While both versions run:**
+- 1.5.x fixes are commits on `release-1.5` (CI: `gh workflow run ci.yml --ref release-1.5`), never a force-push.
+- The website builds from `main`, so guide changes go to `main` and are then merged into `release-1.5`.
+- The USB tars stay at 1.4, which is what a fresh install gets. A student who reinstalls runs the line again.
+
+**Going back to 1.4 from an opted-in folder**: steps 1–3 of "Going back to
+the previous version" with the `_kingo-1.4.0` backup, then
+`git checkout -B main origin/main && ./kingo update`. **Not**
+`git branch -u origin/main`: `main` is behind the release branch, the
+fast-forward says "Already up to date", and the folder stays on 1.5.
+
+**When the other course is over**: merge `release-1.5` into `main`
+(`git switch main && git merge release-1.5 && git push`), rebuild both USB
+tars, and rewrite or retire UPGRADE.md (keep its URL; it went round in
+messages). From then on `./kingo update` points every opted-in folder back to
+`main` by itself (`update_rejoin_main`, in every 1.5 script), so no student
+has to undo anything. Keep `release-1.5` on GitHub: a folder that has not
+updated since still tracks it.
 
 ## Python packages in Langflow
 
@@ -551,6 +602,10 @@ which is the state every other install is in.
 Steps 2–3 discard commits and edits made in this folder. That is the intent; if
 the student put files of their own in it, move them out first (anything
 untracked, such as `shared/`, survives).
+
+**A folder on a release branch** (`./kingo version` says 1.5 while `main` is
+still 1.4; see "Two versions at once") uses `origin/release-1.5` in steps 1
+and 3. `origin/main` would put 1.4 on a database 1.5 has already migrated.
 
 ## Stale container storage ("the container name ... is already in use")
 
