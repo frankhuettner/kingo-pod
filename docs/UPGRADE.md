@@ -69,9 +69,10 @@ flow still mixes up its own chats.
 Langflow renames and deletes chats by their name:
 
 - If you **delete** a chat, Langflow deletes every chat with that name, in
-  all your flows, with all its messages.
+  all your flows, with all its messages. There is no undo.
 - If you **rename** a chat, Langflow renames every chat with that name, in all
-  your flows.
+  your flows. If a flow already has a chat with the new name, the two become
+  one chat.
 
 In Kingo 1.4, this only matters if chats share a name. In Kingo 1.5 it
 matters more: Langflow 1.12 names new chats `New Session 1`, `New Session 2`,
