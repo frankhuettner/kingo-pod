@@ -1,14 +1,16 @@
 # Kingo Classroom — the optional upgrade to Kingo 1.5
 
-Kingo 1.5 is a new version of the class stack. The only difference is
-Langflow:
+Kingo 1.5 is a new version of the class stack. It differs from Kingo 1.4.1
+only in Langflow:
 
-- **Kingo 1.4** (what you have now) comes with **Langflow 1.8**.
+- **Kingo 1.4.1** comes with **Langflow 1.8**.
 - **Kingo 1.5** comes with **Langflow 1.12**.
 
-Everything else, n8n included, is the same in both.
+Everything else, n8n included, is the same in both. Kingo 1.4.0 still has an
+older n8n: `./kingo update` brings you from 1.4.0 to 1.4.1.
 
-**The upgrade is optional.** `./kingo update` does not do it for you.
+**The upgrade to Kingo 1.5 is optional.** `./kingo update` does not do it for
+you.
 
 **Decide as a team: the whole team upgrades, or nobody does.**
 
@@ -16,8 +18,8 @@ Everything else, n8n included, is the same in both.
 > [Should your team upgrade?](#should-your-team-upgrade) ·
 > [How to upgrade](#how-to-upgrade) · [After the upgrade](#after-the-upgrade)
 
-Which version do you have? Run this line. The first line it prints starts
-with `kingo-pod 1.4` or `kingo-pod 1.5`:
+Which version do you have? Run this line. The first line it prints is your
+version, for example `kingo-pod 1.4.1`:
 
 ```
 cd ~/kingo-pod && ./kingo version
