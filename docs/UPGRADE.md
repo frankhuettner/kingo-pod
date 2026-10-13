@@ -27,9 +27,8 @@ cd ~/kingo-pod && ./kingo version
 
 ## Two bugs in Langflow
 
-Both are bugs in Langflow, not in Kingo. Langflow 1.12, which comes with
-Kingo 1.5, fixes the first one. The second one is in both Langflow
-versions.
+Kingo only installs Langflow. Langflow 1.12, which comes with Kingo 1.5,
+fixes the first bug. The second bug is still in Langflow 1.12.
 
 (A chat is a conversation in the Playground. Langflow calls it a "session",
 and its name the "session ID".)
