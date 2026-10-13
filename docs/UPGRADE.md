@@ -38,9 +38,16 @@ conversation, and you cannot trust the result. Langflow fixed this in 1.11
 fix also covers flows saved before it, so after the upgrade your existing
 flows are kept apart without any changes.
 
-**Staying on 1.4?** The mix-up only happens between sessions with the same
-name. Before you test, give each flow's Playground session a name of its own
-(rename `New Session 0`, for example to the flow's name).
+**Staying on 1.4?** There is no reliable workaround, so keep in mind that an
+answer that relies on memory may come from another flow. Renaming the session
+does not help (next paragraph).
+
+**Careful with renaming and deleting Playground sessions, on 1.4 and on
+1.5.** Langflow finds a session by its name, not by its flow. Renaming
+`New Session 1` in one flow renames the `New Session 1` of every flow, and
+deleting a session deletes the session of that name, with its messages, in
+every flow. The upgrade does not change this; Langflow 1.12 still works that
+way.
 
 ## Should your team upgrade?
 
@@ -118,6 +125,8 @@ afterwards.
 - **Packages you installed yourself** with `./kingo langflow pip install` are
   gone, as after every update: install them again. `nemoguardrails` is now
   built in, next to the RAGAS packages.
+- **Renaming or deleting a Playground session still affects every flow**
+  that has a session of the same name ([see above](#the-bug)).
 - **Langflow 1.12 needs somewhat more memory than 1.8.** If your laptop gets
   noticeably slower, tell your instructor.
 
