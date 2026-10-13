@@ -9,7 +9,7 @@
  *
  * Two groupings, for two jobs. `group` (Setup / Use) is how the landing page
  * introduces the guides: set the stack up once, then live in the using guide
- * for the rest of the term. `RAIL` groups the same seven by platform, because
+ * for the rest of the term. `RAIL` groups the same guides by platform, because
  * that is the choice a student actually makes — they have a Mac or they have
  * a Windows laptop, and half of this site is then irrelevant to them.
  */
@@ -23,7 +23,7 @@ export interface Guide {
   rail: string;
   group: "Setup" | "Use";
   platform: "Mac" | "Windows" | "Any";
-  kind: "Internet" | "USB stick" | "Everyday use" | "The class database";
+  kind: "Internet" | "USB stick" | "Everyday use" | "The class database" | "Optional upgrade";
 }
 
 export const GUIDES: Guide[] = [
@@ -96,6 +96,16 @@ export const GUIDES: Guide[] = [
     group: "Use",
     platform: "Any",
     kind: "The class database",
+  },
+  {
+    slug: "upgrade",
+    file: "UPGRADE.md",
+    title: "Upgrading to Kingo 1.5",
+    summary: "Optional this term: Langflow 1.12 fixes agents answering from other flows' chats. Decide as a team.",
+    rail: "Upgrade to 1.5",
+    group: "Use",
+    platform: "Any",
+    kind: "Optional upgrade",
   },
 ];
 

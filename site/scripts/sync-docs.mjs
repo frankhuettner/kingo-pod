@@ -28,6 +28,7 @@ const SLUGS = {
   "USING-MAC.md": "using-mac",
   "USING-WINDOWS.md": "using-windows",
   "CLOUDBEAVER.md": "cloudbeaver",
+  "UPGRADE.md": "upgrade",
 };
 
 const rewrite = (md) =>
