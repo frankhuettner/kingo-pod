@@ -190,7 +190,7 @@ line of their Dockerfile:
 | JupyterHub | `quay.io/jupyterhub/jupyterhub:5` | `jupyterhub/Dockerfile` |
 | Jupyter MCP | `datalayer/jupyter-mcp-server:1.4.5` | `compose.yml` |
 | Langflow | `langflowai/langflow:1.8.0` | `langflow/Dockerfile` |
-| n8n | `n8nio/n8n:2.35.5` | `compose.yml` |
+| n8n | `n8nio/n8n:2.41.6` | `compose.yml` |
 | Metabase | `metabase/metabase:v0.60.25` | `compose.yml` |
 | CloudBeaver | `dbeaver/cloudbeaver:26.1.5` | `compose.yml` |
 
@@ -212,7 +212,8 @@ the opposite of what the paragraph above promises, so pinning them exactly is
 on the list in issue #6.
 
 **Bumping one is never just an edit.** It means: rebuild and re-run
-`./kingo smoke` locally, let CI do both engines, tell every student to run
+`./kingo smoke` locally, let CI do both engines, have a TA run the class
+content on the `next` branch (below), tell every student to run
 `./kingo update` (**at home** — the download is not a classroom activity),
 and rebuild BOTH USB tars, which re-records `bundles.sha256`. So do it
 between cohorts, not during one.
@@ -256,6 +257,123 @@ The actual to-do list, with the checklist for doing it safely, lives in
 [issue #6](https://github.com/frankhuettner/kingo-pod/issues/6) — that is
 the reminder to open between cohorts.
 
+## Trying an update before the class gets it (the `next` branch)
+
+Pin bumps go to the `next` branch first. `./kingo update` fast-forwards
+whichever branch the folder tracks, so a TA whose folder is on `next` gets the
+bump while every student on `main` sees nothing. `./kingo version` on `next`
+names a release candidate (`-rc` suffix). In the TA's `~/kingo-pod`:
+
+| Step | Command |
+|---|---|
+| 1. back up the Langflow and n8n databases | `./kingo backup` |
+| 2. switch the folder to `next` | `git fetch && git switch next` |
+| 3. update as usual | `./kingo update` |
+
+Step 1 is not optional, and it is the one place `update` cannot do the backup
+by itself: `git switch` already changes `VERSION`, so `update` sees no version
+change (see "Going back to the previous version"). While the folder is on
+`next`, every `./kingo update` brings the newest `next` and backs up first.
+
+**Green light**: fast-forward `main` to `next`, drop the `-rc` from `VERSION`
+in the commit you tag, push, rebuild both USB tars. The TA goes back with
+`git switch main && ./kingo update`. While another course has to stay on the
+old version, the release goes on a branch of its own instead of `main`
+("Two versions at once", below).
+
+**Red light**: restore the backup from step 1 (its folder is named after the
+`main` version) BEFORE the old versions start — the recipe below — and go back
+with `git switch main && ./kingo update` as its last step.
+
+Fixes on `next` are new commits, never a force-push: a rewritten `next`
+strands the TA's folder exactly like a rewritten `main` strands a student's
+("A folder that cannot update", with `next` for `main`). If `main` moves in
+the meantime, merge it into `next`.
+
+## Going back to the previous version
+
+The first start of a new Langflow or n8n migrates its database, and neither
+app can open a migrated database in the old version again. So whenever
+`./kingo update` changes the version, it first dumps both databases into
+`backups/<date-time>_kingo-<old version>/` in the student's folder
+(`langflow.dump`, `n8n.dump`; the newest three folders are kept, older ones
+deleted). `./kingo backup` does the same by hand. The folder name says which
+version the data belongs to; restore it only into that version.
+
+Order matters: the old version must not start on the migrated database, so
+restore while the two apps are stopped, and bring the folder back to the old
+version afterwards (a revert pushed to `main` plus `./kingo update`, or for a
+TA on `next`: `git switch main && ./kingo update`). In the student's
+`~/kingo-pod` (`docker` instead of `podman` on Docker Desktop; `<folder>` is
+the backup's folder name):
+
+| Step | Command |
+|---|---|
+| 1. stop the two apps | `podman stop kingo-langflow kingo-n8n` |
+| 2. restore Langflow | `podman exec kingo-postgres dropdb -U student --force langflow && podman exec kingo-postgres createdb -U student langflow && podman exec -i kingo-postgres pg_restore -U student -d langflow < backups/<folder>/langflow.dump` |
+| 3. restore n8n | `podman exec kingo-postgres dropdb -U student --force n8n && podman exec kingo-postgres createdb -U student n8n && podman exec -i kingo-postgres pg_restore -U student -d n8n < backups/<folder>/n8n.dump` |
+| 4. back to the old version | `./kingo update` (after the revert is on `main`) |
+
+The update in step 4 backs up again (the restored data, harmless). A backup is
+not a substitute for the student's own exports: three more backups (every
+version change makes one) and it is gone.
+
+## Two versions at once (an opt-in release branch)
+
+Kingo 1.5 (Langflow 1.12) was ready mid-term, while another course still
+ran its class content on 1.4, and teams were to choose for themselves. A
+release on `main` would reach every folder with its next `./kingo update`,
+and no change to `update` can stop that: the merge is done by the script
+already on the student's laptop. So `main` stays on Langflow 1.8 and the
+release lives on **`release-1.5`**; a folder opts in by tracking it instead
+of `main`.
+
+`main` is a maintenance line meanwhile: what every folder should get goes
+there as a 1.4.x patch and is merged into `release-1.5`. **1.4.1** brought
+n8n 2.41.6 (one n8n for both lines before the n8n workshop) and the backup
+on version change; so "Kingo 1.4" keeps meaning Langflow 1.8 and "Kingo 1.5"
+Langflow 1.12, which is the difference students choose between. The student page is
+[UPGRADE.md](UPGRADE.md) (on the website as `/upgrade/`), with the line:
+
+```
+cd ~/kingo-pod && ./kingo update && git branch -u origin/release-1.5 && ./kingo update
+```
+
+- **The first `./kingo update`** brings the folder to the newest 1.4 and
+  fetches the branch. It matters for folders from before 1.3.0: their script would merge
+  1.5 and finish with its own old code, without the backup.
+- **`git branch -u`** keeps the folder on its `main` branch and changes only
+  what it follows (verified on a copy of the repo).
+- **The second `./kingo update`** is the 1.4 script merging the release
+  branch and re-executing into the 1.5 one, which sees the version change and
+  backs up first (`backups/<date-time>_kingo-1.4.1/`).
+- **Afterwards** every `./kingo update` follows `release-1.5`.
+
+**ZIP-installed folders** (no `.git`) always download `main` and cannot opt
+in. Turn the folder into a clone first, in its `~/kingo-pod`:
+`git init -q && git remote add origin https://github.com/frankhuettner/kingo-pod.git && git fetch -q && git checkout -f -B main origin/main`.
+Untracked files (`shared/`, `.env.local`, `backups/`) stay; tracked files
+become the class version.
+
+**While both versions run:**
+- 1.5.x fixes are commits on `release-1.5` (CI: `gh workflow run ci.yml --ref release-1.5`), never a force-push.
+- The website builds from `main`, so guide changes go to `main` and are then merged into `release-1.5`.
+- The USB tars follow `main`, which is what a fresh install gets: rebuild both after a 1.4.x that moves an image (1.4.1 did, n8n). A student on 1.5 who reinstalls runs the line again.
+
+**Going back to 1.4 from an opted-in folder**: steps 1–3 of "Going back to
+the previous version" with the `_kingo-1.4.x` backup, then
+`git checkout -B main origin/main && ./kingo update`. **Not**
+`git branch -u origin/main`: `main` is behind the release branch, the
+fast-forward says "Already up to date", and the folder stays on 1.5.
+
+**When the other course is over**: merge `release-1.5` into `main`
+(`git switch main && git merge release-1.5 && git push`), rebuild both USB
+tars, and rewrite or retire UPGRADE.md (keep its URL; it went round in
+messages). From then on `./kingo update` points every opted-in folder back to
+`main` by itself (`update_rejoin_main`, in every 1.5 script), so no student
+has to undo anything. Keep `release-1.5` on GitHub: a folder that has not
+updated since still tracks it.
+
 ## Python packages in Langflow
 
 Langflow is built locally (`langflow/Dockerfile`) on top of the upstream
@@ -265,8 +383,9 @@ plus `uv`. To give the whole class a new package: add one line to
 `./kingo update`"** — that one command works for every install kind
 (git installs pull; leftover ZIP-era Mac folders fetch the repo tarball
 automatically) and rebuilds the image. A student who needs something just for themselves:
-`./kingo langflow pip install <pkg>` (ephemeral — gone after `down`+`up`,
-which is fine for one-offs).
+`./kingo langflow pip install <pkg>` (ephemeral — gone after `down`+`up` and
+after every update that changes the image, which is fine for one-offs; a
+package the class keeps using belongs in `requirements.txt`).
 
 **"IpcReadOptions size changed, may indicate binary incompatibility"** when a
 flow builds (the RAGAS Metrics Evaluator, 2026-09-21): a `./kingo langflow pip
@@ -469,6 +588,10 @@ which is the state every other install is in.
 Steps 2–3 discard commits and edits made in this folder. That is the intent; if
 the student put files of their own in it, move them out first (anything
 untracked, such as `shared/`, survives).
+
+**A folder on a release branch** (`./kingo version` says 1.5 while `main` is
+still 1.4; see "Two versions at once") uses `origin/release-1.5` in steps 1
+and 3. `origin/main` would put 1.4 on a database 1.5 has already migrated.
 
 ## Stale container storage ("the container name ... is already in use")
 

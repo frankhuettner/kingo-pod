@@ -158,7 +158,7 @@ services:
         condition: service_healthy
 
   n8n:
-    image: n8nio/n8n:2.35.5
+    image: n8nio/n8n:2.41.6
     container_name: kingo-n8n
     restart: unless-stopped
     profiles: [full, abp, n8n]

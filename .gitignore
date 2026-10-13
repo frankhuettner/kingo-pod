@@ -27,6 +27,10 @@ kingo-images*.tar
 # a leftover from an interrupted `kingo bundle` (~13 GB)
 kingo-images*.tar.part
 
+# Database dumps written by `kingo backup` / `kingo update` (a student's own
+# flows and workflows — per-machine, never committed).
+backups/
+
 # Note written by `kingo load`: which USB bundle this machine installed from
 # (per-machine fact, like .env.local — never committed).
 .kingo-install-source

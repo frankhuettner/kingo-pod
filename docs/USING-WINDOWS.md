@@ -187,7 +187,10 @@ cd ~/kingo-pod && ./kingo update
 ```
 
 Run it whenever your instructor announces an update. It works for every
-install, however old — nothing has to be downloaded by hand.
+install, however old — nothing has to be downloaded by hand. Before a new
+version starts, it saves a copy of your Langflow flows and n8n workflows in
+`kingo-pod/backups/`, so your instructor can bring them back if something
+goes wrong.
 
 **Optional this term: Kingo 1.5.** It brings Langflow 1.12, which fixes a
 memory bug in Langflow 1.8: chats with the same name share one memory, even
