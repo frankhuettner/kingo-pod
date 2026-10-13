@@ -192,10 +192,10 @@ version starts, it saves a copy of your Langflow flows and n8n workflows in
 `kingo-pod/backups/`, so your instructor can bring them back if something
 goes wrong.
 
-**Optional this term: Kingo 1.5** (Langflow 1.12, which stops agents from
-answering with what you typed into a different flow). `./kingo update` does
-not install it by itself. To switch, see
-[the optional upgrade to Kingo 1.5](UPGRADE.md), and decide with your team
+**Optional this term: Kingo 1.5.** It brings Langflow 1.12, which fixes a
+bug in Langflow 1.8: agents can mix up the chats of different flows.
+`./kingo update` does not install it by itself. Read
+[the optional upgrade to Kingo 1.5](UPGRADE.md) and decide with your team
 first.
 
 ## If something breaks
