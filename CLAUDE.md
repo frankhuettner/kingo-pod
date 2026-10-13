@@ -320,7 +320,10 @@ the first, 2026-10). Nothing in `update` can keep a release on `main` away
 from a folder: the OLD script on the laptop does the merge. Students opt in
 with `git branch -u origin/release-X.Y` (docs/UPGRADE.md); the website
 builds from `main`, so guides go there and are merged into the release
-branch.
+branch. Meanwhile `main` is a maintenance line: what every folder needs goes
+there as a PATCH of the old line (1.4.1: n8n 2.41.6 + the backup), even where
+the rule above would say MINOR, so "Kingo 1.4 / 1.5" keeps naming the one
+difference students choose between.
 
 ## Layout
 

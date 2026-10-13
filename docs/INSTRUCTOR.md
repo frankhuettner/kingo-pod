@@ -320,26 +320,33 @@ version change makes one) and it is gone.
 
 ## Two versions at once (an opt-in release branch)
 
-Kingo 1.5 (Langflow 1.12, n8n 2.41) was ready mid-term, while another course
-still ran its class content on 1.4. A release on `main` would reach that
-course with its next `./kingo update`, and no change to `update` can stop
-that: the merge is done by the script already on the student's laptop. So
-`main` stays on 1.4.0 and the release lives on **`release-1.5`**; a folder
-opts in by tracking it instead of `main`. The student page is
+Kingo 1.5 (Langflow 1.12) was ready mid-term, while another course still
+ran its class content on 1.4, and teams were to choose for themselves. A
+release on `main` would reach every folder with its next `./kingo update`,
+and no change to `update` can stop that: the merge is done by the script
+already on the student's laptop. So `main` stays on Langflow 1.8 and the
+release lives on **`release-1.5`**; a folder opts in by tracking it instead
+of `main`.
+
+`main` is a maintenance line meanwhile: what every folder should get goes
+there as a 1.4.x patch and is merged into `release-1.5`. **1.4.1** brought
+n8n 2.41.6 (one n8n for both lines before the n8n workshop) and the backup
+on version change; so "Kingo 1.4" keeps meaning Langflow 1.8 and "Kingo 1.5"
+Langflow 1.12, which is the difference students choose between. The student page is
 [UPGRADE.md](UPGRADE.md) (on the website as `/upgrade/`), with the line:
 
 ```
 cd ~/kingo-pod && ./kingo update && git branch -u origin/release-1.5 && ./kingo update
 ```
 
-- **The first `./kingo update`** brings the folder to 1.4.0 and fetches the
-  branch. It matters for folders from before 1.3.0: their script would merge
+- **The first `./kingo update`** brings the folder to the newest 1.4 and
+  fetches the branch. It matters for folders from before 1.3.0: their script would merge
   1.5 and finish with its own old code, without the backup.
 - **`git branch -u`** keeps the folder on its `main` branch and changes only
   what it follows (verified on a copy of the repo).
-- **The second `./kingo update`** is the 1.4.0 script merging the release
+- **The second `./kingo update`** is the 1.4 script merging the release
   branch and re-executing into the 1.5 one, which sees the version change and
-  backs up first (`backups/<date-time>_kingo-1.4.0/`).
+  backs up first (`backups/<date-time>_kingo-1.4.1/`).
 - **Afterwards** every `./kingo update` follows `release-1.5`.
 
 **ZIP-installed folders** (no `.git`) always download `main` and cannot opt
@@ -351,10 +358,10 @@ become the class version.
 **While both versions run:**
 - 1.5.x fixes are commits on `release-1.5` (CI: `gh workflow run ci.yml --ref release-1.5`), never a force-push.
 - The website builds from `main`, so guide changes go to `main` and are then merged into `release-1.5`.
-- The USB tars stay at 1.4, which is what a fresh install gets. A student who reinstalls runs the line again.
+- The USB tars follow `main`, which is what a fresh install gets: rebuild both after a 1.4.x that moves an image (1.4.1 did, n8n). A student on 1.5 who reinstalls runs the line again.
 
 **Going back to 1.4 from an opted-in folder**: steps 1–3 of "Going back to
-the previous version" with the `_kingo-1.4.0` backup, then
+the previous version" with the `_kingo-1.4.x` backup, then
 `git checkout -B main origin/main && ./kingo update`. **Not**
 `git branch -u origin/main`: `main` is behind the release branch, the
 fast-forward says "Already up to date", and the folder stays on 1.5.
