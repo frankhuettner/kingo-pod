@@ -25,13 +25,14 @@ cd ~/kingo-pod && ./kingo version
 
 ## Two bugs in Langflow
 
-Both are bugs in Langflow, not in Kingo. Kingo 1.5 fixes the first one. The
-second one is in both versions.
+Both are bugs in Langflow, not in Kingo. Langflow 1.12, which comes with
+Kingo 1.5, fixes the first one. The second one is in both Langflow
+versions.
 
 (A chat is a conversation in the Playground. Langflow calls it a "session",
 and its name the "session ID".)
 
-### Bug 1: mixed-up memory (fixed in Kingo 1.5)
+### Bug 1: mixed-up memory (fixed in Langflow 1.12)
 
 An Agent with memory, and the Message History component, should remember
 only the current chat. Langflow 1.8 mixes chats up in three cases:
@@ -48,9 +49,9 @@ only the current chat. Langflow 1.8 mixes chats up in three cases:
   `YOUR_SESSION_ID_HERE`. If you keep it, every flow you call that way shares
   one memory.
 
-Kingo 1.5 (Langflow 1.12) keeps the memory per flow, also in flows you built
-before. One thing stays: if Run Flow has an empty Session ID, the called flow
-still mixes up its own chats.
+Langflow 1.12 (in Kingo 1.5) keeps the memory per flow, also in flows you
+built before. One thing stays: if Run Flow has an empty Session ID, the called
+flow still mixes up its own chats.
 
 **How to avoid bug 1:**
 
@@ -62,7 +63,7 @@ still mixes up its own chats.
 - **Both versions:** when you call a flow through the API, leave out the
   session ID, or give each flow its own. Don't keep `YOUR_SESSION_ID_HERE`.
 
-### Bug 2: renaming and deleting chats (in both versions)
+### Bug 2: renaming and deleting chats (in Langflow 1.8 and 1.12)
 
 Langflow renames and deletes chats by their name:
 
@@ -151,7 +152,7 @@ reinstall), you get Kingo 1.4 again: run the line once more.
 - **Packages you installed yourself** with `./kingo langflow pip install` are
   gone, as after every update. Install them again. `nemoguardrails` is now
   built in.
-- **Don't delete or rename chats** ([bug 2](#bug-2-renaming-and-deleting-chats-in-both-versions)).
+- **Don't delete or rename chats** ([bug 2](#bug-2-renaming-and-deleting-chats-in-langflow-18-and-112)).
 
 **If something goes wrong, don't try to go back to Kingo 1.4 by yourself.**
 Kingo 1.4 cannot read the converted data. Your instructor restores the backup
