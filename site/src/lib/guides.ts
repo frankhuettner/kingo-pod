@@ -101,7 +101,7 @@ export const GUIDES: Guide[] = [
     slug: "upgrade",
     file: "UPGRADE.md",
     title: "Upgrading to Kingo 1.5",
-    summary: "Optional this term. Langflow 1.12 fixes a bug in Langflow 1.8 that mixes up the chats of different flows. Decide as a team.",
+    summary: "Optional this term. Kingo 1.5 brings Langflow 1.12, which fixes a memory bug in Langflow 1.8. Decide as a team.",
     rail: "Upgrade to 1.5",
     group: "Use",
     platform: "Any",
