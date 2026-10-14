@@ -30,35 +30,36 @@ cd ~/kingo-pod && ./kingo version
 Kingo only installs Langflow. Langflow 1.12, which comes with Kingo 1.5,
 fixes the first bug. The second bug is still in Langflow 1.12.
 
-(A chat is a conversation in the Playground. Langflow calls it a "session",
+(A chat is a conversation in the *Playground*. Langflow calls it a "session",
 and its name the "session ID".)
 
 ### Bug 1: mixed-up memory (fixed in Langflow 1.12)
 
-An Agent with memory, and the Message History component, should remember
+An *Agent* with memory, and the *Message History* component, should remember
 only the current chat. Langflow 1.8 mixes chats up in three cases:
 
 - **Two chats with the same name share one memory**, even in different flows.
   For example: in flow A, in a chat called `test`, you say *"My name is
   Alice."* In flow B, in a chat that is also called `test`, you ask *"What is
   my name?"* Flow B answers *"Alice."*
-- **A flow runs another flow** (with the Run Flow component) **and the Session
-  ID is empty.** Then the agent in the called flow reads the latest messages
-  of all your chats, in all your flows.
+- **A flow runs another flow, and the *Session ID* is empty.** *Run Flow* is
+  the component that runs another of your flows inside a flow, or gives it to
+  an agent as a tool. If its *Session ID* is empty, the agent in the called
+  flow reads the latest messages of all your chats, in all your flows.
 - **You call flows through the API with the same session ID.** Then they
   share one memory. Langflow's cURL example sends the session ID
   `YOUR_SESSION_ID_HERE`. If you keep it, every flow you call that way shares
   one memory.
 
 Langflow 1.12 (in Kingo 1.5) keeps the memory per flow, also in flows you
-built before. One thing stays: if Run Flow has an empty Session ID, the called
-flow still mixes up its own chats.
+built before. One thing stays: if *Run Flow* has an empty *Session ID*, the
+called flow still mixes up its own chats.
 
 **How to avoid bug 1:**
 
 - **Kingo 1.4:** don't give two chats the same name. Keep the names Langflow
   gives new chats (date and time).
-- **Both versions:** in Run Flow, fill in **Session ID** (in the component's
+- **Both versions:** in *Run Flow*, fill in *Session ID* (in the component's
   advanced settings) with a name that no other chat uses, for example the
   name of the flow it runs.
 - **Both versions:** when you call a flow through the API, leave out the
@@ -87,7 +88,7 @@ can be wrong, and that chats can disappear.
 
 **Upgrade if:**
 
-- your flows use an Agent with memory or the Message History component,
+- your flows use an *Agent* with memory or the *Message History* component,
 - you want bug 1 fixed instead of following the rules above, and
 - everyone on your team can upgrade before you share flows again.
 
@@ -113,7 +114,7 @@ Before you start:
   more. Keep the laptop plugged in, and don't start right before class or a
   deadline.
 - **Export the flows you care most about** (in Langflow: the flow's menu →
-  Export). The upgrade also makes a backup by itself.
+  *Export*). The upgrade also makes a backup by itself.
 
 Then run this one line. On a Mac, use the **Terminal** app. On Windows, use
 the **Ubuntu** app.
@@ -145,11 +146,13 @@ reinstall), you get Kingo 1.4 again: run the line once more.
 ## After the upgrade
 
 - **Component updates**: when you open an older flow, Langflow offers updates
-  for some components (Chat Input/Output, Agent, …). You can accept them.
-- **Components Langflow does not recognize** (Chroma, File Reader Batch,
-  OpenRouter Embeddings, your own custom components): they still work. Leave
-  them as they are. In new flows, Chroma is now called **Chroma DB**.
-- **Text Input and Text Output** are no longer in the menu. The ones in your
+  for some components (*Chat Input*, *Chat Output*, *Agent*, …). You can
+  accept them.
+- **Components Langflow does not recognize** (*Chroma*, *File Reader Batch*,
+  *OpenRouter Embeddings*, your own custom components): they still work. Leave
+  them as they are. In new flows, *Chroma* is now called *Chroma DB*.
+- **Two components left the menu:** *Text Input* and *Text Output*. In new
+  flows, use *Chat Input* and *Chat Output* instead. The ones already in your
   flows still work.
 - **Packages you installed yourself** with `./kingo langflow pip install` are
   gone, as after every update. Install them again. `nemoguardrails` is now
