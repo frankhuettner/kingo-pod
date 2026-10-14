@@ -15,6 +15,7 @@ you.
 **Decide as a team: the whole team upgrades, or nobody does.**
 
 > **Jump to:** [Motivation](#motivation-langflow-has-two-bugs) ·
+> [Best practice in 1.5](#best-practice-in-kingo-15) ·
 > [Should your team upgrade?](#should-your-team-upgrade) ·
 > [How to upgrade](#how-to-upgrade) · [After the upgrade](#after-the-upgrade)
 
@@ -64,9 +65,12 @@ called flow still mixes up its own chats.
   it. Don't start a new chat for a test: its name, `New Session 0`, is
   probably used in your other flows too. And don't rename a chat to fix a
   clash ([bug 2](#bug-2-renaming-and-deleting-chats-in-langflow-18-and-112)).
-- **Both versions:** in *Run Flow*, fill in *Session ID* (in the component's
-  advanced settings) with a name that no other chat uses, for example the
-  name of the flow it runs.
+- **Both versions, flows run by *Run Flow*:** the agent in the called flow
+  usually doesn't need to remember earlier calls. Then set its *Number of
+  Chat History Messages* (in the *Agent*'s advanced settings) to `0`: that
+  switches its memory off. If it does need a memory, fill in *Session ID* in
+  *Run Flow* (advanced settings) with a name that no other chat uses, for
+  example the name of the flow it runs.
 - **Both versions:** when you call a flow through the API, leave out the
   session ID, or give each flow its own. Don't keep `YOUR_SESSION_ID_HERE`.
 
@@ -85,6 +89,25 @@ In both versions, Langflow names new chats `New Session 0`,
 same names. **So don't rename chats, and don't delete them**, with one
 exception: each flow's *Default Session*. Its name is the flow's ID, so
 deleting it only affects that flow.
+
+### Best practice in Kingo 1.5
+
+Langflow 1.12 fixes bug 1, but not bug 2. So in Kingo 1.5:
+
+- **Start a new chat for each test.** Every chat in every flow now has its
+  own memory. A new chat starts with an empty memory, even though it is called
+  `New Session 0` like chats in your other flows.
+- **Never rename or delete chats**, not even a new, empty one. Let them pile
+  up.
+- **To repeat a test in the same chat with an empty memory,** use the
+  *Default Session*. It is the only chat you can delete safely: delete it,
+  then run the test again.
+- **Agents in flows run by *Run Flow*:** set *Number of Chat History
+  Messages* to `0`, as above. If memory stays on and *Session ID* stays
+  empty, the called flow reads the messages of all its own chats.
+- **API calls:** use one session ID per conversation. Calls to the same flow
+  with the same session ID continue one conversation. For a new conversation,
+  use a new ID.
 
 **Are these security problems?** Not on your laptop. Only you use your
 Langflow, so the mixed-up messages are your own. The problem is that answers
@@ -163,8 +186,9 @@ reinstall), you get Kingo 1.4 again: run the line once more.
 - **Packages you installed yourself** with `./kingo langflow pip install` are
   gone, as after every update. Install them again. `nemoguardrails` is now
   built in.
-- **Still don't rename or delete chats**, except the *Default Session*
-  ([bug 2](#bug-2-renaming-and-deleting-chats-in-langflow-18-and-112)).
+- **Follow the [best practice for Kingo 1.5](#best-practice-in-kingo-15):**
+  a new chat for each test, and never rename or delete chats except the
+  *Default Session*.
 
 **If something goes wrong, don't try to go back to Kingo 1.4 by yourself.**
 Kingo 1.4 cannot read the converted data. Your instructor restores the backup
