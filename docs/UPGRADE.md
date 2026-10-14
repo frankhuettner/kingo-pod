@@ -39,9 +39,11 @@ An *Agent* with memory, and the *Message History* component, should remember
 only the current chat. Langflow 1.8 mixes chats up in three cases:
 
 - **Two chats with the same name share one memory**, even in different flows.
-  For example: in flow A, in a chat called `test`, you say *"My name is
-  Alice."* In flow B, in a chat that is also called `test`, you ask *"What is
-  my name?"* Flow B answers *"Alice."*
+  This happens all the time, because Langflow names new chats
+  `New Session 0`, `New Session 1`, … and counts in each flow separately. So
+  most of your flows have a `New Session 0`. For example: in flow A, in
+  `New Session 0`, you say *"My name is Alice."* In flow B, also in
+  `New Session 0`, you ask *"What is my name?"* Flow B answers *"Alice."*
 - **A flow runs another flow, and the *Session ID* is empty.** *Run Flow* is
   the component that runs another of your flows inside a flow, or gives it to
   an agent as a tool. If its *Session ID* is empty, the agent in the called
@@ -57,8 +59,11 @@ called flow still mixes up its own chats.
 
 **How to avoid bug 1:**
 
-- **Kingo 1.4:** don't give two chats the same name. Keep the names Langflow
-  gives new chats (date and time).
+- **Kingo 1.4:** to test anything with memory, use each flow's first chat,
+  the *Default Session*. Its name is the flow's ID, so no other flow shares
+  it. Don't start a new chat for a test: its name, `New Session 0`, is
+  probably used in your other flows too. And don't rename a chat to fix a
+  clash ([bug 2](#bug-2-renaming-and-deleting-chats-in-langflow-18-and-112)).
 - **Both versions:** in *Run Flow*, fill in *Session ID* (in the component's
   advanced settings) with a name that no other chat uses, for example the
   name of the flow it runs.
@@ -75,10 +80,11 @@ Langflow renames and deletes chats by their name:
   your flows. If a flow already has a chat with the new name, the two become
   one chat.
 
-In Kingo 1.4, this only matters if chats share a name. In Kingo 1.5 it
-matters more: Langflow 1.12 names new chats `New Session 1`, `New Session 2`,
-… in every flow, so most of your flows have chats with the same names.
-**In Kingo 1.5, don't delete or rename chats.**
+In both versions, Langflow names new chats `New Session 0`,
+`New Session 1`, … in every flow, so most of your flows have chats with the
+same names. **So don't rename chats, and don't delete them**, with one
+exception: each flow's *Default Session*. Its name is the flow's ID, so
+deleting it only affects that flow.
 
 **Are these security problems?** Not on your laptop. Only you use your
 Langflow, so the mixed-up messages are your own. The problem is that answers
@@ -157,7 +163,8 @@ reinstall), you get Kingo 1.4 again: run the line once more.
 - **Packages you installed yourself** with `./kingo langflow pip install` are
   gone, as after every update. Install them again. `nemoguardrails` is now
   built in.
-- **Don't delete or rename chats** ([bug 2](#bug-2-renaming-and-deleting-chats-in-langflow-18-and-112)).
+- **Still don't rename or delete chats**, except the *Default Session*
+  ([bug 2](#bug-2-renaming-and-deleting-chats-in-langflow-18-and-112)).
 
 **If something goes wrong, don't try to go back to Kingo 1.4 by yourself.**
 Kingo 1.4 cannot read the converted data. Your instructor restores the backup
