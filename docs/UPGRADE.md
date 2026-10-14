@@ -14,7 +14,7 @@ you.
 
 **Decide as a team: the whole team upgrades, or nobody does.**
 
-> **Jump to:** [The two bugs](#two-bugs-in-langflow) ·
+> **Jump to:** [Motivation](#motivation-langflow-has-two-bugs) ·
 > [Should your team upgrade?](#should-your-team-upgrade) ·
 > [How to upgrade](#how-to-upgrade) · [After the upgrade](#after-the-upgrade)
 
@@ -25,7 +25,7 @@ version, for example `kingo-pod 1.4.1`:
 cd ~/kingo-pod && ./kingo version
 ```
 
-## Two bugs in Langflow
+## Motivation: Langflow has two bugs
 
 Kingo only installs Langflow. Langflow 1.12, which comes with Kingo 1.5,
 fixes the first bug. The second bug is still in Langflow 1.12.
