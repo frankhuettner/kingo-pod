@@ -153,10 +153,10 @@ cd ~/kingo-pod && ./kingo update && git branch -u origin/release-1.5 && ./kingo 
 ```
 
 It updates twice: first Kingo 1.4, then it switches to Kingo 1.5. The very
-last line should end with `→ 1.5.0.`, for example:
+last line should end with a 1.5 version, for example:
 
 ```
-Stack updated — kingo-pod 1.4.1 → 1.5.0.
+Stack updated — kingo-pod 1.4.1 → 1.5.1.
 ```
 
 That's it. From now on, `./kingo update` keeps you on Kingo 1.5. Everything
@@ -174,6 +174,11 @@ reinstall), you get Kingo 1.4 again: run the line once more.
 
 ## After the upgrade
 
+- **Langflow cannot reach `postgres` or `qdrant`, or cannot open a file in
+  `/app/shared`?** You see an error that mentions
+  `LANGFLOW_SSRF_ALLOWED_HOSTS` or `LANGFLOW_RESTRICT_LOCAL_FILE_ACCESS`.
+  Langflow 1.12 blocks these unless Kingo allows them, and Kingo 1.5.0 did
+  not. Run `./kingo update` once: Kingo 1.5.1 fixes it.
 - **Component updates**: when you open an older flow, Langflow offers updates
   for some components (*Chat Input*, *Chat Output*, *Agent*, …). You can
   accept them.
