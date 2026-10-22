@@ -553,6 +553,22 @@ v1.1.0.
   reported to boot on 0.60, not yet measured here. The Langflow upgrade is NOT
   a memory lever: 1.11.6 idles at 1.36 GB against 1.8.0's 0.6–1.3 GB with one
   worker (measured 2026-09-05; upstream's −85 % is per additional worker).
+- **Kingo 1.5 (Langflow 1.12.4) needs ~0.7 GB more than the table assumes.**
+  Measured in CI on 2026-10-22, `full` mode, 1–7 minutes after the start,
+  steady throughout: Langflow 1.8.0 idles at 610 MiB (Docker) / 619 MB
+  (Podman), the 611 MB above, and 1.12.4 at 1.28 GiB / 1.29 GB; every other
+  service is unchanged. A 4 GB `abp` machine then has about 1 GB left at idle
+  instead of 1.6 GB. How far 1.12 grows over days of use is not measured (1.8
+  roughly doubled). The table stays as it is for now (Frank, 2026-10-22): a
+  new target would reach a 1.5 machine only through `./kingo mode`, never
+  through `update`, and a higher `abp` floor would flag every 8 GB Windows
+  laptop. **Langflow on 1.5 crashes, restarts by itself or gets very slow?**
+  First `./kingo memory` (live use per container). On a Mac with Podman,
+  `./kingo memory 5` resizes the machine (stops every container on the Mac
+  for a minute; while pinned, `doctor` no longer asks an 8 GB Mac to shrink
+  it back); Docker on a Mac gets the Settings path. On Windows `kingo` sets
+  no size (above); `./kingo mode langflow` frees ~0.7 GB (n8n, CloudBeaver,
+  Qdrant go off), but without Qdrant a RAG flow cannot retrieve.
 
 **Announcing it to a running cohort** (they are on full mode, 5 GB machines;
 `./kingo update` changes nothing by itself — an unset mode means full):
