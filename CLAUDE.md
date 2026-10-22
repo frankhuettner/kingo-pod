@@ -70,12 +70,14 @@ kept short; the full incident write-ups are in this file's history
   after every start. A `.pth`, not a wrapped CMD, because it also covers
   whatever process Langflow forks or spawns; the guard asserts it ran.
   Temporary: openai 3.16.1 fixed the race, Langflow 1.12.4 pins openai <3 —
-  delete the preload once the image has openai >= 3.16.1. The image is Python 3.14 with no
-  compiler: a dependency without a cp314 wheel fails the build (scikit-network
-  did, on CI) and goes in `langflow/excludes.txt` if nothing imports it. Check
-  with `uv pip compile --python-version 3.14 --python-platform
-  x86_64-manylinux_2_28` with and without `--only-binary :all:` and DIFF the
-  two — wheels-only alone "passes" by silently picking an ancient release. A
+  delete the preload once the image has openai >= 3.16.1, and the guard's
+  assert for it with it (else every build fails). The image is Python 3.14
+  with no compiler: a dependency without a cp314 wheel fails the build
+  (scikit-network did, on CI) and goes in `langflow/excludes.txt` if nothing
+  imports it. Check with `uv pip compile --python-version 3.14
+  --python-platform x86_64-manylinux_2_28` with and without `--only-binary
+  :all:` and DIFF the two — wheels-only alone "passes" by silently picking an
+  ancient release. A
   COMPILED package (pyarrow, numpy, pandas) is upgraded in the build, never
   under a running server: the process keeps the old shared library mapped and
   the next lazy import mixes the two ("IpcReadOptions size changed"). For a

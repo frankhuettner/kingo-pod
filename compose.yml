@@ -114,7 +114,8 @@ services:
 
   langflow:
     # Built locally (langflow/Dockerfile): upstream Langflow + the class's
-    # Python packages (langflow/requirements.txt) + uv for `kingo langflow`.
+    # Python packages (langflow/requirements.txt); `kingo langflow` runs the uv
+    # that the upstream image ships.
     # Same pattern as jupyterhub — pull/bundle/load handle both *:local builds.
     build: ./langflow
     image: kingo-langflow:local

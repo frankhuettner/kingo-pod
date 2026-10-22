@@ -420,7 +420,8 @@ import line in that file. The file is temporary: openai 3.16.1 fixed the race
 upstream, but Langflow 1.12.4 pins openai below 3 — at each Langflow bump,
 check the image's openai (`podman exec kingo-langflow /app/.venv/bin/python
 -c "import openai; print(openai.__version__)"`), and from 3.16.1 on, delete
-the file and its two Dockerfile lines.
+the file and, in `langflow/Dockerfile`, its COPY and `cp` lines and the
+preload assert in the last line (left alone, the assert fails every build).
 
 ## Did this laptop install from the stick, or from the Wi-Fi?
 

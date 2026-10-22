@@ -25,5 +25,5 @@ COPY kingo-preload.pth /tmp/kingo-preload.pth
 RUN cp /tmp/kingo-preload.pth "$(/app/.venv/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')/"
 # A class package that cannot import fails the build (and CI), not a student's
 # flow — and so does a preload that stopped running (checked first: ragas
-# imports openai itself).
+# imports openai itself; the assert goes when the preload goes).
 RUN /app/.venv/bin/python -c "import sys; assert 'openai.resources' in sys.modules, 'kingo-preload.pth did not run'; import ragas, statsmodels.api, nemoguardrails"
