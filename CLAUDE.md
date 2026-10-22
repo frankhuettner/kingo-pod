@@ -86,6 +86,15 @@ kept short; the full incident write-ups are in this file's history
   later container gets EACCES on them (SELinux MCS labels — root does not help).
   `:z` relabels at mount; a no-op without SELinux. "Can list it, cannot open
   it" on any volume means SELinux, not `chmod`.
+- **Langflow 1.12.4 blocks private hosts and local files by default**: the
+  SQL Database component refused `postgres` (the TA, 2026-10), and
+  `sqlite:////app/shared/…` and `/app/shared` paths fail the same way.
+  `compose.yml` allow-lists the stack's hosts in `LANGFLOW_SSRF_ALLOWED_HOSTS`
+  (service AND container names, loopback, the host-gateway names; a new
+  service goes in too) and sets `LANGFLOW_RESTRICT_LOCAL_FILE_ACCESS=false`
+  (no path allow-list exists). SSRF protection stays on for everything else.
+  CI's "Langflow may reach the stack" step runs Langflow's own guards on the
+  guides' addresses and asserts a LAN address is still blocked.
 - **Exact health codes are the source of truth**: `8888/api→200`,
   `8000/hub/api→200`, `4040/mcp→401`, `7860/health→200`, `5678/healthz→200`,
   `3000/api/health→200`, `8978/→200|301|302`, `6333/readyz→200`, `5432 tcp`.

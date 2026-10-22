@@ -133,6 +133,19 @@ services:
       LANGFLOW_CONFIG_DIR: /app/data
       LANGFLOW_HOST: 0.0.0.0
       LANGFLOW_PORT: "7860"
+      # Langflow 1.12.4 blocks private addresses by default (SSRF protection):
+      # the SQL Database, Qdrant and API Request components and MCP servers
+      # then fail with "Hostname postgres resolves to blocked IP address(es)".
+      # Allowed: the stack's services by service name (what the guides teach)
+      # and by container name, and the names that reach the laptop itself.
+      # Every other private address stays blocked.
+      LANGFLOW_SSRF_ALLOWED_HOSTS: postgres,qdrant,jupyterlab,jupyterhub,jupyter-mcp,langflow,n8n,metabase,cloudbeaver,kingo-postgres,kingo-qdrant,kingo-jupyterlab,kingo-jupyterhub,kingo-jupyter-mcp,kingo-langflow,kingo-n8n,kingo-metabase,kingo-cloudbeaver,localhost,127.0.0.1,host.docker.internal,host.containers.internal
+      # Also new in 1.12.4: components may only read their own uploads, which
+      # locks out /app/shared (the folder the guides hand files in through)
+      # and every sqlite:////app/shared/... URL. There is no allow-list for
+      # paths; a single-user laptop is the "trusted single-tenant server"
+      # Langflow's release notes name for this switch.
+      LANGFLOW_RESTRICT_LOCAL_FILE_ACCESS: "false"
     ports:
       - "127.0.0.1:${KINGO_PORT_LANGFLOW:-7860}:7860"
     volumes:

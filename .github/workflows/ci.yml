@@ -137,6 +137,26 @@ jobs:
           ./kingo up
           ./kingo smoke
 
+      - name: Langflow may reach the stack and the shared folder
+        # Langflow 1.12.4 blocks private hosts and local files by default; the
+        # SQL Database component then refused postgres (2026-10). Runs
+        # Langflow's own guards in the running container, on the addresses the
+        # guides teach, and checks the protection is still on for the rest.
+        run: |
+          ${{ matrix.engine }} exec kingo-langflow /app/.venv/bin/python -c '
+          from lfx.utils.ssrf_protection import SSRFProtectionError, validate_connector_database_url_for_ssrf as db, validate_connector_url_for_ssrf as connector, validate_url_for_ssrf as http
+          db("postgresql://student:kingo2026@postgres:5432/classroom")
+          db("sqlite:////app/shared/trials.sqlite")
+          connector("http://qdrant:6333")
+          http("http://n8n:5678/webhook/test")
+          try:
+              http("http://192.168.1.1/")
+          except SSRFProtectionError:
+              print("OK: the stack and /app/shared are allowed, other private hosts are blocked")
+          else:
+              raise SystemExit("FAIL: SSRF protection is off")
+          '
+
       - name: Boot 2 — second cycle catches first-run-only survivors
         timeout-minutes: 25
         # With a backup in between, on purpose: with the stack down it has to

@@ -451,6 +451,17 @@ is reachable from Langflow. It is deliberately NOT a bind over `/app/data`,
 which is Langflow's own config dir — flows themselves live in the `langflow`
 PostgreSQL database, so a folder mount is no substitute for exporting a flow.
 
+**"Hostname postgres resolves to blocked IP address(es)"**, or **"Database
+dialect 'sqlite' accesses the local filesystem"**: Langflow 1.12.4 blocks
+private addresses and local files by default. Since Kingo 1.5.1, `compose.yml`
+allows the stack's own services (by service and container name), `localhost`,
+and `host.docker.internal` / `host.containers.internal`, and lets components
+read `/app/shared`. A student on 1.5.0 needs only `./kingo update`. Every
+other private address stays blocked on purpose (a classmate's laptop, the
+Mac's own Wi-Fi IP): to reach a program on the student's own laptop, use
+`host.docker.internal` (Docker) or `host.containers.internal` (Podman)
+instead of its IP. A new service goes into `LANGFLOW_SSRF_ALLOWED_HOSTS` too.
+
 ## CloudBeaver has two logins (students will ask)
 
 CloudBeaver opens on an empty page saying "No Connections" — that is an
