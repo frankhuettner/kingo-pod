@@ -185,6 +185,12 @@ reinstall), you get Kingo 1.4 again: run the line once more.
 - **Components Langflow does not recognize** (*Chroma*, *File Reader Batch*,
   *OpenRouter Embeddings*, your own custom components): they still work. Leave
   them as they are. In new flows, *Chroma* is now called *Chroma DB*.
+- **Your own Python components, one exception:** a component does not load
+  if an input has the same `name` as one of the component's methods: one of
+  yours, or one that Langflow has, such as `index`, `run`, `start`, `stop`,
+  `log`, `validate` or `variables`. The error says the input is *"named after
+  a method of the component"*. Rename the input: change its `name`, not its
+  `display_name`. Then connect that input again in your flows.
 - **Two components left the menu:** *Text Input* and *Text Output*. In new
   flows, use *Chat Input* and *Chat Output* instead. The ones already in your
   flows still work.
