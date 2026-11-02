@@ -1,0 +1,19 @@
+From: Ron Baker <ron.baker@enron.example>
+To: Ron Baker <ron.baker@enron.example>
+Subject: Costless Collar
+Date: Wed, 10 Jan 2001 10:28:00 +0000
+Message-ID: <v-e690b536736f7786@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Here's the calculation using the historical volatility.  The strike drops 
+slightly.  The volatility in the calculation is the expected future 
+vol;atility - looking at traded options for HC and an expected fall off in 
+vol for long dated options, one could justify a vol estimate in the range 40 
+- 50% for the collar.
+
+The presence of the swap makes no difference on the collar valuation.
+
+Bob

@@ -1,0 +1,110 @@
+From: lu <lu@enron.example>
+To: Bjorn Hagelmann <bjorn.hagelmann@enron.example>, Viacheslav Danilov <viacheslav.danilov@enron.example>
+Cc: Vince J Kaminski <{{ME}}>, Tani Nath <tani.nath@enron.example>, Ted Murphy <ted.murphy@enron.example>, Stinson Gibner <stinson.gibner@enron.example>
+Subject: RE: Exotica's different versions
+Date: Thu, 31 May 2001 15:19:17 +0000
+Message-ID: <8507531.1075858449669.JavaMail.evans@thyme>
+In-Reply-To: <5649128.1075858475390.JavaMail.evans@thyme>
+References: <v-f6cbc35591c224cf@kaminski.enron.example> <v-2747876283f515c0@kaminski.enron.example> <5649128.1075858475390.JavaMail.evans@thyme>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+X-Enron-From: lu@enron.example
+X-Enron-To: Bjorn Hagelmann <bjorn.hagelmann@enron.example>, Viacheslav Danilov <viacheslav.danilov@enron.example>
+X-Enron-Cc: Vince J Kaminski <{{ME}}>, Tani Nath <tani.nath@enron.example>, Ted Murphy <ted.murphy@enron.example>, Stinson Gibner <stinson.gibner@enron.example>
+
+Bjorn,
+
+Vince forwarded your message to me.  
+
+I think it is a relatively easy task to achieve the synchronization with Houston's Exotica Options Library.
+Just install Houston's Exotica.xll in London office, which will not take more than one hour. 
+We can routinely ship the excutable whenever we update the library for installation in London.
+
+
+There are good reasons to do this:
+
+1)  We make changes to Exotica frequently. In this sense, it is very hard to keep 
+ONE version across the company if offices outside Houston want to maintain their own
+version.
+
+2)  It is not necessary and cost effective to maintain different versions. As matter of fact, it is harmful
+to have different versions. At the end of the day, it is Enron's P/L, different versions of Exotica would
+produce a small difference in per unit basis, however, this difference could  be amplified to 
+a large discrepency due to the large trade volumes. 
+
+3) The London research plans to rewrite Exotica in C++. In our view, Exotica's routine is
+small and self-contained, the objective programming will not add much value to it. While
+it is nice to have a C++ version, but we think it should be assigned a low priority. We 
+are not moving to C++ any time soon in Houston. 
+
+
+Let me know if this answers your question. My phone number is 713-853-6388.
+
+
+Zimin Lu
+
+
+
+
+
+ -----Original Message-----
+From: 	Kaminski, Vince J  
+Sent:	Friday, May 25, 2001 1:00 PM
+To:	Hagelmann, Bjorn
+Cc:	Lu, Zimin; Kaminski, Vince J
+Subject:	RE: Exotica's different versions
+
+Bjorn,
+
+I don't think the scope of the project is really that big. When we looked
+into it, it seemed like a relatively minor issue. 
+
+To me, it's  really a matter of routine maintenance that should not be
+an equivalent of a Desert Storm operation.
+
+Zimin and I will call Slava on Tuesday and determine what has to be done.
+
+
+Vince
+
+ -----Original Message-----
+From: 	Hagelmann, Bjorn  
+Sent:	Wednesday, May 23, 2001 2:48 PM
+To:	Murphy, Ted; Kaminski, Vince J
+Subject:	FW: Exotica's different versions
+
+Vince:
+
+We had discussed this briefly before I went on vacation. What did you want to do with this?
+
+Regards
+
+Bj?rn Hagelmann
+Director
+Rac - Market Risk Management
+E-Mail: bjorn.hagelmann@enron.example
+Office:  + 1 713 345 7984
+Mobil:   + 1 713 302 5279
+
+
+ -----Original Message-----
+From: 	Danilov, Viacheslav  
+Sent:	Tuesday, May 22, 2001 02:25
+To:	Hagelmann, Bjorn
+Cc:	Nath, Tani; Gibner, Stinson
+Subject:	Exotica's different versions
+
+Hi Bjorn,
+
+some time ago we, you, Stinson and I, had a meeting in Houston regarding having the same versions for Houston and London.
+
+We agreed that you would talk to Ted Murphy to get his support for this project. I know that Ted did not come to Houston at the time he planned and therefore you were not able to talk to him (you were on holidays when he came to Houston).
+
+This project is really big (several man month work) and we cannot do this without Ted's support. You know that requests from RAC are always taken very seriously.
+
+Please, could you talk to Ted to get his support.
+
+many thanks,
+
+Slava

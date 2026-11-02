@@ -1,0 +1,22 @@
+From: Chonawee Supatgiat <chonawee.supatgiat@enron.example>
+To: Richard Dimichele <richard.dimichele@enron.example>
+Subject: some more input
+Date: Fri, 20 Apr 2001 16:31:00 +0000
+Message-ID: <v-b78d3d16731de6e0@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Hi Rich and Key,
+Again I think your idea is very good. I think that we, as a market maker, can 
+reduce our credit risk (risk of default) if we do the "mark-to-market" 
+charging. That is, each week when we release a new expected value of the 
+gross box office receipt, we balance all the opening positions the same way 
+as in a regular future market. This way, we can give margin calls to the 
+couterparties who are expected to owe us a lots of money.
+In the last paragraph, I think the gross box office can also be determined 
+from the market itself (i.e., if there are lots of buyers, our offer price 
+should go up.)
+We can offer other derivative products such as options as well.
+-Chonawee

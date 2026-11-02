@@ -1,0 +1,50 @@
+From: Amitava Dhar <amitava.dhar@enron.example>
+To: Vince J Kaminski <{{ME}}>
+Subject: CreditDotCom Projects
+Date: Wed, 03 Jan 2001 08:30:00 +0000
+Message-ID: <v-38ad5dab4e2f7490@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+The following is a good summary from Vasant about the projects and what is 
+ahead of us.
+Ben, please let me know when things are ready; I can plan my trip accordingly.
+Thanks, 
+Amitava
+
+
+
+EnronCredit.com is working on 3 main models --- the FMC model, the Placement 
+model, and the Movement model.
+FMC Model : provides credit default swap price curves for 16 ratings with 33 
+industry offsets.  Each day, this model takes the previous day's trader 
+curves and adjusts them for the movement in Bloomberg yields and observed 
+swap prices.
+Placement Model : uses linear regression to credit default swap prices using 
+dummified ranges for Market Capitalization, Liquidity, KMV Score, etc.  One 
+main issue here is that the dataset is biased towards investment grade 
+names.  Alternate approaches looked at developing separate models for 
+separate sunsets of names.
+Movement Model : provides an alert system for news.  This is under 
+development.
+
+Current involvement of Houston Research Group members is in the 
+development/modifications of the Placement Model, especially in thinking 
+through the various single vs multi model approaches.  We can help in the 
+brainstorming for better models for subsets.  One main project right now is 
+to get a separate model for subsidiaries, and to exclude subsidiary names 
+from the main regression.
+
+Value-at-risk is based on historical variance-covariance approach.
+
+The portfolio model is under development.
+
+Agenda for Houston Research Group members : 
+
+Once sufficient data is collected, start reviewing for potential analytic 
+relationships.
+Get weekly updates from London, and provide feedback.
+Plan on a trip if the work warrants it, once the agenda is fairly well drawn 
+out, and data is available for analysis.

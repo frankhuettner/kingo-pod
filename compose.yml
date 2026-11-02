@@ -19,7 +19,10 @@ name: kingo
 
 services:
   postgres:
-    image: postgres:16
+    # The official postgres:16 plus pgvector (the mail assistant's search). Same Postgres 16 on
+    # the same Debian trixie, so an existing pgdata volume opens unchanged, without collation
+    # warnings, and contrib extensions such as pg_trgm are still there.
+    image: pgvector/pgvector:pg16-trixie
     container_name: kingo-postgres
     restart: unless-stopped
     environment:
@@ -129,6 +132,8 @@ services:
     user: root
     environment:
       LANGFLOW_DATABASE_URL: postgresql://${KINGO_USER}:${KINGO_PASSWORD}@postgres:5432/langflow
+      # The mail roles' password (the class password), for the Mail Search component: no flow carries it.
+      N8N_WORKSHOP_MAIL_PASSWORD: ${KINGO_PASSWORD}
       LANGFLOW_AUTO_LOGIN: "true"
       LANGFLOW_SECRET_KEY: ${LANGFLOW_SECRET_KEY}
       LANGFLOW_CONFIG_DIR: /app/data
@@ -203,6 +208,42 @@ services:
       postgres:
         condition: service_healthy
 
+  mail:
+    # The mail assistant's mailbox (n8n workshop): keeps one test mailbox in
+    # step with the tables of schema n8n_workshop_mail in `classroom` and sends
+    # what a person approved in n8n. Built locally (mail/Dockerfile: Alpine with
+    # mbsync, notmuch, goimapnotify and a small Python service) — the same
+    # pattern as jupyterhub and langflow. No port: n8n and Langflow reach it
+    # only through Postgres. `./kingo mail` sets the account up; it lives in
+    # mail-data, never in the files from git.
+    build: ./mail
+    image: kingo-mail:local
+    container_name: kingo-mail
+    restart: unless-stopped
+    profiles: [full, abp, n8n]
+    # On SIGTERM it finishes the mail it is sending (SMTP timeout 30 s) and
+    # starts no other; an interrupted send waits at `sending` for a person.
+    stop_grace_period: 60s
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: classroom
+      # Its own role, not the superuser: it may write the mailbox rows and move
+      # an approved outbox row on, nothing else. `kingo up` gives it the class
+      # password (init_stack → mail_schema).
+      PGUSER: n8n_workshop_mail_container
+      PGPASSWORD: ${KINGO_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      # ":z" for the same reason as langflow-data; a no-op without SELinux.
+      - mail-data:/data:z
+      # The course case: the sample mailbox (`kingo mail seed`) and the test
+      # mails n8n asks for (n8n_workshop_mail.deliver_test).
+      - ./mail/case:/opt/case:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   metabase:
     image: metabase/metabase:v0.60.25
     container_name: kingo-metabase
@@ -256,4 +297,5 @@ volumes:
   jupyterhub-data:
   langflow-data:
   n8n-data:
+  mail-data:
   cloudbeaver-data:

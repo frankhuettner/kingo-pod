@@ -1,0 +1,89 @@
+From: Richard DiMichele <richard.dimichele@enron.example>
+To: Chonawee Supatgiat <chonawee.supatgiat@enron.example>
+Subject: Re: calculating bid-ask prices
+Date: Wed, 25 Apr 2001 13:46:00 +0000
+Message-ID: <v-222772bf212b23a7@kaminski.enron.example>
+In-Reply-To: <v-b78d3d16731de6e0@kaminski.enron.example>
+References: <v-b78d3d16731de6e0@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Chonawee:  
+
+Thanks for your input.  This is similar to what I was thinking.  Our prices 
+would be "indicative" only.  We could take positions, but initially would try 
+to find the other side of any deal we'd do.  That's why we've been spending a 
+lot of brain cells trying to come up with an exhaustive list of the "natural" 
+buyers and sellers.  To the extent we make the product more generic (e.g., a 
+slate of movies as opposed to an individual picture) we may drive out more 
+liquidity. 
+
+I'm a little unclear on the settlement.  What if there are no buyers - do we 
+tell the sellers they didn't get done?  Also, a buyer or seller would have to 
+give us an open order (which might be okay).  However, leaving an order open 
+for several days might be a problem.  Are you aware of any other markets 
+which trade in the way you suggest?
+
+Rich
+
+
+
+
+	Chonawee Supatgiat@ENRON
+	04/24/01 07:40 PM
+		 
+		 To: Richard DiMichele/Enron Communications@Enron Communications
+		 cc: Chonawee Supatgiat/Corp/Enron@ENRON, Cynthia Harkness/Enron 
+Communications@Enron Communications, Greg Wolfe/HOU/ECT@ECT, James 
+Ginty/Enron Communications@Enron Communications, Jim Fallon/Enron 
+Communications@Enron Communications, Kelly Kimberly/Enron 
+Communications@Enron Communications, Kevin Howard/Enron Communications@Enron 
+Communications, Key Kasravi/Enron Communications@Enron Communications, 
+Kristin Albrecht/Enron Communications@Enron Communications, Kristina 
+Mordaunt/Enron Communications@Enron Communications, Martin 
+Lin/Contractor/Enron Communications@Enron Communications, Paul Racicot/Enron 
+Communications@Enron Communications, Zachary McCarroll/Enron 
+Communications@Enron Communications, Martin Lin/Contractor/Enron 
+Communications@Enron Communications
+		 Subject: calculating bid-ask prices
+
+
+I think we should let the price float with the market instead of trying to 
+forecast it. Otherwise, if our forecast is not consistence with the market, 
+we may have an imbalance in the bid-ask orders and we may end up taking some 
+positions. You know, as Russ and Martin pointed out, we cannot fight with the 
+studio and exhibitors because they have inside information and can game the 
+price easily.
+
+One way to ensure the balance of the bid-ask orders is to embed an exchange 
+system inside our bid-ask prices front end. Each week, we have a trading 
+period. During the period, instead of posting bid-ask prices, we post 
+"tentative" bid-ask prices, then we ask our customers to submit their 
+acceptable buying or selling price. These "tentative" bid-ask prices get 
+updated and are shown to the public. Of course, customers can revise/withdraw 
+their bids anytime during the trading period. At the end of the period, we 
+calculate and post the final bid and ask prices. The seller who submits lower 
+selling price than our final bid price gets paid at the bid price. The buyer 
+who submits higher buying price than our final ask price pays at the ask 
+price. Next week, we repeat the same process.
+
+This way, we can manage our positions easily and we can also behave like a 
+broker where we don't take any position at all. We make profit from those 
+bid-ask spread. We don't have to worry about forecasting accuracy and 
+insiders' trading because we don't have to take any position. Let the market 
+be the one who decides the price. 
+
+If we maintain our net position as zero, at the end, when all the actual 
+gross box office numbers are reported in those publications, our customers 
+with open long/short positions are perfectly matched. Using the 
+mark-to-market charge can reduce credit risk.
+
+Thanks,
+-Chonawee
+
+
+
+---------------------- Forwarded by Chonawee Supatgiat/Corp/Enron on 
+04/24/2001 07:24 PM ---------------------------

@@ -1,0 +1,77 @@
+From: Mike Bothwell <mbothwell@houston.vni.com.example>
+To: Rakesh Bharati <rakesh.bharati@enron.example>
+Subject: Visual Numerics CNL Licensing Issues
+Date: Thu, 29 Mar 2001 12:56:03 +0000
+Message-ID: <v-ec271aa272bf534d@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Rakesh, I'm just following up to see how things looked on this.  Any change
+in status?  Let me know I can furhter help you.
+
+Best regards,
+
+Mike Bothwell
+Account Manager
+Visual Numerics Inc.
+Phone: 713-954-6423
+Fax: 713-781-9260
+Cell: 713-417-9069
+mbothwell@houston.vni.com.example <mailto:mbothwell@houston.vni.com.example>
+<http://www.vni.com/>
+
+Visual Numerics Celebrates 30 Years
+As an Independent Software Vendor
+
+
+
+
+
+Rakesh,
+
+As we discussed, the CNL 4.0 PC libraries are not license managed.  Version
+5 will be.  The PC Version 4.0 can be installed on a network drive and
+called from networked PCs.  As expected, we would ask that Enron honor the
+license agreement by allowing only the number of simultaneous uses
+permitted
+by the license.  Version 5.0 will be license managed and can be licensed as
+node locked or floating.
+
+With regard to Unix licensing, the current version of CNL for Unix is
+license managed.  It can be licensed as node locked or floating.  If you
+install the libraries on a Unix server as node locked, the number of
+simultaneous sessions on that server is not limited except by the
+capabilities of the machine.  A floating Unix license would be checked out
+by the individual user to be executed on a local machine.
+
+Also as mentioned, your investment is protected by allowing you to upgrade
+in the future by paying only the price difference between your current and
+desired platforms.  This upgrade option only applies to licenses covered
+under support.
+
+If you have any additional questions, please let me know.  I look forward
+to
+providing you the best math and statistical libraries available today to
+help you solve your problems and understand your data.
+
+Best regards,
+
+Mike Bothwell
+Account Manager
+Visual Numerics Inc.
+Phone: 713-954-6423
+Fax: 713-781-9260
+Cell: 713-417-9069
+mbothwell@houston.vni.com.example <mailto:mbothwell@houston.vni.com.example>
+<http://www.vni.com/>
+
+Visual Numerics Celebrates 30 Years
+As an Independent Software Vendor
+
+
+
+
+
+ - vni-mb-enro-014-1 03-30-2001.doc

@@ -47,11 +47,12 @@ kept short; the full incident write-ups are in this file's history
 - **A running Docker (Desktop) is a first-class engine**: both setup scripts
   detect and use it, installing nothing; Podman is installed only when no
   working engine exists. Do not make the guides Podman-only.
-- **Two images are built locally**, tagged `*:local`: JupyterHub
-  (`jupyterhub/Dockerfile` — no published image runs hub+Lab standalone) and
+- **Three images are built locally**, tagged `*:local`: JupyterHub
+  (`jupyterhub/Dockerfile` — no published image runs hub+Lab standalone),
   Langflow (`langflow/Dockerfile` — upstream + `langflow/requirements.txt` +
-  `uv`). Anything that special-cases one (pull's base-image list, bundle, load's
-  retag) must handle both. `pull` builds them only when MISSING
+  `uv`) and Mail (`mail/Dockerfile` — Alpine + mbsync, notmuch, goimapnotify and
+  a small Python service; see "The mail service"). Anything that special-cases
+  one (pull's base-image list, bundle, load's retag) must handle all three. `pull` builds them only when MISSING
   (`build_missing`; a USB `load` brings images without build cache), `update`
   alone forces a build, `smoke` checks the hub can launch a Lab whenever the
   mode runs it.
@@ -336,14 +337,57 @@ there as a PATCH of the old line (1.4.1: n8n 2.41.6 + the backup), even where
 the rule above would say MINOR, so "Kingo 1.4 / 1.5" keeps naming the one
 difference students choose between.
 
+## The mail service (n8n workshop)
+
+- **`mail/` is copied from the workshop repo** (n8n-workshop,
+  `system/kingo/apply.sh`): the container, the schema
+  `mail/n8n_workshop_mail.sql` and the course case `mail/case/`. Change it
+  there, not here, or the next copy undoes it.
+- **No host port**: n8n and Langflow reach it only through Postgres. Its
+  SERVICE_TABLE row has port `-` and path `ps` (up = its container runs), and
+  every loop over the PORTS skips `-` (preflight, fixports, `dup_ports`,
+  `release_after_down`; `host_ports` feeds the loopback drift guard and
+  doctor's count). A new loop over the table's ports must skip it too.
+- **The schema is applied by `init_stack` on every `up`** (`mail_schema`, in
+  every mode), never from `postgres-init/`: an error there would abort the
+  database's first start, here it is a warning. The same run gives the five
+  `n8n_workshop_mail_*` roles `KINGO_PASSWORD` (public by design, like every
+  login in `.env`) and makes the calendar table a copy of
+  `mail/case/calendar.csv`.
+- **Postgres runs `pgvector/pgvector:pg16-trixie`**, the official `postgres:16`
+  on the same Debian plus pgvector: existing data opens unchanged. The schema
+  creates the extension `vector` in `classroom` and the table
+  `n8n_workshop_mail.chunks` (mails and documents with a vector and full text,
+  for the search in Langflow; row level security keeps internal rows from the
+  role `n8n_workshop_mail_reply`). `kingo mail seed` loads the case documents
+  with vectors made in advance (`mail/case/documents.jsonl`), on every run.
+- **A mail failure never holds up the stack**: `up` and `smoke` warn (both
+  setup scripts run `smoke` right after `up`); only CI (`CI=true`) makes
+  `smoke` fail on it.
+- **It logs in as `n8n_workshop_mail_container`**, never as the superuser: that
+  role may write the mailbox rows and move an approved outbox row on, nothing
+  else. `smoke` checks the login and the tools in the image.
+- **Not in `LANGFLOW_SSRF_ALLOWED_HOSTS`**: nothing listens in it, so there
+  is nothing for Langflow to reach. Give it a port one day and it goes in.
+- **The account lives only in the volume `mail-data`** (address, app password,
+  Maildir, mbsync's sync state). `kingo mail reset` deletes that volume alone;
+  `kingo reset` deletes it with everything else. Restored, it must be whole: a
+  Maildir without its sync state uploads every mail a second time.
+- **`stop_grace_period: 60s`**: on SIGTERM it finishes the mail it is
+  sending (SMTP timeout 30 s) and sends no further one. A sync that runs
+  longer is killed after 60 s, which mbsync recovers from; an interrupted
+  send stays at `sending` for a person to check — it never sends a row twice
+  by itself.
+
 ## Layout
 
-- `compose.yml` — the 9-service stack (ports via `KINGO_PORT_*`; profiles =
+- `compose.yml` — the 10-service stack (ports via `KINGO_PORT_*`; profiles =
   modes).
 - `kingo` (bash) — the ONE CLI for Mac, Linux and Windows-in-WSL2; CI-tested
   on Linux with both engines.
 - `jupyterhub/`, `cloudbeaver/`, `postgres-init/` — service config;
-  `langflow/` — Dockerfile + requirements.txt for the local Langflow build.
+  `langflow/` — Dockerfile + requirements.txt for the local Langflow build;
+  `mail/` — the mail service (copied from the workshop repo, see above).
 - `setup/setup-mac.sh` (brew podman + machine; Homebrew is a guide
   prerequisite — the script refuses to install it, Frank's call) and
   `setup/setup-linux.sh` (apt + podman, also the Windows/WSL path): both

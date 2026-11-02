@@ -1,0 +1,30 @@
+From: Vince J Kaminski <{{ME}}>
+To: Jeff Gray <jeff.gray@enron.example>
+Cc: Vince J Kaminski <{{ME}}>, Stinson Gibner <stinson.gibner@enron.example>, Alex Huang <alex.huang@enron.example>, Gary Hickerson <gary.hickerson@enron.example>, Michelle Cisneros <michelle.cisneros@enron.example>
+Subject: Power Plant Model
+Date: Fri, 05 Jan 2001 15:26:00 +0000
+Message-ID: <28849262.1075856528234.JavaMail.evans@thyme>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Jeff,
+
+A few comments on the model:
+
+1. We have a few reservations about some features of the model but would like 
+to
+discuss it internally and make the improvements without giving the benefit of 
+our insights to the consultant.
+In general, the model is not unreasonable but the devil is always in the 
+details and in the inputs and
+calibration. The same model may produce drastically different results 
+depending
+on the quality of inputs. 
+
+2. We don't have a separate pool of programmers in the Research  Group. We 
+were told that you
+would provide an IT resource. Alex would supervise this person.
+
+
+Vince

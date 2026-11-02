@@ -1,0 +1,138 @@
+From: Stinson Gibner <stinson.gibner@enron.example>
+To: Vince J Kaminski <{{ME}}>
+Subject: Re: Stanford Project
+Date: Wed, 03 Jan 2001 08:54:00 +0000
+Message-ID: <14038633.1075856239278.JavaMail.evans@thyme>
+In-Reply-To: <v-3130f9118281aca3@kaminski.enron.example>
+References: <v-949324d075747723@kaminski.enron.example> <v-3130f9118281aca3@kaminski.enron.example>
+X-Enron-Folder: stanford
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+---------------------- Forwarded by Stinson Gibner/HOU/ECT on 01/03/2001 
+08:54 AM ---------------------------
+
+
+Stinson Gibner
+12/27/2000 05:04 PM
+To: Nick Bambos <bambos@stanford.edu.example> @ ENRON
+cc:  
+Subject: Re: Stanford Project  
+
+Nick,
+
+Hope you had a nice Christmas.  Best wishes for the New Year.   
+
+It would certainly be great to see you and to meet Eric some time in the next 
+few months.     Everyone here
+was very impressed with Giuseppe and we are eager to have another of your 
+students come to Enron.
+
+Enron Broadband is continuing to evolve and the current vision is to rely on 
+Enron's trading expertise while trying to
+minimize our role as an engineering company and innovator of technology.   I 
+spoke recently with Jim Fallon, the current
+head trader in EBS, and we put together a short list of topics of interest 
+where you might be able to help educate us.
+I put these in the order of interest (to Mr. Fallon).
+
+1.   Where will bandwidth prices go?   The direction of prices, obviously is 
+the concern of any trader.   We realize that 
+technological innovation will continue to drive down prices, but are still 
+interested in trying to quantify how fast prices will fall,  
+if there are likely to be certain bottlenecks in the fiber network where you 
+could see prices stable or rising for some length of time,  
+if there are applications on the horizon which would use such prodigious 
+amounts of bandwidth as to have some effect on pricing, 
+and if there is a rational way of trying to quantify the timing and effect on 
+prices of new technologies.
+ The term "bandwidth" might primarily mean lit fiberoptic capacity, but could 
+also incompass dark fiber, or IP transit and transport 
+pricing.
+
+2.  During the last year, Enron purchased a company known as "Warpspeed" in 
+order to acquire their MetaRouter technology.   To quote from the Enron press 
+release:
+
+"MetaRouter sends signals throughout distributed networks to determine the 
+optimal connectivity paths for any size bandwidth capacity from anywhere in 
+the world. Capable of processing thousands of connections per second, 
+MetaRouter significantly enhances Enron,s ability to automate circuit 
+provisioning."
+
+There may be two separate questions to ask here.   First,  in the context of 
+the current market (or the market which may develop in the next 1-2 years), 
+will the MetaRouter be a commercially viable product?   That is,  will it 
+address an actual need in the market, or would it be more cost effective just 
+to use technicians with jumper cables to provision circuits?
+
+The second question (our first real technical question):  is the MetaRouter 
+technology scalable?     Before starting on this project, Vince and I will 
+need to make the proper introductions with the principles who are 
+implementing this technology.
+
+3.  Aggregation of loads.   A recurring question comes from a number of areas 
+such as IP, network storage, and   streaming media transport sales:  What 
+value can I get form aggregating customers, each of which has some type of 
+stochastic load profile?   Giuseppe touched on this problem as it relates to 
+IP transport, but it may be interesting to try and look in more detail.    
+The main stumbling block may be that we currently have basically no actual 
+customer data.   I am told that in a few months we will have some more useful 
+history.   My understanding is that what will be available will be 5-minute 
+averages of usage, so we still will not know on a short time scale what the 
+distribution of load looks like.
+
+
+I hope that this gives you enough information to get some idea of what our 
+concerns are at this point.   Please let me know your thoughts about these 
+topics.   I would expect, for instance that question number 1 may not be 
+reasonable as a research project, but might be a question which you would 
+feel comfortable in addressing by giving us  your qualitative opinions, maybe 
+in the form of a talk here at Enron.    
+
+
+Again,  let me know your thoughts, and I look forward to seeing you again 
+soon.
+
+Stinson
+
+
+
+
+
+
+Nick Bambos <bambos@stanford.edu.example> on 12/20/2000 12:14:40 PM
+To: {{ME}}
+cc: stinson.gibner@enron.example 
+Subject: Stanford Project
+
+
+Hello Vince and Stinson,
+
+First of all,
+
+BEST WISHES FOR HAPPY HOLIDAYS!!!!
+
+If you are in the Stanford area during the holidays, let's get together
+some time to have dinner.
+
+I have formally established the project - thanks again for funding
+it - and I have also recruited the second PhD student. His name is
+Eric Cope, and he is a top-notch student, very mature, and entrepreneurial!
+
+We have started working on some interesting problems in this area. I would
+hope that Eric could spend the coming summer at Enron to get immersed into
+the "problem/opportunity generation environment." That really helps the 
+student
+to develop a realistic vision about their research.
+
+Perhaps, our whole team could visit Enron again some time in the next quarter,
+say in March or so, to discuss the research issues we are pursuing. And of 
+course
+you could visit us before that too.
+
+
+With my WARMEST WISHES,
+
+Nick

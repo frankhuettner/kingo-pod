@@ -1,0 +1,50 @@
+From: Mike Mumford <mike.mumford@enron.example>
+To: Scott Salmon <scott.salmon@enron.example>
+Subject: RE: D&B Contact Names
+Date: Thu, 19 Apr 2001 01:37:00 +0000
+Message-ID: <v-473d8390b86de11a@kaminski.enron.example>
+In-Reply-To: <v-0d2ca14b3bba9ee2@kaminski.enron.example>
+References: <v-0d2ca14b3bba9ee2@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Ooops... part II.
+
+I just threw out 12 as a number for something we might develop... it's really 
+not based on anything.  We know 17 will work for pre-packaged programs.  We 
+also know there will be a great number of names with less than the full 17... 
+I assume we would pursue another model (internal or external) to provide 
+probably less accurate numbers but at least available for names with fewer 
+inputs.  
+
+Mike
+
+
+
+
+
+From: Iris Mack/ENRON@enronXgate on 18/04/2001 15:02 CDT
+To: Mike Mumford/LON/ECT@ECT
+cc: Amitava Dhar/Corp/Enron@ENRON, Scott Salmon/EU/Enron@Enron, Eric 
+Kirkpatrick/EU/Enron@Enron 
+
+Subject: RE: D&B Contact Names
+
+Hi Mike,
+
+ Thanks for your email.
+
+ What do you mean by "buying blind  all major data associated with these 
+specific DUNS numbers"?
+
+ I am puzzled about why you would be looking at 17 vs 12 fields.  I know 
+RiskCalc requires 17 inputs and seem to apply that the model does not work 
+for less than 17.  Yesterday the RiskCalc sales people could not guarantte 
+that their model would work for less than the required 17 data inputs.  They 
+suggested that this would be a question to direct towards their quants who 
+developed the model.
+
+Regards,
+Iris

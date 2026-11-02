@@ -1,0 +1,15 @@
+From: Mark Ruane <mark.ruane@enron.example>
+To: William Bradford <william.bradford@enron.example>
+Subject: GBM vs Reversion
+Date: Mon, 26 Mar 2001 11:11:00 +0000
+Message-ID: <v-b797c2c85d8f8695@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+A quick example of the impact of using GBM based simulation:  Based on a five 
+year swap, the expected losses are 18% higher as a result of GBM.  Attached 
+chart shows the relative long-term gas prices under both processes. << File: 
+gbmcht.xls >> 
+Mark

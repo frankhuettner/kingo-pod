@@ -1,0 +1,39 @@
+From: Yannis Tzamouranis <yannis.tzamouranis@enron.example>
+To: Vasant Shanbhogue <vasant.shanbhogue@enron.example>
+Subject: class proposal by Yannis
+Date: Mon, 05 Mar 2001 10:39:00 +0000
+Message-ID: <v-ced3a8a8d221dfe9@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Here is a tentative course description.
+
+Day 1: Extreme Value Distriutions and Copulas
+1. Heavy Tail Distributions: Exploratory data analysis and detection.
+Extreme value distributions and generalized Pareto distributions.
+Estimation and simulation. Practical examples.
+2. Notions of dependence and copulas. Estimation and simulation.
+Experiments with the program EVANECE.
+
+Day 2: Principal Component Analysis and Modern Regression
+1. Principal component analysis and applications to the yield curve and
+the detection of contagion in financial markets.
+2. Nonlinear regression and the construction of yield curves.
+3. Nonparametric regression (kernel and projection pursuit methods) and
+alternatives to the Black-Scholes formula to option pricing.
+
+Day 3: Time Series Analysis
+Examples of temperature time series will be used to introduce and
+illustrate the following concepts and techniques:
+1. Removing trends and seasonal components, and stationarity.
+2. Fitting the classical autoregressive and moving average models.
+3. Discretization of stochastic differential equations
+4. Multivariate time series
+
+Day 4: Nonlinear Systems and Filtering
+1. ARCH, GARCH and stochastic volatility models
+2. Linear state space models and the classical Kalman filter
+3. Nonlinear systems and particle filtering.
+4. Applications

@@ -1,0 +1,58 @@
+From: Tanya Tamarchenko <tanya.tamarchenko@enron.example>
+To: William Bradford <william.bradford@enron.example>, Mark Ruane <mark.ruane@enron.example>
+Cc: Naveen Andrews <naveen.andrews@enron.example>, Tanya Rohauer <tanya.rohauer@enron.example>, Debbie Brackett <debbie.brackett@enron.example>, Rabi De <rabi.de@enron.example>, Wenyao Jia <wenyao.jia@enron.example>, Vince J Kaminski <{{ME}}>
+Subject: RE: forward prices simulations in the Credit Reserve Model
+Date: Mon, 26 Mar 2001 15:08:00 +0000
+Message-ID: <23117236.1075856203595.JavaMail.evans@thyme>
+In-Reply-To: <v-69cf4bc496a8a29c@kaminski.enron.example>
+References: <v-b797c2c85d8f8695@kaminski.enron.example> <v-69cf4bc496a8a29c@kaminski.enron.example>
+X-Enron-Folder: credit
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Bill and Mark,
+the figure below shows you what happens when we simulate forward prices using 
+current methodology of our Credit Reserve Model.
+The time scale on this figure goes from 0 to 30 years. I started with $5.2 
+gas prices at time 0 and used the NG forward volatility curve which
+has 50% volatilities in the front and 13.5% vols for long-term contracts. You 
+can see from the figure, that, for example, at 30 years horizon
+the price will be more than $13.4 with probability 5% but less than $22.1 
+with probability 99%. The corresponding lower bounds are
+$1.17 and $0.71.
+
+Tanya
+
+
+
+
+From: William S Bradford/ENRON@enronXgate on 03/26/2001 11:22 AM
+To: Mark Ruane/ENRON@enronXgate, Naveen Andrews/ENRON@enronXgate, Tanya 
+Rohauer/ENRON@enronXgate, Debbie R Brackett/HOU/ECT@ECT, Tanya 
+Tamarchenko/HOU/ECT@ECT, Rabi De/NA/Enron@ENRON, Wenyao Jia/ENRON@enronXgate
+cc:  
+Subject: RE: GBM vs Reversion
+
+Both seem to provide fairly unrealistic values.  $50 gas over the term seems 
+improbable, however, a $6 gas peak does not represent capture all potential 
+price movement at 99% confience interval.
+
+What were your assumptions on price curves, volatilty curves, and trend 
+reversion?
+
+Bill
+
+
+ -----Original Message-----
+From:  Ruane, Mark  
+Sent: Monday, March 26, 2001 11:11 AM
+To: Bradford, William S.; Andrews, Naveen; Rohauer, Tanya; Brackett, Debbie; 
+Tamarchenko, Tanya; De, Rabi; Jia, Winston
+Subject: GBM vs Reversion
+
+A quick example of the impact of using GBM based simulation:  Based on a five 
+year swap, the expected losses are 18% higher as a result of GBM.  Attached 
+chart shows the relative long-term gas prices under both processes. << File: 
+gbmcht.xls >> 
+Mark

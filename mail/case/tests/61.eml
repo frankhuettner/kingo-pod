@@ -1,0 +1,23 @@
+From: Tanya Tamarchenko <tanya.tamarchenko@enron.example>
+To: {{ME}}, Frank Hayden <frank.hayden@enron.example>
+Subject: RE: Here are the correlations..............
+Date: Thu, 10 May 2001 14:54:00 +0000
+Message-ID: <v-a50ee9b377d3c024@kaminski.enron.example>
+In-Reply-To: <v-9e3836a7b8de5af8@kaminski.enron.example>
+References: <v-61fc81e72e00bb80@kaminski.enron.example> <v-9e3836a7b8de5af8@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+X-Enron-From: Tanya Tamarchenko <tanya.tamarchenko@enron.example>
+X-Enron-To: Frank Hayden <frank.hayden@enron.example>
+
+Frank, this is the correlation between R6 and NG. 
+R6 is not under EPMI-LT-NW-PR1.
+
+I referred to low correlations between NG and west power curves which I observed for recent data (NGI-SOCAL and R8, for example).
+
+To capture properly term structure of correlations we need to increase the number of factors and do joint factors analysis
+for all curves. This will not increase computational time or memory requirements for VAR.
+
+Tanya

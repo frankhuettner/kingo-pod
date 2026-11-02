@@ -1,0 +1,78 @@
+From: Vince J Kaminski <{{ME}}>
+To: Vasant Shanbhogue <vasant.shanbhogue@enron.example>
+Subject: Newsletter
+Date: Mon, 02 Apr 2001 07:37:00 +0000
+Message-ID: <27544555.1075856510877.JavaMail.evans@thyme>
+In-Reply-To: <v-43a9dd10e9aa7488@kaminski.enron.example>
+References: <v-43a9dd10e9aa7488@kaminski.enron.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Vasant,
+
+Can you, please, review this Newsletter article.
+I had to put something together rather quickly last night.
+
+Vince
+
+---------------------- Forwarded by Vince J Kaminski/HOU/ECT on 04/02/2001 
+07:37 AM ---------------------------
+
+
+vkaminski@aol.com.example on 04/01/2001 11:22:50 PM
+To: {{ME}}
+cc: vkaminski@aol.com.example 
+Subject: Newsletter
+
+
+Complexity of modern financial markets never ceases toamaze me. Te links  
+between different financial instruments are sometimes verysubtle and it 
+takes  
+understanding of many different types of transactions toexplain the  
+interdependencies. Recently, I have been receiving E-mails fromdifferent  
+academics and practitioners asking for explanation of anomalydetected in  
+pricing of credit default swaps. One E-mail asked the followingquestion:  
+According to a Bank of America publication, your (Enron) default swapspreads  
+are consistently trading about 80 basis points wider than your assetswaps.  
+Any idea of what is going on here? 
+
+Icame up with an answer with the help of Bryan Seyfried from Enron  
+Credit.com,our unit in London trading credit protection tools. The answer  
+requiresexplaining first what are credit default swaps. In a plain-vanilla  
+credit default swapstructure, the buyer pays a premium for protection he or  
+she receives in case acredit event (default) takes place in the case of a  
+reference entity. In theevent of default by the reference entity, the seller  
+of the protection isrequired to pay an amount equal to the difference 
+between  
+the initial price ofthe credit exposure and its recovery value. For example,  
+the protection may bepurchased for a bond issued by the reference entity. In  
+the case of a default,the seller of protection pays the difference between  
+the face value of the bondand its current(post-default) market price.  
+Mispricing of credit default swaps often takes placefollowing an issuance by  
+the reference entity of convertible bonds. Aconvertible bond can be looked 
+at  
+as a combination of a regular coupon bond anda long-term equity option.  
+Sometimes the equity option may be mispriced and beavailable at a lower 
+price  
+than the comparable equity options that can beobtained at the derivatives  
+markets. The hedge funds buy convertible bonds toacquire the option 
+component  
+but are not interested in taking the issuer,scredit. They seek to lay off  
+credit risk by selling the asset swaps or bybuying protection through 
+default  
+swaps. This arbitrage leads in many cases,after a large convertible bonds  
+issue, to imbalance in the asset swaps marketsvs. default swaps markets. The  
+cost of credit protection goes up but this hasnothing to do with  
+deterioration of the issuer,s credit.  
+One may expect that this imbalance will be eliminated overtime and the 
+prices  
+of default and asset swaps will converge. Frictions andrigidities in the  
+capital markets may slow down this process. 
+Enron issues recently a$1.9 billion convertible bond that became a target of  
+arbitrage activitiescarried out by the hedge funds. What is very interesting  
+is that analysts wholook at one segment of the financial markets in 
+isolation  
+from other segmentsmay be unable to explain the dynamics of prices.  
+Globalization has arrived andit has more than one dimension.
+ - credit.doc

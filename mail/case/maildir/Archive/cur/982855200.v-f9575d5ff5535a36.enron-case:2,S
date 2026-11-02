@@ -1,0 +1,31 @@
+From: Rabi De <rabi.de@enron.example>
+To: Michael Tribolet <michael.tribolet@enron.example>
+Subject: Credit Reserve Simulation for EES
+Date: Thu, 22 Feb 2001 15:20:00 +0000
+Message-ID: <v-f9575d5ff5535a36@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Amitava and Seksan have identified the source of the discrepancy between the 
+option prices calculated by the credit-reserve model and the stand-alone 
+spreadsheet model used in deal pricing.  We expect to put a fix in place by 
+tomorrow.  
+
+In response to your desire to see more output from credit reserve simulation, 
+I have identified a list of possible items that may be of interest to you for 
+credit pricing. 
+
+1.  Potential Exposure across time
+
+2.  For each simulated credit event, display:
+default time
+exposure -- is deal-by-deal breakdown of any interest?
+commodity forward curves (or spot price ?) at default time
+
+I would appreciate it if you could let me know your wish list at your 
+earliest.
+Thanks,
+Rabi De
+5-4593

@@ -1,0 +1,39 @@
+From: Mike Mumford <mike.mumford@enron.example>
+To: Mike Mumford <mike.mumford@enron.example>
+Subject: RE: D&B Contact Names
+Date: Wed, 18 Apr 2001 13:20:00 +0000
+Message-ID: <v-0d2ca14b3bba9ee2@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Iris,
+
+Thanks.
+
+After our meeting we stuck around to discuss things a little further.
+
+Specifically with respect to global counterparty names... we have DUNS 
+cross-references on about 70 of active names (13k out of 18.5k).  We could 
+greatly accellerate purchase of some useful data by buying blind all major 
+data associated with these specific DUNS numbers.
+
+Pro  -  Data gets in on names we know we want to review ASAP, but without 
+resolution on which specific fields are most useful.  We also get to test for 
+completeness of data (how many have all 17 fields... how many have only 12 of 
+which fields, etc.).
+
+Con  -  Costs could be significantly higher... buying info we don't know we 
+need (converse of buying only the 17 fields doesn't seem best answer).  We 
+would end up buying additional info later... overhead costs and piecemeal 
+buying will increase costs.  IT development time would be greatly 
+increased... multiple file formats... developing to unknown maximum size, 
+etc.... redoing when more data is purchased.
+
+
+Any thoughts.
+
+
+
+Mike

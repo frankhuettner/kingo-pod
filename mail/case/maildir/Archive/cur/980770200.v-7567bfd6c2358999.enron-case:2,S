@@ -1,0 +1,25 @@
+From: Stinson Gibner <stinson.gibner@enron.example>
+To: Jeffrey Shankman <jeffrey.shankman@enron.example>
+Subject: P+ spread options
+Date: Mon, 29 Jan 2001 12:10:00 +0000
+Message-ID: <v-7567bfd6c2358999@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Jeff,
+
+We are reviewing the P+ spread option book.    One item of note is that the 
+correlations used to book the spread options have dropped significantly from 
+what was being used a year ago (see charts below).   I also remember that 
+John Mee was using even higher correlations when he ran this book.  In fact 
+he wanted to book options with a correlation of 1.0, but our model would not 
+allow it, so he was using 0.999.
+
+We are currently calculating historical correlations for you as well.   If 
+you want, Vince and I can review this with you at the end of the day.   Just 
+let me know what time would be convenient.
+
+--Stinson
+x34748

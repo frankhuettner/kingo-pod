@@ -1,0 +1,20 @@
+From: William S Bradford <william.bradford@enron.example>
+To: Tanya Tamarchenko <tanya.tamarchenko@enron.example>
+Subject: RE: GBM vs Reversion
+Date: Mon, 26 Mar 2001 11:22:00 +0000
+Message-ID: <v-69cf4bc496a8a29c@kaminski.enron.example>
+In-Reply-To: <v-b797c2c85d8f8695@kaminski.enron.example>
+References: <v-b797c2c85d8f8695@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Both seem to provide fairly unrealistic values.  $50 gas over the term seems 
+improbable, however, a $6 gas peak does not represent capture all potential 
+price movement at 99% confience interval.
+
+What were your assumptions on price curves, volatilty curves, and trend 
+reversion?
+
+Bill

@@ -1,0 +1,26 @@
+From: Chris Loehr <chris.loehr@enron.example>
+To: Bob Lee <bob.lee@enron.example>
+Subject: Costless Collar for Hanover
+Date: Thu, 11 Jan 2001 07:04:00 +0000
+Message-ID: <v-8f725a338c18d6a2@kaminski.enron.example>
+In-Reply-To: <v-ecf591277a6f2c49@kaminski.enron.example>
+References: <v-e690b536736f7786@kaminski.enron.example> <v-ecf591277a6f2c49@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Ryan and I have looked at the research model and made some adjustments.  
+The treasury rate at 12/28/00 was 5.127% (research uses 4.6% which probably 
+takes into account the recent Fed 50 bp cut)
+The maturity is 6/30/03 or 2.5 years (research uses 3 years)
+
+Using these assumptions and a 47.2% volatility in the Bloomberg collar 
+function results in a ceiling of 92 103/256 and a floor of 34 7/8.  After 
+adjusting the research model for the changes above, Ryan and I got a similar 
+range from the research model so we are comfortable with these numbers.
+
+Let me know if there are any questions.
+
+Chris
+x33092

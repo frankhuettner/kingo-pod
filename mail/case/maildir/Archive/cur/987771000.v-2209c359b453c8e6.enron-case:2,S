@@ -1,0 +1,22 @@
+From: Ben Parsons <ben.parsons@enron.example>
+To: Iris Mack <iris.mack@enron.example>
+Subject: Asset Swap and LIBOR Model Docs
+Date: Fri, 20 Apr 2001 12:50:00 +0000
+Message-ID: <v-2209c359b453c8e6@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+The LIBOR and asset swap models are now live on the traders' desktops, so in 
+order to aid your understanding and validation of them, here are the 
+technical documents:
+
+ << File: LiveLIBOR.pdf >>  << File: AssetSwap.pdf >> 
+
+Please read, and report back with any questions, criticisms or ideas. 
+Feedback is the only way we'll ever progress forward......
+
+thanks
+
+Ben

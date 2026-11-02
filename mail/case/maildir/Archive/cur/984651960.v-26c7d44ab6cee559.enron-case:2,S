@@ -1,0 +1,43 @@
+From: "Barry, Dan" <barryd@dnb.com.example>
+To: Mark Wilson <mark.wilson@enron.example>
+Subject: meeting follow-up
+Date: Thu, 15 Mar 2001 10:26:00 +0000
+Message-ID: <v-26c7d44ab6cee559@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Mark,
+
+Attached are a presentation on the Financial Stress Score and the countries
+that have risk scores available today. Please let me know if you have any
+questions.
+
+In response Vince's question regarding false positives from the model, that
+is a little difficult to answer.  The model is predicting the likelihood of
+a company experiencing financial distress.  We are not saying that all
+companies with a high risk score will experience financial distress.  In
+other words, it is not really a yes or no proposition.  It' not like a drug
+test where the test either comes back positive or negative and ocassionally,
+you get a false positive test result.  We are identifying companies that are
+at high risk for failure.  Some of those high risk companies will fail and
+some will not fail.  How many in each classification that will ultimately
+fail is addressed in the performance charts attached below.
+
+Please let me know if you have any other questions or need any additional
+information.
+
+Dan Barry
+Dun & Bradstreet
+Analytical Services
+barryd@dnb.com.example
+Phone (713) 953-5458
+Fax     (713) 953-5454
+ <<enron fss.ppt>>  <<Globalfailure.ppt>>  <<Fin Stress Understanding.doc>>
+ <<FSS performance.doc>>
+
+ - enron fss.ppt
+ - Globalfailure.ppt
+ - Fin Stress Understanding.doc
+ - FSS performance.doc

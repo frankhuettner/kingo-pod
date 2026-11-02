@@ -1,0 +1,21 @@
+From: Zimin Lu <zimin.lu@enron.example>
+To: Andrea Reed <andrea.reed@enron.example>
+Cc: Vince J Kaminski <{{ME}}>, Stinson Gibner <stinson.gibner@enron.example>
+Subject: HC collar valuation - update
+Date: Tue, 09 Jan 2001 10:17:00 +0000
+Message-ID: <10031736.1075856236132.JavaMail.evans@thyme>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Andrea,
+
+We computed the HC historical volatility for last 3 years, it is 47.2%.
+
+Using this volatility, the costless collar call strike is at 83.32.
+
+
+
+Zimin
+
+ 

@@ -1,0 +1,44 @@
+From: lu <lu@enron.example>
+To: {{ME}}, Paulo Issler <paulo.issler@enron.example>
+Cc: Stinson Gibner <stinson.gibner@enron.example>, Lon Draper <lon.draper@enron.example>, John Disturnal <john.disturnal@enron.example>
+Subject: FW: Strip of Spread Options
+Date: Thu, 31 May 2001 22:13:20 +0000
+Message-ID: <662102.1075858462760.JavaMail.evans@thyme>
+In-Reply-To: <v-74c4cb1f8392ee22@kaminski.enron.example>
+References: <v-74c4cb1f8392ee22@kaminski.enron.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+X-Enron-From: lu@enron.example
+X-Enron-To: Paulo Issler <paulo.issler@enron.example>
+X-Enron-Cc: Stinson Gibner <stinson.gibner@enron.example>, Lon Draper <lon.draper@enron.example>, John Disturnal <john.disturnal@enron.example>
+
+Paulo,
+
+Our Calgary office needs an option model that prices a strip of daily spread options.
+
+In Exotica, we have the Ostrip model that does a strip of daily European options.
+To modify that into spread option, we need to replace the EURO() function into 
+Spdopt()  function. 
+
+Lon would like to speak to you directly tomorrow about his specification. 
+I think one week or so is probably a reasonable time line for the delivery.  Thanks. 
+
+
+Zimin
+
+
+
+ -----Original Message-----
+From: 	Draper, Lon  
+Sent:	Thursday, May 31, 2001 4:49 PM
+To:	Lu, Zimin
+Cc:	Disturnal, John
+Subject:	Strip of Spread Options
+
+Zimin,
+
+As we were discussing, it would be extremely helpful to our desk if the research group could create a new exotica function that would calculate a strip of daily spread options similar to how the ostrip function calculates a strip of daily options.  We have just put on a sizable daily spread option position and expect to add to it in the following months.  A new spread option function would be invaluable for marking to market our existing positions as well as help us to price new deals quickly.  We currently value each option in the strip individually.
+
+Thanks,
+Lon

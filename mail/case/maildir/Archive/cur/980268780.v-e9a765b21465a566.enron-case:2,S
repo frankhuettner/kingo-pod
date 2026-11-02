@@ -1,0 +1,30 @@
+From: Tanya Tamarchenko <tanya.tamarchenko@enron.example>
+To: Stephen Stock <stephen.stock@enron.example>
+Subject: Re: Winston
+Date: Tue, 23 Jan 2001 16:53:00 +0000
+Message-ID: <v-e9a765b21465a566@kaminski.enron.example>
+In-Reply-To: <v-50a77d9b19871da1@kaminski.enron.example>
+References: <v-50a77d9b19871da1@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Steve,
+- we spent about 5 fruitful hours with Winston last week.
+- I pretty much understand the data flow when the code runs.
+- I also got an idea where the time is spent during the execution of the code 
+by questioning Winston.
+I did not see any results of profiling the code. Winston's opinion is (as I 
+understood) that he knows how much time is spent 
+on different calculations and profiling is not easy to do, so we don't need 
+to do it. 
+- Based on above I suggested possible way to reduce the time credit model 
+takes to run and we discussed it with Debbie, who was
+going to arrange a meeting with Winston.
+- It might be useful to look at the Documentation created by contractors, if 
+you have it handy - send it to me, please.
+
+Thank you,
+
+Tanya.
