@@ -1945,9 +1945,11 @@ usage: ./kingo mail [setup | seed | status | reset]
   ./kingo mail          set up the mailbox: the address of your test account, its app
                         password, and the addresses the course mode may also send to.
                         Signs in once to check, sends nothing.
-  ./kingo mail seed     put the course case's sample mailbox into it (once per account;
-                        the mails are uploaded to the provider)
-  ./kingo mail status   account, folders, last sync, last error
+  ./kingo mail seed     put the course case's sample mailbox into it; the mails are
+                        uploaded to the provider. Run it again if the upload seems
+                        stuck: it copies nothing twice and wakes the upload.
+  ./kingo mail status   account, folders, last sync, last error, and each folder here
+                        and at the provider: while the numbers differ, it still syncs
   ./kingo mail reset    forget the account and the local copy of its mailbox — the way to
                         switch accounts. The mailbox at the provider stays as it is.
 EOF

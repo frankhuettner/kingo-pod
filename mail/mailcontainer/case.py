@@ -100,6 +100,11 @@ def header(raw: bytes, name):
     return m.group(1).decode("utf-8", "replace").strip() if m else None
 
 
+def _seed_name(name):
+    """A case mail's file name without what mbsync adds (",U=<uid>") and the flags (":2,S")."""
+    return name.split(",U=", 1)[0].split(":2,", 1)[0]
+
+
 def _deliver(folder: Path, name, raw: bytes, mtime=None, sub="cur"):
     """Maildir delivery: write to tmp, then rename, so no reader sees half a file."""
     for d in ("tmp", "new", "cur"):
@@ -143,31 +148,38 @@ def vector_text(b64):
 def seed(paths, cfg, force=False, conn=None):
     """Put the case's old mails into the local folders: Archive -> the archive folder, Sent -> Sent.
 
-    Only once per account: seeding again would upload every mail a second time. The volume notes it,
-    and with `conn` so does the table n8n_workshop_mail.seeded, which outlives `kingo mail reset`.
+    Only once per account: after `kingo mail reset` the Maildir has lost mbsync's state, and a seed would upload
+    every mail a second time. The volume notes it, and with `conn` so does the table n8n_workshop_mail.seeded,
+    which outlives the reset. A mail already in its folder is skipped (by its file name, before the ",U=" that
+    mbsync adds), so a seed that stopped half way can simply run again (Frank, 3 Nov 2026: "kann man das
+    idempotent machen?").
     """
     if paths.seeded.exists() and not force:
-        raise AlreadySeeded(f"already seeded ({paths.seeded.read_text().strip()}); seeding again uploads every mail twice")
+        raise AlreadySeeded(f"already seeded ({paths.seeded.read_text().strip()}); nothing is copied twice")
     address = cfg.address.lower()
     if conn is not None and not force:
         row = conn.execute("SELECT seeded_at FROM n8n_workshop_mail.seeded WHERE address = %s", (address,)).fetchone()
         if row:
             raise AlreadySeeded(f"already seeded: {cfg.address} got the case mailbox on {row['seeded_at']:%Y-%m-%d} "
-                               f"(a reset does not change that); seeding again uploads every mail twice")
+                               f"(a reset does not change that); nothing is copied twice")
     src = case_dir() / "maildir"
     if not src.is_dir():
         raise RuntimeError(f"no case mailbox at {src}")
     counts = {}
     for case_folder, local in (("Archive", cfg.archive_local), ("Sent", SENT)):
         n = 0
+        here = {_seed_name(p.name) for sub in ("cur", "new") if (paths.folder(local) / sub).is_dir()
+                for p in (paths.folder(local) / sub).iterdir()}
         for f in sorted((src / case_folder / "cur").iterdir()):
             if f.name.startswith("."):
+                continue
+            n += 1
+            if _seed_name(f.name) in here:
                 continue
             raw = fill(f.read_bytes(), cfg.address)
             date = header(raw, "Date")
             mtime = parsedate_to_datetime(date).timestamp() if date else None
             _deliver(paths.folder(local), f.name, raw, mtime)
-            n += 1
         counts[local] = n
     paths.seeded.write_text(json.dumps({"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                                         "folders": counts}) + "\n")

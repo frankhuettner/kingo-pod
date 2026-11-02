@@ -71,7 +71,7 @@ def cmd_setup(args):
         allowed = old.allowed if old else []
     else:
         print("Course mode: replies go only to your own address and its plus addresses (name+anything@...).")
-        allowed = _ask("Other addresses it may send to, e.g. your private one (comma-separated, or empty)",
+        allowed = _ask("Other addresses it may send to, e.g. your SKKU address (comma-separated, or empty)",
                        ",".join(old.allowed) if old else "").split(",")
     print(f"Signing in to {imap_host} and {smtp_host} ... (nothing is sent)")
     try:
@@ -104,7 +104,13 @@ def cmd_seed(args):
         try:
             counts = case.seed(paths, cfg, force=args.force, conn=conn)
         except case.AlreadySeeded as e:   # the documents may still need loading, e.g. after `kingo update`
-            print(f"Mailbox: {e}.")
+            # Seeding again is the one answer when the upload seems stuck: it wakes the sync, which goes on where
+            # it stopped (Frank, 3 Nov 2026, after an upload that stood still at 2,420 of 3,244).
+            print(f"Mailbox: {e}. The upload goes on now; ./kingo mail status shows how far it is.")
+            try:
+                db.wake(conn, action="sync", source="seed")
+            except Exception as e:
+                print(f"(The service goes on with its next run: {e})")
         except RuntimeError as e:
             print(f"Mailbox not seeded: {e}", file=sys.stderr)
             rc = 1
@@ -113,6 +119,7 @@ def cmd_seed(args):
                 cfg.name = case.case_name()
                 settings.save(paths, cfg)
             print("Mailbox: " + ", ".join(f"{n} mails in {f}" for f, n in counts.items()) + ". Uploading starts now.")
+            print("./kingo mail status shows how far it is.")
             try:
                 db.wake(conn, action="sync", source="seed")
             except Exception as e:
@@ -155,4 +162,29 @@ def cmd_status(args):
             print(f"Last error:  {st['last_error_at']}: {st['last_error']}")
     except Exception as e:
         print(f"Postgres:    not reachable ({e})")
+    print_folder_counts(cfg, paths)
     return 0
+
+
+def print_folder_counts(cfg, paths):
+    """Each synced folder, here and at the provider: while the numbers differ, the sync is still running (Frank,
+    3 Nov 2026: "wäre ein status oder ein progress irgendwo möglich?"). Every folder, not only the case's two:
+    with a real mailbox there are more, and the mails come down instead of up."""
+    where = "Gmail" if cfg.gmail else cfg.imap_host
+    try:
+        rows = account.folder_counts(cfg, paths, None if cfg.test_far_maildir else settings.read_password(paths))
+    except Exception as e:
+        print(f"At {where}:    not reachable ({e})")
+        return
+    width = max(len(f) for f, _, _ in rows)
+    print(f"Mails here and at {where}:")
+    for folder, here, far in rows:
+        far_text = f"{far:>6,}" if far is not None else "     ?"
+        note = "" if far == here else "  (cannot read it)" if far is None else "  (not yet the same: still syncing)"
+        print(f"  {folder:<{width}}  {here:>6,} here  {far_text} at {where}{note}")
+    if any(far is None for _, _, far in rows):
+        print("Sync:        cannot tell, a folder could not be read")
+    elif all(far == here for _, here, far in rows):
+        print(f"Sync:        done, every folder is the same here and at {where}")
+    else:
+        print("Sync:        still running. Keep kingo-pod running and your laptop awake; it goes on by itself.")

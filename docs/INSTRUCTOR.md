@@ -726,8 +726,8 @@ Postgres. It runs in `abp`, `n8n` and `full`.
 | Command | What it does |
 |---|---|
 | `./kingo mail` | asks for the address of the student's test account, its app password, and the addresses the course mode may also send to; signs in once to check, sends nothing |
-| `./kingo mail seed` | puts the course case's sample mailbox into it and uploads it to the provider (once per account) |
-| `./kingo mail status` | account, folders, number of mails in Postgres, last sync, last error |
+| `./kingo mail seed` | puts the course case's sample mailbox into it and uploads it to the provider (once per account; run again, it copies nothing twice and wakes a stuck upload) |
+| `./kingo mail status` | account, folders, number of mails in Postgres, last sync, last error, each folder here and at the provider |
 | `./kingo mail reset` | forgets the account and the local copy of its mailbox (the volume `mail-data`); the mailbox at the provider and the rows in Postgres stay. The way to switch accounts |
 | `./kingo logs mail` | what it does, live |
 

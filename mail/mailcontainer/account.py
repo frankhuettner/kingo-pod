@@ -9,6 +9,7 @@ import imaplib
 import re
 import smtplib
 import ssl
+from pathlib import Path
 
 from .settings import Config
 
@@ -34,6 +35,25 @@ def decode_utf7(name):
         b += "=" * (-len(b) % 4)
         return base64.b64decode(b).decode("utf-16-be")
     return re.sub(r"&([^-]*)-", dec, name)
+
+
+def encode_utf7(name):
+    """Text to IMAP's modified UTF-7, for a command that names a folder (the reverse of decode_utf7)."""
+    out, wide = [], []
+
+    def flush():
+        if wide:
+            b = base64.b64encode("".join(wide).encode("utf-16-be")).decode().rstrip("=").replace("/", ",")
+            out.append(f"&{b}-")
+            wide.clear()
+    for ch in name:
+        if " " <= ch <= "~":
+            flush()
+            out.append("&-" if ch == "&" else ch)
+        else:
+            wide.append(ch)
+    flush()
+    return "".join(out)
 
 
 def parse_list(lines):
@@ -91,6 +111,37 @@ def check_imap(host, port, address, password):
         if typ != "OK":
             raise RuntimeError(f"IMAP LIST failed: {typ}")
         return parse_list(data)
+
+
+def count_maildir(folder):
+    """The mails in a Maildir folder, without the ones marked as deleted (flag T), which only mbsync's expunge
+    removes."""
+    n = 0
+    for sub in ("cur", "new"):
+        d = Path(folder) / sub
+        if d.is_dir():
+            n += sum(1 for f in d.iterdir() if not f.name.startswith(".") and "T" not in f.name.partition(":2,")[2])
+    return n
+
+
+def folder_counts(cfg, paths, password=None):
+    """[(folder, mails here, mails at the provider)] for every synced folder, the labels left out: how far a sync
+    is, in either direction (the course mailbox goes up; a real mailbox would come down). At the provider by IMAP
+    STATUS, in tests from the Maildir that plays it; None where a folder cannot be read."""
+    pairs = [(local, cfg.folders[key]) for key, local in cfg.local_folders.items() if cfg.folders.get(key)]
+    if cfg.test_far_maildir:
+        far = {f: count_maildir(Path(cfg.test_far_maildir) / f) for _, f in pairs}
+    else:
+        far = {}
+        ctx = ssl.create_default_context()
+        with imaplib.IMAP4_SSL(cfg.imap_host, cfg.imap_port, ssl_context=ctx, timeout=30) as m:
+            m.login(cfg.address, password)
+            for _, f in pairs:
+                quoted = '"' + encode_utf7(f).replace("\\", "\\\\").replace('"', '\\"') + '"'
+                typ, data = m.status(quoted, "(MESSAGES)")
+                hit = re.search(rb"MESSAGES (\d+)", data[0] or b"") if typ == "OK" and data else None
+                far[f] = int(hit.group(1)) if hit else None
+    return [(local, count_maildir(paths.folder(local)), far[f]) for local, f in pairs]
 
 
 def check_smtp(host, port, tls, address, password):
