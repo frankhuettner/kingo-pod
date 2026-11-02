@@ -1,0 +1,63 @@
+From: mack <mack@enron.example>
+To: Scott Salmon <scott.salmon@enron.example>
+Cc: Vince J Kaminski <{{ME}}>, Amitava Dhar <amitava.dhar@enron.example>, Vasant Shanbhogue <vasant.shanbhogue@enron.example>, Jeff Kinneman <jeff.kinneman@enron.example>, Bryan Seyfried <bryan.seyfried@enron.example>, Markus Fiala <markus.fiala@enron.example>, Tanya Tamarchenko <tanya.tamarchenko@enron.example>
+Subject: RE: Scott's concerns about the Public Firm Models
+Date: Sat, 26 May 2001 20:37:06 +0000
+Message-ID: <15765148.1075858462119.JavaMail.evans@thyme>
+In-Reply-To: <v-31a39536ecde9d75@kaminski.enron.example>
+References: <v-31a39536ecde9d75@kaminski.enron.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+X-Enron-From: mack@enron.example
+X-Enron-To: Scott Salmon <scott.salmon@enron.example>
+X-Enron-Cc: Vince J Kaminski <{{ME}}>, Amitava Dhar <amitava.dhar@enron.example>, Vasant Shanbhogue <vasant.shanbhogue@enron.example>, Jeff Kinneman <jeff.kinneman@enron.example>, Bryan Seyfried <bryan.seyfried@enron.example>, Markus Fiala <markus.fiala@enron.example>, Tanya Tamarchenko <tanya.tamarchenko@enron.example>
+
+Hi Scott, 	
+ 
+
+	How are you?  Thanks for your email.
+
+	I can appreciate your concerns about the public firm models, but am at a loss for what more I can say that has not already been said. 
+
+	Recall that during my recent trip to London, we had a conference call with Houston research, you, Bryan, Mike and Eric.  During this conference call Vince, Vasant, Amitava and I pointed out some of the "issues" with the public firm models and the data used to develop these models.  
+
+	In addition, after that conference call you, Bryan, Mike, Eric and I had further discussions as to how to sort out the public firm models.  During this discussion we all agreed that most of these issues had already been raised and addressed by George Albanis in the following documents:
+		1.  EnronCredit.com Project Proposal - Movement Model and Parallel Work - Phases IV,  by George Albanis, December 2000
+		2.  Meeting 25/01/2001 - Review, by George Albanis.  
+
+	I also forwarded copies of these documents to you and Ben via email on May 11th.  Just in case you can't find them, I will forward them again.
+
+	Based on recent discussions with Jeff Kinneman, it is my understanding that he will be meeting with Vince and Bryan to figure out how to "repair" the public firm models.  Hence it may be more appropriate to direct any future concerns about the public firm models to their attention.
+
+
+
+
+Regards,
+Iris
+
+
+
+
+
+
+
+
+	
+ -----Original Message-----
+From: 	Salmon, Scott  
+Sent:	Friday, May 25, 2001 11:45 AM
+To:	Mack, Iris
+Cc:	Kaminski, Vince J; Dhar, Amitava
+Subject:	Report to Professor Duffie
+
+Hi Iris,
+
+I wasn't sure if you had already sent your report to Professor Duffie yet or not, but I've been thinking about ways that his group (or the Research team) could really add value in an area where we're admittedly weak - model testing.  If you haven't sent the report to him yet, perhaps we can request his opinions on best practices for testing models with limited quality out of sample test sets.  Obviously, I'd like to discuss this in detail with you as well, especially since you understand the characteristics of the models and data better now, but I'll do that via phone.  I'm hoping there are some statistical techniques we're currently ignoring that we can employ to maximize the testing we do and get a better handle on judging our accuracy.
+
+If you've got some time Tuesday after our meeting where Mike catches us up on the D&B issues, I'd love to get your views as the model testbed is now in place and we're starting a model recalbration phase.  I'm least comfortable about our plans for stress testing the models once we've recalibrated them.
+
+Looking forward to talking to you Tuesday.
+
+Regards,
+Scott

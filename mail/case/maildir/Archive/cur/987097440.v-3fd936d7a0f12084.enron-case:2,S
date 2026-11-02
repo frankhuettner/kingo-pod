@@ -1,0 +1,15 @@
+From: Christian LeBroc <christian.lebroc@enron.example>
+To: Nelson Neale <nelson.neale@enron.example>
+Subject: RE: Petrochemical Forward Curves
+Date: Thu, 12 Apr 2001 17:44:00 +0000
+Message-ID: <v-3fd936d7a0f12084@kaminski.enron.example>
+In-Reply-To: <v-8001252da5c99967@kaminski.enron.example>
+References: <v-2e1d99101ade07db@kaminski.enron.example> <v-72e5f8812ae228d8@kaminski.enron.example> <v-8001252da5c99967@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+For GBM, I was thinking about using crude volatility.  Unfortunately, supply and demand is not a good indicator of predicting prices because of the economic complexity of processing aromatics.  Statistically, there is no relationship between utilization, supply, demand and price.  Inserting time lag does not make the number any better either. 
+
+Christian

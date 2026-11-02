@@ -1,0 +1,26 @@
+From: Vince J Kaminski <{{ME}}>
+To: Vince J Kaminski <{{ME}}>
+Subject: Wharton collaborative research
+Date: Fri, 22 Dec 2000 17:40:00 +0000
+Message-ID: <v-dbf1fdc498245905@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Here is a short note on potential research with Wharton.  Please review and 
+edit and then we can send some indication to the Wharton guys.    ----------
+
+ The objective would be to define the amount of risk an enterprise can take, 
+and the difference between this and the actual amount of risk the enterprise 
+chooses to take based on the capital structure and reporting structure.  In 
+particular, one can view Enron as a hierarchy of companies, and assuming we 
+can separately quantify the risks of each unit, what framework would one use 
+to analyze risk at Enron? 
+  A related question is how one should represent risks in the different 
+units?  Risks may be of different types --- short-term volatility risk, 
+catastrophic risk, liquidity risk, etc --- what should one focus on for a 
+first cut?
+ Another related question is to decide on the optimal amount of insurance 
+both at the unit level and the enterprise level, and relate the decision to 
+get insurance to the cost/benefit of insurance.

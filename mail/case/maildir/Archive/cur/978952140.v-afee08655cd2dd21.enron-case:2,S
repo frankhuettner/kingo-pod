@@ -1,0 +1,40 @@
+From: Tanya Tamarchenko <tanya.tamarchenko@enron.example>
+To: Zhiyong Wei <zhiyong.wei@enron.example>
+Subject: Re: real time VAR
+Date: Mon, 08 Jan 2001 11:09:00 +0000
+Message-ID: <v-afee08655cd2dd21@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Ziyong,
+we met with Nilay and Winston last week regarding real time VAR calculation 
+possibility.
+
+Winston has an overview of VAR System which consists of:
+- Main Curves Simulation;
+- Curve Server;
+- Book Server;
+- ID Server
+- Clients
+
+As a first step I want to see where the time is spent when VAR runs, which 
+percentages of time are spent by each part.
+Nilay is going to get this information for a few portfolios (AGG-ECT, AGG-GAS 
+and NG-PRICE-PRC).
+Preliminary information: currently VAR run takes about 1 hour, half of this 
+time taken by "Book Server" 
+(we have about 4500 lower level portfolios in the portfolio hierarchy, about 
+5500 portfolios all together), 
+most of the rest is taken by "Clients", "Main Curves Simulation" does not 
+take much time.
+
+I am looking also at using alternative methods of faster VAR calculation, but 
+having so many portfolios in the hierarchy will slow down
+even analytical VAR.
+
+We also have to think more about what "real time"  calculation means and what 
+it should produce.
+
+Tanya

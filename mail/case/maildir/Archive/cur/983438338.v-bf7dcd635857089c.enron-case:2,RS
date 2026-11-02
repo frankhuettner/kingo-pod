@@ -1,0 +1,57 @@
+From: "Murphy, Bernard" <bernard.murphy@caminus.com.example>
+To: Vince J Kaminski <{{ME}}>
+Subject: RE: 1997 Risk paper on Pricing of Electricity Derivatives
+Date: Thu, 01 Mar 2001 09:18:58 +0000
+Message-ID: <v-bf7dcd635857089c@kaminski.enron.example>
+In-Reply-To: <4718438.1075856517430.JavaMail.evans@thyme>
+References: <481892.1075856214982.JavaMail.evans@thyme> <4718438.1075856517430.JavaMail.evans@thyme>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Vince,
+
+I can send you a Scientific Word DVI file (at the weekend) if you can read
+SCientific Word files ?  The dissertation hasn't been reviewed by Les or the
+External yet - although its been at FORC for 2 months. I think that the
+Empirical Chapter is probably the one which would be of most relevance to
+both our company's businesses - although I ultimately didn't have the time
+to 'explicitly' price the jump risk-premium which I conjectured is possibly
+implicit in the prices of exchange-traded electricity futures-options -
+rather I developed an implicit estimation procedure which will enable a
+rough assessment (with a little bit of further work, but not too much) be
+made of the price of jump risk in wholesale power markets.
+
+In other words, I assumed spot jump-risk to be undiversifiable, and
+essentially devoted 2 Theoretical Chapters to :
+
+1) proving that a jump-diffusion trading model is "incomplete" (synthesising
+the securities markets framework with martingale representation theory) -
+note that I did not assume that markets could be dynamically completed with
+'term structure' securities as in the HJM w/ jumps papers of Shirakawa and
+Das and;
+
+2) deriving an explicit risk-adjustment process for 'implementing' the price
+of jump-risk using a jump-diffusion marginal indirect utility of wealth
+process (ie. a jump-augmented production economy approach in the spirit of
+CIR, Bates, Ahn & Thompson).
+
+
+Incidentally, I would be keen to find out if you or any of your team done
+much work on real-asset valuations in a spark-spread option-valuation
+framework ?  I'm about to start a project evaluation of embedded
+optionality, and have a dilemna whether I should model the spot or forward
+gas / power price processes.  With the former, I can model mean-reversion
+and jumps explicitly (obviously, important for capturing the optionality of
+out-of-the-money plant, which might otherwise be ignored in a pure-diffusion
+framework) but am not maximising the informational content of the available
+market data (that is, assuming there was a long-term market forward curve
+for electricity); whereas in the latter the driftless forward supposition
+means that I have to capture mean-reversion via the futures volatility
+function, and jumps are less easy to calibrate.  Any suggestions ?
+
+Regards
+
+
+Bernard

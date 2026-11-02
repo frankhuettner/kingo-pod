@@ -2,9 +2,10 @@
 
 The Kingo classroom data/AI stack, run **natively in containers** on each
 student's laptop with **Podman** (preferred) or **Docker** — no virtual
-machine. Nine services in one `compose.yml`: Langflow, n8n, PostgreSQL,
-Qdrant, JupyterHub, JupyterLab, a Jupyter MCP server, Metabase and
-CloudBeaver. KNIME and OpenCode install natively alongside it.
+machine. Ten services in one `compose.yml`: Langflow, n8n, PostgreSQL,
+Qdrant, JupyterHub, JupyterLab, a Jupyter MCP server, Metabase, CloudBeaver
+and the mail service of the n8n workshop. KNIME and OpenCode install natively
+alongside it.
 
 ## Guides
 

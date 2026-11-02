@@ -1,0 +1,18 @@
+From: Lon Draper <lon.draper@enron.example>
+To: {{ME}}, lu@enron.example
+Subject: Strip of Spread Options
+Date: Thu, 31 May 2001 16:49:00 +0000
+Message-ID: <v-74c4cb1f8392ee22@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+X-Enron-From: Lon Draper <lon.draper@enron.example>
+X-Enron-To: lu@enron.example
+
+Zimin,
+
+As we were discussing, it would be extremely helpful to our desk if the research group could create a new exotica function that would calculate a strip of daily spread options similar to how the ostrip function calculates a strip of daily options.  We have just put on a sizable daily spread option position and expect to add to it in the following months.  A new spread option function would be invaluable for marking to market our existing positions as well as help us to price new deals quickly.  We currently value each option in the strip individually.
+
+Thanks,
+Lon

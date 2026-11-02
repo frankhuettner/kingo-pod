@@ -1,0 +1,31 @@
+From: Steven Leppard <steven.leppard@enron.example>
+To: Vince J Kaminski <{{ME}}>
+Subject: Research sign off
+Date: Wed, 24 Jan 2001 03:42:00 +0000
+Message-ID: <v-901ae3caff8ea91b@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Hi Sharad
+
+I note from our discussion earlier this morning that you've been asked to 
+sign off a calculation from another group, which is something we're asked to 
+do from time to time.
+
+I take the view that we in Research can assess a computation in terms of what 
+it achieves with respect to its requirements, what its shortfalls are, and 
+therefore what the risks associated with using this method are.  We cannot 
+provide an opinion on whether these risks are acceptable to Enron, which I 
+feel falls firmly within RAC territory.
+
+This then raises the question of can Research sign off anything for other 
+groups after all?  To "sign off" means to accept something, which our opinion 
+in itself cannot do.  It is most appropriate for us to provide a technical 
+note outlining the methodology, risks and shortcomings of a method, leaving 
+the formal "sign off" to those best placed to assess these risks for our 
+company.  The alternative is for multiple groups each to have their own view 
+on what is acceptable risk for the company.
+
+Steve

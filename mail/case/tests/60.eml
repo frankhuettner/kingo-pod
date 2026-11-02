@@ -1,0 +1,19 @@
+From: Frank Hayden <frank.hayden@enron.example>
+To: {{ME}}, Tanya Tamarchenko <tanya.tamarchenko@enron.example>
+Subject: FW: Here are the correlations..............
+Date: Thu, 10 May 2001 11:58:00 +0000
+Message-ID: <v-9e3836a7b8de5af8@kaminski.enron.example>
+In-Reply-To: <v-61fc81e72e00bb80@kaminski.enron.example>
+References: <v-61fc81e72e00bb80@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+X-Enron-From: Frank Hayden <frank.hayden@enron.example>
+X-Enron-To: Tanya Tamarchenko <tanya.tamarchenko@enron.example>
+
+I had Bharat run correlations and the way he did it correlations came in around 50% for prompt and 65% further back.  I want to make sure we calc it the same way. I asked Bharat to take the last 60 days of pricing, hold reference date the same.  Calculate log returns.  Then calculate correlations of log returns.
+
+Another method we may want to consider is using the heat rate to calc correlations which is consistent with the way they hedge. 
+
+Frank

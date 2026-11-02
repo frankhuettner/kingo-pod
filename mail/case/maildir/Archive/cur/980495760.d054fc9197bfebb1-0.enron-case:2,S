@@ -1,0 +1,44 @@
+From: Naveen Andrews <naveen.andrews@enron.example>
+To: Tanya Tamarchenko <tanya.tamarchenko@enron.example>
+Cc: Vince J Kaminski <{{ME}}>, Rabi De <rabi.de@enron.example>, Jaesoo Lew <jaesoo.lew@enron.example>, Oliver Gaylard <oliver.gaylard@enron.example>
+Subject: Re: factors for US power curves
+Date: Fri, 26 Jan 2001 07:56:00 +0000
+Message-ID: <17644700.1075856226634.JavaMail.evans@thyme>
+In-Reply-To: <v-0c8cd081c9eabcb9@kaminski.enron.example>
+References: <v-0c8cd081c9eabcb9@kaminski.enron.example>
+X-Enron-Folder: var
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Tanya,
+          I have checked the factors for US Power and all except the 
+following are acceptable:
+R11, R1C, R1F, R1J, R1K, R1L, R1M, R1N, R1Z, R4A, R4B.
+          For Global Liquids, the requisite curves have been submitted to the 
+liquids team.  I will review their results and confirm.
+Naveen
+   
+
+
+
+
+Tanya Tamarchenko@ECT
+01/25/2001 12:52 PM
+To: Naveen Andrews/Corp/Enron@ENRON, Rabi De/NA/Enron@ENRON, Jaesoo 
+Lew/NA/Enron@ENRON
+cc: Oliver Gaylard/LON/ECT@ECT 
+
+Subject: Re: factors for US power curves  
+
+Naveen,
+attached spreadsheet contains the factors for US power curves calculated
+based on 9/28/00-11/28/00 data in stage with the latest version of vatrfacs.
+By specifying integer number from 1 to 32 in cell J1 you can see the factors 
+for different regions.
+I suggest to consider the following sets of factors as acceptable:
+R1A, R1E,R2,R2A,R2B,R3,R3A,R3B,R4,R4C,R5,R5A,R6,R7,R7A,R8,R9.
+
+Please review and confirm.
+
+Tanya.

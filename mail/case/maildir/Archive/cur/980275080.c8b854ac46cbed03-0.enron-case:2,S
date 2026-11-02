@@ -1,0 +1,26 @@
+From: Alex Huang <alex.huang@enron.example>
+To: Michelle Cisneros <michelle.cisneros@enron.example>
+Cc: Chris Constantine <chris.constantine@enron.example>, Helen Zhang <helen.zhang@enron.example>, Gary Hickerson <gary.hickerson@enron.example>
+Subject: Project
+Date: Tue, 23 Jan 2001 18:38:00 +0000
+Message-ID: <32937880.1075856228212.JavaMail.evans@thyme>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Hi Michelle,
+Chris, Helen and I met this afternoon and discussed about
+the project.  We think the following course of action is appropriate.
+The model interface will be in Excel Spreadsheet, with most
+of the inputs (from Enron as well as from the consultant) hiding
+in an Access data base. The Access data base can be update
+when needed. The engine will be written in Visual Basis code and
+be linked to Excel through xll (or dll). 
+
+Helen has been discussing with Ken about various
+aspects of the model and will finalize the Access data table
+form with Ken. In the mean time, Helen and I will start working
+on code this Thursday (she will be in training Wednesday). 
+
+Best,
+Alex

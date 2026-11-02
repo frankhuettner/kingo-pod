@@ -1,0 +1,62 @@
+From: hayden <hayden@enron.example>
+To: Vince J Kaminski <{{ME}}>
+Subject: RE: Project X
+Date: Wed, 30 May 2001 19:24:42 +0000
+Message-ID: <23860252.1075858453015.JavaMail.evans@thyme>
+In-Reply-To: <10251061.1075858453039.JavaMail.evans@thyme>
+References: <v-ffa9663fea4e25b3@kaminski.enron.example> <v-e15135b5815ec836@kaminski.enron.example> <10251061.1075858453039.JavaMail.evans@thyme>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+X-Enron-From: hayden@enron.example
+X-Enron-To: Vince J Kaminski <{{ME}}>
+
+I'l schedule it..
+
+Thanks again
+
+ -----Original Message-----
+From: 	Kaminski, Vince J  
+Sent:	Wednesday, May 30, 2001 2:24 PM
+To:	Hayden, Frank
+Cc:	Tamarchenko, Tanya; Kaminski, Vince J
+Subject:	RE: Project X
+
+
+Frank,
+
+I shall catch you tomorrow (Thu) morning with m feedback. I shall be glad to attend
+any meeting on Thursday or Friday this week (I am still relatively open).
+
+Sorry for the delay.
+
+Vince
+ -----Original Message-----
+From: 	Hayden, Frank  
+Sent:	Wednesday, May 30, 2001 1:38 PM
+To:	Kaminski, Vince J
+Cc:	Tamarchenko, Tanya
+Subject:	Project X
+
+Vince,
+I'm trying to organize a project X update.  Are there any times you would prefer? Also, below is an email form the power desk...it appears that they are going to post correlations...
+
+Any ideas? Feedback?
+
+Thanks,
+Frank
+
+
+ -----Original Message-----
+From: 	Evans, Casey  
+Sent:	Wednesday, May 30, 2001 1:10 PM
+To:	Hayden, Frank
+Cc:	White, Stacey; Vinson, Donald Wayne; McIntyre, Burton
+Subject:	VAR Engine question
+
+Frank,
+
+Concerning our ongoing discussions on the proper capture of ancillary and renewable energy credit positions in VAR, I have a proposed solution that I would like to run by you to ensure that proper valuation for these positions will be captured by your VAR engine.  As the positions are marked on their own curve but are valued for VAR purposes using the volatility curves and correlation factors for an energy curve, the VAR on these positions is obviously inaccurate.  As a result, the traders will be setting volatility curves and correlation factors today which will be unique for each ancillary/energy credit position.  All of the correlation factors will be zero and a majority of the volatility curves will be zero, as well.  I simply wanted to ensure that your model would not have a problem with volatilityies or correlations of zero.  I would appreciate your thoughts.
+
+Thanks.
+Casey

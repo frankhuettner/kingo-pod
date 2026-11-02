@@ -1,0 +1,42 @@
+From: Vasant Shanbhogue <vasant.shanbhogue@enron.example>
+To: Vasant Shanbhogue <vasant.shanbhogue@enron.example>
+Subject: Risk article
+Date: Tue, 23 Jan 2001 09:06:00 +0000
+Message-ID: <v-bc93915f532d6b84@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Everyone should read the attached Risk article about calculating def probs 
+from CDS quotes. 
+
+Amazingly it is in pretty close agreement with our own methodology for both 
+CDS valuation and reverse engineering def probs. The only extension in the 
+reverse engineering is that instead of linearly interpolating CDS quotes, 
+they propose minimising an error measure based on 'smoothness' of def prob 
+curve and difference between model and market prices. 
+
+What is also amazing is the fact that this article has been published in 
+Risk, given that it is essentially the same as my credit pricing paper, plus 
+one excellent idea. Given extra time, resources and brainpower, there is no 
+reason why we shouldn't have similar work published ourselves.
+
+Ben
+
+(thanks Steve for pointing this article out)
+---------------------- Forwarded by Ben Parsons/LON/ECT on 23/01/2001 14:40 
+---------------------------
+
+
+London Fax System2
+23/01/2001 14:09
+To: Ben Parsons/LON/ECT@ECT
+cc:  
+
+Subject: New fax received (Likely sender: +44 20 7783 8076).
+
+
+You have received a new fax from +44 20 7783 8076
+
+The image contains 3 page(s).

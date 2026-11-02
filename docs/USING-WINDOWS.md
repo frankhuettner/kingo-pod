@@ -33,7 +33,7 @@ laptop:
 | PostgreSQL | `localhost:5432` | `student` / `kingo2026` (db: `classroom`) |
 
 Not all of these run at the same time: in **abp mode** — what setup installs —
-only Langflow, n8n, CloudBeaver, Qdrant and PostgreSQL are on, and
+only Langflow, n8n, Mail, CloudBeaver, Qdrant and PostgreSQL are on, and
 `./kingo credentials` marks the others as *off*. See [Modes](#modes-which-services-run)
 for switching.
 
@@ -76,6 +76,7 @@ then one command per job:
 | `./kingo credentials` | my addresses + logins |
 | `./kingo mode` | which services run — and `./kingo mode full` / `abp` / … switches (see [Modes](#modes-which-services-run)) |
 | `./kingo memory` | how much memory the containers have and use |
+| `./kingo mail` | set up the mailbox for the mail assistant (n8n workshop); `./kingo mail help` shows the rest |
 | `./kingo doctor` | something's wrong? start here |
 | `./kingo version` | which version am I running? (send this when you ask for help) |
 | `./kingo update` | get the newest class files + images (run it when the instructor announces an update) |
@@ -91,17 +92,17 @@ then one command per job:
 
 ### Modes: which services run
 
-Not every class week needs all nine services, and an 8 GB laptop cannot run
+Not every class week needs all ten services, and an 8 GB laptop cannot run
 them all comfortably. A **mode** is the set of services that runs — the
 others are simply off (nothing is deleted; every mode keeps your data):
 
 | Mode | What runs | Memory it wants |
 |---|---|---|
-| `abp` (what setup installs) | Langflow, n8n, CloudBeaver, Qdrant, PostgreSQL | 4 GB |
-| `full` | all nine services | 6 GB |
+| `abp` (what setup installs) | Langflow, n8n, Mail, CloudBeaver, Qdrant, PostgreSQL | 4 GB |
+| `full` | all ten services | 6 GB |
 | `bi` | JupyterLab, JupyterHub, Jupyter MCP, Metabase, CloudBeaver, Qdrant, PostgreSQL | 4.5 GB |
 | `langflow` | Langflow, PostgreSQL | 3.5 GB |
-| `n8n` | n8n, PostgreSQL | 2.5 GB |
+| `n8n` | n8n, Mail, PostgreSQL | 2.5 GB |
 
 `./kingo mode` shows the current one. Switching is one line, for example:
 

@@ -1,0 +1,18 @@
+From: Tom Barkley <tom.barkley@enron.example>
+To: Vince J Kaminski <{{ME}}>, Vasant Shanbhogue <vasant.shanbhogue@enron.example>, Zimin Lu <zimin.lu@enron.example>, Bob Lee <bob.lee@enron.example>
+Subject: Some sample data
+Date: Mon, 30 Apr 2001 13:40:00 +0000
+Message-ID: <18088494.1075856185248.JavaMail.evans@thyme>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+I took the large spreadsheet of data that we had before, and sorted the data 
+so that I could just look at trades that took place off-peak (between 6:00 PM 
+and 8:00 AM). Then, I sorted this data by counterparty, and looked at Hess's 
+trading against us. It seems as though there are several clear occasions when 
+they were bidding the price up, as shownin the graph within the spreadsheet.
+
+Tom
+
+ 

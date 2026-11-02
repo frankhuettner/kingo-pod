@@ -1,0 +1,38 @@
+From: tamarchenko <tamarchenko@enron.example>
+To: Frank Hayden <frank.hayden@enron.example>
+Cc: Vince J Kaminski <{{ME}}>, Naveen Andrews <naveen.andrews@enron.example>
+Subject: RE: Jump
+Date: Fri, 11 May 2001 20:52:45 +0000
+Message-ID: <14666364.1075858460449.JavaMail.evans@thyme>
+In-Reply-To: <v-4df174c0c314b2ab@kaminski.enron.example>
+References: <v-4df174c0c314b2ab@kaminski.enron.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+X-Enron-From: tamarchenko@enron.example
+X-Enron-To: Frank Hayden <frank.hayden@enron.example>
+X-Enron-Cc: Vince J Kaminski <{{ME}}>, Naveen Andrews <naveen.andrews@enron.example>
+
+Frank,
+
+Jaesoo modified jump calibration code and passed it to IT.
+Using this code we can calculate jump-diffusion parameters based on historical data for
+every power curve.
+
+Tanya
+
+ -----Original Message-----
+From: 	Lew, Jaesoo  
+Sent:	Thursday, May 10, 2001 4:14 PM
+To:	Jia, Winston
+Cc:	Tamarchenko, Tanya; Yu, Jin
+Subject:	Jump
+
+Hi Winston,
+
+I put the jump source code under the vobs/vatr/src/vatrjumps. You can access with project name prj_vatr_jumps.
+I also talked to Jin about it so IT can modify and put it to production. 
+
+Thanks.
+
+Jaesoo 

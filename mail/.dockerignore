@@ -1,0 +1,8 @@
+tests/
+**/__pycache__/
+.pytest_cache/
+README.md
+.auth/
+# kingo's mail/ folder also holds these: the case is mounted, the schema goes to Postgres
+case/
+*.sql

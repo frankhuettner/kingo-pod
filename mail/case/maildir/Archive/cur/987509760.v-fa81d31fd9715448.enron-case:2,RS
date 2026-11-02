@@ -1,0 +1,59 @@
+From: Jeff Gray <jeff.gray@enron.example>
+To: Jeff Gray <jeff.gray@enron.example>
+Subject: DSM projects as real options
+Date: Tue, 17 Apr 2001 12:16:00 +0000
+Message-ID: <v-fa81d31fd9715448@kaminski.enron.example>
+In-Reply-To: <28849262.1075856528234.JavaMail.evans@thyme>
+References: <28849262.1075856528234.JavaMail.evans@thyme>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Vince:
+
+Could you spare a few moments to look over the attached three-page Power 
+Point presentation?  At a minimum, we're trying to demonstrate the 
+following:  In high-volatility electricity environments, for those EES 
+customers who employ their own capital, their usual capital-project IRR 
+hurdles may be lowered slightly in the special case of DSM projects, to allow 
+for the extra value derived from reduced risk exposure stemming from reduced 
+power consumption/dependence.
+
+I'm pushing the boundaries of real-option theory (and good sense) and viewing 
+a DSM project as a series of options, the values of which are additive.  
+First is the option to engage in the DSM project itself; which, if we 
+exercise the option immediately, can be valued intrinsically through a simple 
+NPV analysis.  Second is a strip of put options to generate "negawatts," 
+extending over the useful life of a DSM installation, the cumulative value of 
+which is an extrinsic value associated with the DSM project.  These options 
+are exercised sequentially--over the life of the DSM installation--whenever 
+the customer experiences a dramatic, stochastic spike in electricity price, 
+associated with a lognormal price distribution.  I'm calling the value of 
+this strip a "residual time value" associated with the original DSM option.  
+If we can add this residual time value to the NPV and derive a total value 
+that is quantitatively higher than a simple NPV alone,  we may be able to 
+help the customer get more projects approved, even at the original high IRR 
+hurdle.
+
+Alternatively, and more feasibly, we'd like to give these same customers a 
+"qualitative" tool with which they can convince their finance gatekeepers to 
+lower--for DSM projects--their standard capital-project IRR hurdle .  The 
+attached presentation is a first attempt at this qualitative argument.
+
+We intend to use this only as a sales and marketing tool, to allow at least 
+one of our customers who has an onerously high hurdle rate to manage around 
+his company's internal capital-budgeting requirements.  He has set aside a 
+large sum of money for DSM projects, but will only be able to spend a small 
+portion of it under his company's current capital budgeting methodology, 
+which does not take into account forward commodity price volatility.
+
+In your opinion, is there any hope in devising a quantitative justification, 
+or will we have to stick with the qualitative argument as described in the 
+attached presentation?  In other words, is it possible to quantify "residual 
+time value" as I've defined it above? Or, even better, are you aware of a 
+more practical way of conceptualizing this problem?
+
+Thanks,
+
+Jeff Gray

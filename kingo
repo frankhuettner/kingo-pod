@@ -192,6 +192,10 @@ compose_all() { neutral_auth; $ENGINE compose --profile full "$@"; }
 # DisplayName|ENV_SUFFIX|host port|health path|expected codes
 #   suffix → the KINGO_PORT_<suffix> override (port already reflects overrides)
 #   path 'tcp' → plain TCP probe;  path '-' → port-only (no health/status row)
+#   port '-' + path 'ps' → no host port at all: up = its container runs (Mail,
+#     which n8n and Langflow reach only through Postgres). Every loop over the
+#     PORTS skips it (preflight, fixports, dup_ports, release_after_down, and
+#     host_ports for the loopback drift guard and doctor's count).
 # Health codes are the source of truth (plan §8): 4040/mcp answering 401
 # without the bearer token IS healthy. Exact codes only — "any answer counts"
 # once passed while a service was crash-looping. `kingo smoke` asserts this
@@ -207,7 +211,15 @@ SERVICE_TABLE=(
   "Qdrant|QDRANT|${P_QDRANT}|/readyz|200"
   "Qdrant gRPC|QDRANT_GRPC|${P_QDRANT_GRPC}|-|-"
   "PostgreSQL|POSTGRES|${P_POSTGRES}|tcp|-"
+  "Mail|-|-|ps|-"
 )
+host_ports() { # the table's host ports, one per line (a row with port '-' has none)
+  local s name suffix port rest
+  for s in "${SERVICE_TABLE[@]}"; do
+    IFS='|' read -r name suffix port rest <<<"$s"
+    [ "$port" = "-" ] || printf '%s\n' "$port"
+  done
+}
 
 # ── Modes: what each one runs and how much memory it wants ───────────────────
 # Machine budgets in MiB, measured under classroom use on 2026-09-05 (see
@@ -217,11 +229,11 @@ mode_mem_mb()   { case "$1" in full) echo 6144 ;; abp) echo 4096 ;; bi) echo 460
 mode_floor_mb() { case "$1" in full) echo 6144 ;; abp) echo 3584 ;; bi) echo 4096 ;; langflow) echo 3072 ;; n8n) echo 2048 ;; esac; }
 mode_describe() {
   case "$1" in
-    full)     echo "all 9 services" ;;
-    abp)      echo "Langflow, n8n, CloudBeaver, Qdrant, PostgreSQL" ;;
+    full)     echo "all 10 services" ;;
+    abp)      echo "Langflow, n8n, Mail, CloudBeaver, Qdrant, PostgreSQL" ;;
     bi)       echo "JupyterLab, JupyterHub, Jupyter MCP, Metabase, CloudBeaver, Qdrant, PostgreSQL" ;;
     langflow) echo "Langflow, PostgreSQL" ;;
-    n8n)      echo "n8n, PostgreSQL" ;;
+    n8n)      echo "n8n, Mail, PostgreSQL" ;;
   esac
 }
 # The modes each service runs in — MUST match the `profiles:` in compose.yml
@@ -229,7 +241,7 @@ mode_describe() {
 service_modes() {
   case "$1" in
     Langflow)    echo "full abp langflow" ;;
-    n8n)         echo "full abp n8n" ;;
+    n8n|Mail)    echo "full abp n8n" ;;
     CloudBeaver) echo "full abp bi" ;;
     Qdrant|"Qdrant gRPC") echo "full abp bi" ;;
     PostgreSQL)  echo "$MODES" ;;
@@ -241,7 +253,7 @@ compose_name() { # table name → compose service name
   case "$1" in
     JupyterLab) echo jupyterlab ;; JupyterHub) echo jupyterhub ;; "Jupyter MCP") echo jupyter-mcp ;;
     Langflow) echo langflow ;; n8n) echo n8n ;; Metabase) echo metabase ;; CloudBeaver) echo cloudbeaver ;;
-    Qdrant|"Qdrant gRPC") echo qdrant ;; PostgreSQL) echo postgres ;;
+    Qdrant|"Qdrant gRPC") echo qdrant ;; PostgreSQL) echo postgres ;; Mail) echo mail ;;
   esac
 }
 off_services() { # display names that are off in the current mode, comma-separated
@@ -296,6 +308,13 @@ inactive_hint() { # $@: compose service names a student typed — refuse ones th
   done
 }
 
+container_up() { # table name -> 0 if its kingo-* container runs (the health of a row with path 'ps')
+  case " $( { $ENGINE ps --filter name=kingo- --format '{{.Names}}' 2>/dev/null || true; } | tr '\n' ' ') " in
+    *" kingo-$(compose_name "$1") "*) return 0 ;;
+  esac
+  return 1
+}
+
 check() { # port path [want] -> 0 if the expected code(s) match
   local port="$1" path="$2" want="${3:-200}" code
   if [ "$path" = "tcp" ]; then
@@ -314,6 +333,7 @@ wait_all() { # $1 = max attempts (10s apart)
       IFS='|' read -r name suffix port path want <<<"$s"
       [ "$path" = "-" ] && continue
       service_active "$name" || continue
+      if [ "$path" = ps ]; then container_up "$name" || { all=0; break; }; continue; fi
       check "$port" "$path" "${want:-200}" || { all=0; break; }
     done
     [ "$all" = 1 ] && return 0
@@ -334,6 +354,52 @@ init_stack() {
   if service_active Metabase; then
     setup_metabase || warn "Metabase pre-setup skipped (worst case: you click through the wizard once)"
   fi
+  # In every mode: PostgreSQL always runs, and n8n, Langflow and the mail
+  # service all read these tables.
+  mail_schema
+}
+
+# The mail assistant's tables in `classroom` (schema n8n_workshop_mail, from
+# mail/n8n_workshop_mail.sql), applied on EVERY `up`: the file is idempotent and
+# one transaction, so a release that changes it reaches existing databases, and
+# a fresh volume gets it on its first `up`. Not from postgres-init/: an error
+# there would abort the database's first start, here it is a warning. Then the
+# four roles get the class password (public by design, like every login in
+# .env), on their own, so a bad calendar row cannot take it back. Last, the
+# calendar table becomes a copy of the course case's mail/case/calendar.csv, so
+# the rules in n8n work before any mailbox does and a corrected date replaces
+# the old one. lock_timeout: a session that holds these tables (a notebook's
+# open transaction) makes this fail after 20 s instead of hanging `up`. Quiet
+# (the file turns notices off) and non-fatal, like everything in init_stack.
+MAIL_ROLES="container n8n agent reply"
+mail_schema() {
+  local f r err
+  for f in mail/n8n_workshop_mail.sql mail/case/calendar.csv; do
+    [ -f "$f" ] || { warn "could not set up the mail assistant's tables: $f is missing — the rest of the stack is fine"; return 0; }
+  done
+  err="$( { { echo "SET lock_timeout = '20s';"
+              cat mail/n8n_workshop_mail.sql
+              for r in $MAIL_ROLES; do echo "ALTER ROLE n8n_workshop_mail_$r PASSWORD :'pw';"; done
+              echo "BEGIN;"
+              echo "CREATE TEMP TABLE kingo_calendar (event text, event_date date, quiet_from date, quiet_to date) ON COMMIT DROP;"
+              echo "COPY kingo_calendar FROM STDIN WITH (FORMAT csv, HEADER true);"
+              # Without CRs (a CSV saved by Excel has CRLF, and psql 16 then
+              # rejects the LF end marker), without empty lines, and with a
+              # last newline (or the marker joins the last row).
+              awk '{ sub(/\r$/, "") } length' mail/case/calendar.csv
+              printf '%s\n' '\.'
+              echo "INSERT INTO n8n_workshop_mail.calendar (event, event_date, quiet_from, quiet_to)"
+              echo "  SELECT event, event_date, quiet_from, quiet_to FROM kingo_calendar"
+              echo "  ON CONFLICT (event, event_date) DO UPDATE SET quiet_from = EXCLUDED.quiet_from, quiet_to = EXCLUDED.quiet_to;"
+              echo "DELETE FROM n8n_workshop_mail.calendar c"
+              echo "  WHERE NOT EXISTS (SELECT FROM kingo_calendar k WHERE k.event = c.event AND k.event_date = c.event_date);"
+              echo "COMMIT;"
+            } | $ENGINE exec -i kingo-postgres \
+                  psql -X -q -v ON_ERROR_STOP=1 -v pw="$KINGO_PASSWORD" -U "$KINGO_USER" -d classroom >/dev/null; } 2>&1 )" \
+    && return 0
+  warn "could not set up the mail assistant's tables (schema n8n_workshop_mail) — the rest of the stack is fine; retry with: ./kingo up${err:+
+       psql says: $(printf '%s\n' "$err" | LC_ALL=C grep -m1 . || true)}"
+  return 0
 }
 
 # Pre-provision the Metabase admin + classroom DB so students never see the
@@ -840,7 +906,7 @@ cmd_status() {
     local stray; stray="$(off_running)"
     [ -z "${stray% }" ] || echo "  [!!] still running although off in $KINGO_MODE mode: ${stray% } — './kingo up' stops them"
   else
-    echo "Mode: full — all 9 services."
+    echo "Mode: full — all 10 services."
   fi
   printf '%-14s %-8s %s\n' "SERVICE" "STATUS" "URL"
   # A container that runs but does not answer yet is "starting", not DOWN: the
@@ -852,6 +918,14 @@ cmd_status() {
     IFS='|' read -r name suffix port path want <<<"$s"
     [ "$path" = "-" ] && continue
     service_active "$name" || continue
+    if [ "$path" = ps ]; then   # no port, no web page: up = the container runs
+      case "$running" in
+        *" kingo-$(compose_name "$name") "*) st="up"; n_up=$((n_up + 1)) ;;
+        *) st="DOWN"; n_down=$((n_down + 1)) ;;
+      esac
+      printf '%-14s %-8s %s\n' "$name" "$st" "no web page — ./kingo mail sets it up"
+      continue
+    fi
     # status is lenient (any answer = up); smoke enforces exact codes.
     if { [ "$path" = tcp ] && check "$port" tcp; } || { [ "$path" != tcp ] && check "$port" "$path" '[0-9]{3}'; }; then
       st="up"; n_up=$((n_up + 1))
@@ -894,7 +968,13 @@ cmd_credentials() {
   cred_row CloudBeaver   "http://localhost:${P_CLOUDBEAVER}"         "${KINGO_USER} / ${KINGO_STRONG_PASSWORD}"
   cred_row Qdrant        "http://localhost:${P_QDRANT}/dashboard"    "no login required"
   cred_row PostgreSQL    "localhost:${P_POSTGRES}"                   "${KINGO_USER} / ${KINGO_PASSWORD}  (db: classroom)"
+  cred_row Mail          "no web page: ./kingo mail"                 "your test account's app password (stays in the mail volume)"
   echo
+  if service_active n8n || service_active Langflow; then
+    echo "Mail assistant: n8n and Langflow reach its tables at postgres:5432, database classroom, as"
+    echo "  n8n_workshop_mail_n8n (n8n) or n8n_workshop_mail_agent / n8n_workshop_mail_reply (Langflow, read-only),"
+    echo "  password ${KINGO_PASSWORD}."
+  fi
   if service_active "Jupyter MCP"; then
     echo "MCP clients (Claude Desktop/Code, Cursor): point at http://localhost:${P_MCP}/mcp"
     echo "  with header  Authorization: Bearer ${MCP_TOKEN}"
@@ -936,7 +1016,7 @@ assert_loopback() {
   # and a count-only check would miss a changed number (e.g. the never-probed
   # Qdrant gRPC port) — so compare the values, not the count.
   local tports cports s
-  tports=$(for s in "${SERVICE_TABLE[@]}"; do printf '%s\n' "$s" | cut -d'|' -f3; done | sort -n)
+  tports=$(host_ports | sort -n)
   cports=$(printf '%s\n' "$cfg" | grep -E '^[[:space:]]*published:' | grep -oE '[0-9]+' | sort -n)
   if [ "$tports" != "$cports" ]; then
     echo "FAIL: compose.yml's published ports and kingo's SERVICE_TABLE disagree — update SERVICE_TABLE"
@@ -1002,15 +1082,33 @@ cmd_smoke() {
   echo "Waiting for exact health codes ..."
   wait_all 90 || { compose ps; die "services did not all reach their expected codes"; }
   assert_stable
+  # A running mail container is not enough: it must have its tools and reach
+  # its tables as its own role. A failure only warns, as in `up`: the mail
+  # service serves one workshop, and both setup scripts run smoke right after
+  # up, so a mail problem must not abort an install. CI fails on it (GitHub
+  # Actions sets CI=true).
+  local mail_note=""
+  if service_active Mail && ! mail_check; then
+    [ -z "${CI:-}" ] || die "the mail service failed its check (see above)"
+    mail_note=" — except the mail service (see above)"
+  fi
   # A healthy hub is not enough — it must be able to LAUNCH a Lab.
   if service_active JupyterHub; then
     echo "Verifying JupyterHub can launch a Lab ..."
     $ENGINE exec kingo-jupyterhub jupyterhub-singleuser --version >/dev/null || die "hub cannot launch single-user server"
     $ENGINE exec kingo-jupyterhub python3 -c 'import jupyterlab' || die "jupyterlab not importable in the hub image"
-    echo "SMOKE OK — all services healthy, stable, loopback-bound, hub can launch Lab."
+    echo "SMOKE OK — all services healthy, stable, loopback-bound, hub can launch Lab$mail_note."
   else
-    echo "SMOKE OK — $KINGO_MODE mode: all its services healthy, stable, loopback-bound."
+    echo "SMOKE OK — $KINGO_MODE mode: all its services healthy, stable, loopback-bound$mail_note."
   fi
+}
+
+mail_check() { # the mail image has its tools and reaches its tables; warns and fails otherwise
+  echo "Verifying the mail service has its tools and reaches Postgres as its own role ..."
+  $ENGINE exec kingo-mail sh -c 'command -v mbsync && command -v notmuch && command -v goimapnotify' >/dev/null \
+    || { warn "the mail image lacks mbsync, notmuch or goimapnotify — ./kingo update rebuilds it"; return 1; }
+  $ENGINE exec kingo-mail python3 -c 'from mailcontainer import db; c = db.connect(); c.execute("SELECT 1 FROM n8n_workshop_mail.sync_state"); c.close()' \
+    || { warn "the mail service cannot reach its tables (schema n8n_workshop_mail, role n8n_workshop_mail_container) — ./kingo up sets them up; see ./kingo logs mail"; return 1; }
 }
 
 # ── Host ports: collision detection + automatic remapping ────────────────────
@@ -1128,6 +1226,7 @@ release_after_down() {
   local entry name suffix port rest busy="" freed
   for entry in "${SERVICE_TABLE[@]}"; do
     IFS='|' read -r name suffix port rest <<<"$entry"
+    [ "$port" = "-" ] && continue
     if port_in_use "$port"; then busy="$busy $port"; fi
   done
   [ -n "$busy" ] || return 0
@@ -1152,6 +1251,7 @@ count_busy_ports() {
   local busy="" entry name suffix port rest mine theirs oeng
   for entry in "${SERVICE_TABLE[@]}"; do
     IFS='|' read -r name suffix port rest <<<"$entry"
+    [ "$port" = "-" ] && continue
     service_active "$name" && ACTIVE_PORTS_N=$((ACTIVE_PORTS_N + 1))
     if port_in_use "$port"; then busy="${busy}${port}|${name}"$'\n'; fi
   done
@@ -1205,6 +1305,7 @@ dup_ports() { # echoes host ports assigned twice (stale .env.local overrides)
   local entry name suffix port rest seen=" "
   for entry in "${SERVICE_TABLE[@]}"; do
     IFS='|' read -r name suffix port rest <<<"$entry"
+    [ "$port" = "-" ] && continue
     case "$seen" in *" $port "*) printf ' %s' "$port" ;; esac
     seen="${seen}${port} "
   done
@@ -1285,6 +1386,7 @@ cmd_fixports() {
   local used=" " entry name suffix port rest newport
   for entry in "${SERVICE_TABLE[@]}"; do
     IFS='|' read -r name suffix port rest <<<"$entry"
+    [ "$port" = "-" ] && continue
     used="${used}${port} "
   done
   for entry in "${SERVICE_TABLE[@]}"; do
@@ -1330,7 +1432,8 @@ cmd_pull() {
   # tags (*:local), plus those builds' BASE images from their Dockerfiles.
   imgs="$( { compose_all config --images 2>/dev/null | grep -v ':local$'; \
              awk '/^FROM/{print $2; exit}' jupyterhub/Dockerfile; \
-             awk '/^FROM/{print $2; exit}' langflow/Dockerfile; } || true)"
+             awk '/^FROM/{print $2; exit}' langflow/Dockerfile; \
+             awk '/^FROM/{print $2; exit}' mail/Dockerfile; } || true)"
   [ -n "$imgs" ] || die "could not read the image list from compose.yml"
   for img in $imgs; do
     case "$img" in
@@ -1391,12 +1494,13 @@ EOT
 # The instructor runs `kingo bundle` at home and copies kingo-images-<arch>.tar
 # to USB sticks; a student runs `kingo load <path-to-tar>` and `kingo up` then
 # starts without downloading anything. The bundle includes the locally-BUILT
-# images (jupyterhub, langflow — not just their bases), so the builds need no
-# network either.
+# images (jupyterhub, langflow, mail — not just their bases), so the builds
+# need no network either.
 bundle_images() { # every image the stack needs, one per line — every mode's
   { compose_all config --images 2>/dev/null; \
     awk '/^FROM/{print $2; exit}' jupyterhub/Dockerfile; \
-    awk '/^FROM/{print $2; exit}' langflow/Dockerfile; } || true
+    awk '/^FROM/{print $2; exit}' langflow/Dockerfile; \
+    awk '/^FROM/{print $2; exit}' mail/Dockerfile; } || true
 }
 
 # Docker-style architecture of THIS machine (amd64 / arm64). A bundle is
@@ -1764,7 +1868,7 @@ cmd_load() {
   # sure that name exists. Short-name resolution usually covers this already;
   # the guard costs nothing and must name what bundles really carry (issue #5).
   local _n
-  for _n in kingo-jupyterhub kingo-langflow; do
+  for _n in kingo-jupyterhub kingo-langflow kingo-mail; do
     $ENGINE tag "docker.io/library/$_n:local" "$_n:local" 2>/dev/null \
       || $ENGINE tag "localhost/$_n:local" "$_n:local" 2>/dev/null || true
   done
@@ -1819,6 +1923,66 @@ EOF
   $ENGINE exec kingo-langflow sh -c 'command -v uv >/dev/null 2>&1' \
     || die "this Langflow container has no uv yet (image predates the class-packages change) — run:  ./kingo update"
   $ENGINE exec kingo-langflow uv "$@"
+}
+
+# ── mail: the mailbox of the mail assistant (n8n workshop) ───────────────────
+# The service `mail` (mail/, built locally) keeps one test mailbox in step with
+# the tables of schema n8n_workshop_mail in `classroom` and sends what a person
+# approved in n8n. Its account — address, app password, the local copy of the
+# mailbox and mbsync's sync state — lives in the volume mail-data, never in the
+# files from git. setup, seed and status run mailctl inside the container.
+MAIL_VOLUME=kingo_mail-data
+cmd_mail() {
+  local sub it=-i a
+  case "${1:-}" in -h|--help) ;; -*) set -- setup "$@" ;; esac   # ./kingo mail --address … = setup
+  sub="${1:-setup}"
+  [ $# -gt 0 ] && shift
+  case "$sub" in
+    help|-h|--help)
+      cat <<'EOF'
+usage: ./kingo mail [setup | seed | status | reset]
+
+  ./kingo mail          set up the mailbox: the address of your test account, its app
+                        password, and the addresses the course mode may also send to.
+                        Signs in once to check, sends nothing.
+  ./kingo mail seed     put the course case's sample mailbox into it (once per account;
+                        the mails are uploaded to the provider)
+  ./kingo mail status   account, folders, last sync, last error
+  ./kingo mail reset    forget the account and the local copy of its mailbox — the way to
+                        switch accounts. The mailbox at the provider stays as it is.
+EOF
+      return 0 ;;
+    setup|seed|status|reset) ;;
+    *) die "unknown: ./kingo mail $sub — ./kingo mail help lists what it does" ;;
+  esac
+  select_engine
+  service_active Mail \
+    || die "the mail service is off in $KINGO_MODE mode — ./kingo mode abp (or full, or n8n) turns it on"
+  if [ "$sub" = reset ]; then
+    ensure_ready   # compose below; the other commands only exec into the container
+    echo "This forgets the mail account: address, app password, and the local copy of the mailbox"
+    echo "(Maildir, search index, sync state). The mailbox at the provider stays as it is, and so do"
+    echo "the rows in PostgreSQL."
+    read -r -p "Type 'yes' to continue: " a || a=""
+    [ "$a" = yes ] || { echo "Cancelled."; return 0; }
+    compose rm -sf mail >/dev/null 2>&1 || $ENGINE rm -f kingo-mail >/dev/null 2>&1 || true
+    if $ENGINE volume inspect "$MAIL_VOLUME" >/dev/null 2>&1; then
+      $ENGINE volume rm "$MAIL_VOLUME" >/dev/null || die "could not delete the volume $MAIL_VOLUME — see the error above"
+    fi
+    compose up -d mail
+    echo "Done. Set the account up again with: ./kingo mail"
+    return 0
+  fi
+  container_up Mail || die "the mail container is not running — start the stack first:  ./kingo up"
+  case "$sub" in
+    setup)
+      # Typing at a terminal gets -t, so the password stays hidden even when the
+      # output goes to a pipe (| tee). Without a terminal: --password-stdin --yes.
+      [ -t 0 ] && it=-it
+      $ENGINE exec "$it" kingo-mail mailctl setup "$@" ;;
+    seed)   $ENGINE exec kingo-mail mailctl seed "$@" ;;
+    status) $ENGINE exec kingo-mail mailctl status ;;
+  esac
 }
 
 # ── version: the one line to ask a student for ───────────────────────────────
@@ -1939,7 +2103,7 @@ small_host_hint() { # one nudge, only where it helps — the end of up / update 
     full|bi)
       echo
       echo "NOTE: $(host_phrase) of memory and runs $KINGO_MODE mode ($(mode_describe "$KINGO_MODE")) — that is why it feels slow."
-      echo "      Lighter: ./kingo mode abp   (keeps Langflow, n8n, CloudBeaver, Qdrant and the database; Jupyter"
+      echo "      Lighter: ./kingo mode abp   (keeps Langflow, n8n, Mail, CloudBeaver, Qdrant and the database; Jupyter"
       echo "      and Metabase go off — ./kingo mode full brings them back; nothing is deleted)" ;;
     abp)
       echo
@@ -2254,7 +2418,7 @@ cmd_doctor() {
   elif [ "$OURS_N" -gt 0 ]; then
     echo "  [ok] the Kingo stack is running — its ports are in use by kingo, not a collision."
   else
-    echo "  [ok] all ${#SERVICE_TABLE[@]} host ports are free."
+    echo "  [ok] all $(host_ports | wc -l | tr -d ' ') host ports are free."
   fi
   small_host_hint
   echo "== done =="
@@ -2278,6 +2442,7 @@ case "${1:-help}" in
   memory|mem)        shift; cmd_memory "${1:-}" ;;
   pull)              cmd_pull ;;
   langflow)          shift; cmd_langflow "$@" ;;
+  mail)              shift; cmd_mail "$@" ;;
   bundle)            shift; cmd_bundle "${1:-}" ;;
   load)              shift; cmd_load "${1:-}" ;;
   update)            cmd_update ;;
@@ -2317,6 +2482,8 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo pull          download all images, one at a time with retries
   kingo langflow ...  run uv inside the Langflow container to manage Python
                       packages (e.g. kingo langflow pip install statsmodels)
+  kingo mail          set up the mailbox of the mail assistant (test account +
+                      app password); 'kingo mail help' shows seed, status, reset
   kingo bundle [file] save all images into one arch-stamped tar for USB sticks
                       (instructor; default kingo-images-<arch>.tar; records its
                       checksum in bundles.sha256 — commit that file)

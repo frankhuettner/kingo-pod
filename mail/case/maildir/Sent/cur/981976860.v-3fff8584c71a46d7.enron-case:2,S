@@ -1,0 +1,38 @@
+From: Vince J Kaminski <{{ME}}>
+To: Vince J Kaminski <{{ME}}>
+Subject: New Merchant Asset VaR Model
+Date: Mon, 12 Feb 2001 11:21:00 +0000
+Message-ID: <v-3fff8584c71a46d7@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+I was recently informed of a risk-reducing strategy that we have on the 
+Merchant Asset portfolio.  It seems that we have a vertical bear spread 
+hedging our holdings of Hanover Compression.
+
+Since these holdings represent about 10% of the porfolio, I felt that 
+parametric VaR would not be accurate enough.  As a result, I have changed the 
+model to a Monte Carlo simulation with the following details:
+
+Following my conversation with Vince, I changed the method of parameter 
+estimation to RiskMetrics standard (assume a zero mean and estimate daily 
+volatilities and correlations using exponential weighting with a 0.94 lambda).
+
+I use the Cholesky decomposition to produce correlated random normals, which 
+I then use to simulate Geometric Brownian Motion prices.
+
+I treat the Hanover Compression stock holding and bear spread together as a 
+synthetic short put at 34 and long call at 92.  I do full revaluation of the 
+options with the Black-Scholes.  I keep volatility and the interest rate 
+constant for the sake of computational speed.
+
+I write my Monte Carlos through VBA and formulas in Excel, so this model does 
+not need Crystal Ball.
+
+Regards,
+
+
+
+Eugenio

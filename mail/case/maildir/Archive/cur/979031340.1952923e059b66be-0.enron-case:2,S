@@ -1,0 +1,39 @@
+From: Zimin Lu <zimin.lu@enron.example>
+To: Andrea Reed <andrea.reed@enron.example>
+Cc: Vince J Kaminski <{{ME}}>, Stinson Gibner <stinson.gibner@enron.example>, Bob Lee <bob.lee@enron.example>
+Subject: HC Costless Collar
+Date: Tue, 09 Jan 2001 09:09:00 +0000
+Message-ID: <25928278.1075856236156.JavaMail.evans@thyme>
+In-Reply-To: <v-ddb6672a414b57b1@kaminski.enron.example>
+References: <v-ddb6672a414b57b1@kaminski.enron.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Andrea,
+
+We finished the the costless collar valuation. See the spreadsheets for 
+details.
+
+We checked the Bloomberg for volatility assumption. The 100 days volatility is
+around 50%.  Since the option is for 3 years, the volatility should be 
+somewhat smaller.
+So we put an array of calculations, with the volatility ranges from 20% to 
+60%.
+
+If you have any questions,  please call me or Bob Lee.
+
+Zimin
+
+
+
+
+---------------------- Forwarded by Zimin Lu/HOU/ECT on 01/09/2001 09:02 AM 
+---------------------------
+
+
+Bob Lee@ENRON
+01/09/2001 08:48 AM
+To: Zimin Lu/HOU/ECT@ECT
+cc:  
+Subject: HC Costless Collar

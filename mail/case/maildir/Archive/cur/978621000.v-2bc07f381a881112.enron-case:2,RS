@@ -1,0 +1,21 @@
+From: Chonawee Supatgiat <chonawee.supatgiat@enron.example>
+To: Vince J Kaminski <{{ME}}>
+Subject: Sorry.
+Date: Thu, 04 Jan 2001 15:10:00 +0000
+Message-ID: <v-2bc07f381a881112@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Hi Vince, I am sorry for correcting on the revenue of the different auctions. 
+Vickrey 1961 showed that all 4 kinds of auctions would yield the same 
+expected revenue to the auctioneer. (Dutch, English, first price-sealed bid, 
+and second-price sealed bid.) In fact, the selling price is equal to the 
+valuation of the second highest bidder. For example, in Vickrey auction, 
+everyone bids at his own valuation. Hence, the winner pays the valuation of 
+the second highest bidder. In English auction, the second highest valuation 
+bidder will stop competing if the price is above his valuation. Hence, the 
+winner also gets the item at the price of the second highest valuation bidder.
+Thank you for attending the meeting and giving many helpful contributions.
+-chonawee

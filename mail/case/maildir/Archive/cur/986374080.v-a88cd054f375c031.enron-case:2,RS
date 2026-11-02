@@ -1,0 +1,66 @@
+From: Ben Parsons <ben.parsons@enron.example>
+To: Vince J Kaminski <{{ME}}>
+Subject: Enron Credit Model Docs
+Date: Wed, 04 Apr 2001 08:48:00 +0000
+Message-ID: <v-a88cd054f375c031@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Iris
+
+Vasant informed me that you would be helping the quant efforts of Enron 
+Credit, with the first job to be compiling model documentation to be sent to 
+Darrell Duffie. I've attached below a pretty complete set of current docs we 
+have produced, in no particular order:
+
+Nigel's doc on FMC curve generation (he claims it is out of date now though):
+
+FMCMATHS.DOC
+
+My doc on general theory we're using for pricing and default probability 
+generation:
+
+CREDIT PRICING 2.1.DOC
+
+My doc on asset swap calculation (there is one error to correct)
+
+ASSET SWAP DFIS.PDF
+
+My doc on Placement Model (a second version of the model incorporating 
+ratings has yet to be documented)
+
+PLACEMENT MODEL 1.0.1.DOC
+
+George's doc on the neural network placement model:
+
+NEURAL NETWORK 1.0.DOC
+
+My doc on the VAR model used for credit:
+
+VAR MODEL 1.0 .DOC  
+
+and Kirstee's which preceded it:
+
+CREDITVAR2.DOC
+
+Nigel's doc on the portfolio model used for CDOs and basket trades:
+
+SYNTHETICCDOS.DOC
+
+Katherine's doc on correlations:
+
+CORRELATIONS.DOC
+
+
+Let me know if you need any more information about these models and their 
+applications.
+
+Regards
+
+Ben
+
+PS I've had to zip the files up as they were too big:
+
+ << File: CreditDocs.zip >>

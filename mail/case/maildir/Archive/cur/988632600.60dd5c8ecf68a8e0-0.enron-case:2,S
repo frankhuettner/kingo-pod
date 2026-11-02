@@ -1,0 +1,37 @@
+From: Vasant Shanbhogue <vasant.shanbhogue@enron.example>
+To: Vince J Kaminski <{{ME}}>
+Subject: Non-firm power curve building
+Date: Mon, 30 Apr 2001 12:10:00 +0000
+Message-ID: <5437261.1075856185319.JavaMail.evans@thyme>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Hi Vince,
+
+ Amitava and I have received a request to build a non-firm power curve for 
+each region from David Hoog's Double Trigger folks.  The objective, as they 
+explain it, is to allow the Desk to buy non-firm from the market, buy David's 
+outage product, and sell firm to the market.  Accountants would like a curve 
+to mark the non-firm position.
+ My initial thought is that the desk should provide this non-firm curve, but 
+it seems that this market is very illiquid and they are reluctant so they 
+have put the ball in David Hoog's court to build the curve if David wants to 
+sell his product internally to the desk.  
+ Assuming we build the curve, the next issue is how to define "non-firm"?  
+The only way I can think of is to tie the non-firmness to a specific 
+generation unit or group of units.  This will allow the purchase of David's 
+outage product to cover the non-firmness risk.  Tying the definition of 
+non-firmness to a whole region seems implausible --- what does it mean to 
+give a marketer the option to not deliver power if there is any problem 
+anywhere in the region?  Consequently, the non-firm curve takes on a 
+unit-level interpretation, and not a region-level interpretation.  
+Consequently, I do not see how we can talk about the "non-firm curve for the 
+region"?  We will need to build a non-firm curve for each generation unit or 
+group of units.
+
+Maybe I could get your thoughts later today.
+
+Thanks,
+ 
+Vasant

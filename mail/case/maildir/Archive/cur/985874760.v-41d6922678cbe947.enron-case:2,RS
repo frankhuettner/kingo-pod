@@ -1,0 +1,32 @@
+From: Rakesh Bharati <rakesh.bharati@enron.example>
+To: Vince J Kaminski <{{ME}}>
+Subject: Visual Numerics CNL Licensing Issues
+Date: Thu, 29 Mar 2001 14:06:00 +0000
+Message-ID: <v-41d6922678cbe947@kaminski.enron.example>
+In-Reply-To: <v-d99054b789ed5e11@kaminski.enron.example>
+References: <v-d99054b789ed5e11@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Vince,
+
+Tanya and I feel that there is a need for a constrained optimization routine 
+for our VAR related research.   Numerical recipes does not contain 
+subroutines where equality and inequality contraints can be easily 
+incorporated.  Also, the number of arguments that can be handled is also 
+limited.
+
+IMSL provides a comprehensive library of more than 300 C/C++  statistical and 
+mathematical analysis functions.  We think that it would be of great value to 
+our efforts and to the efforts of our research group.  Presently the cost is 
+aproximately around $1500 and Mike Bothwell (Visual Numerics Rep) assures us 
+as the version is not license protected, we all can use it as long as 
+simultaneous usage is within the license.
+
+Please let me know if you should need further information.
+
+Thanks,
+
+Rakesh

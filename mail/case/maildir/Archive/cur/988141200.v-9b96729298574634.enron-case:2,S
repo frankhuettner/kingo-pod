@@ -1,0 +1,49 @@
+From: Chonawee Supatgiat <chonawee.supatgiat@enron.example>
+To: Chonawee Supatgiat <chonawee.supatgiat@enron.example>
+Subject: calculating bid-ask prices
+Date: Tue, 24 Apr 2001 19:40:00 +0000
+Message-ID: <v-9b96729298574634@kaminski.enron.example>
+In-Reply-To: <v-b78d3d16731de6e0@kaminski.enron.example>
+References: <v-b78d3d16731de6e0@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+I think we should let the price float with the market instead of trying to 
+forecast it. Otherwise, if our forecast is not consistence with the market, 
+we may have an imbalance in the bid-ask orders and we may end up taking some 
+positions. You know, as Russ and Martin pointed out, we cannot fight with the 
+studio and exhibitors because they have inside information and can game the 
+price easily.
+
+One way to ensure the balance of the bid-ask orders is to embed an exchange 
+system inside our bid-ask prices front end. Each week, we have a trading 
+period. During the period, instead of posting bid-ask prices, we post 
+"tentative" bid-ask prices, then we ask our customers to submit their 
+acceptable buying or selling price. These "tentative" bid-ask prices get 
+updated and are shown to the public. Of course, customers can revise/withdraw 
+their bids anytime during the trading period. At the end of the period, we 
+calculate and post the final bid and ask prices. The seller who submits lower 
+selling price than our final bid price gets paid at the bid price. The buyer 
+who submits higher buying price than our final ask price pays at the ask 
+price. Next week, we repeat the same process.
+
+This way, we can manage our positions easily and we can also behave like a 
+broker where we don't take any position at all. We make profit from those 
+bid-ask spread. We don't have to worry about forecasting accuracy and 
+insiders' trading because we don't have to take any position. Let the market 
+be the one who decides the price. 
+
+If we maintain our net position as zero, at the end, when all the actual 
+gross box office numbers are reported in those publications, our customers 
+with open long/short positions are perfectly matched. Using the 
+mark-to-market charge can reduce credit risk.
+
+Thanks,
+-Chonawee
+
+
+
+---------------------- Forwarded by Chonawee Supatgiat/Corp/Enron on 
+04/24/2001 07:24 PM ---------------------------

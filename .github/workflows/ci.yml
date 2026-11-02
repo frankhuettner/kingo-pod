@@ -218,7 +218,7 @@ jobs:
         run: |
           set -euo pipefail
           ./kingo down
-          IMGS="postgres:16 n8nio/n8n:2.41.6"
+          IMGS="pgvector/pgvector:pg16-trixie n8nio/n8n:2.41.6"
           # KNOWN GAP, found by this very step on its first run (2026-08-30):
           # on Ubuntu 24.04's podman 4.9.3 the zstd→gzip conversion does not
           # stick — `save` still reports the zstd layers and fails. It works on
@@ -229,7 +229,7 @@ jobs:
           # engines, and the log says plainly which case ran.
           if ! KINGO_BUNDLE_IMAGES="$IMGS" ./kingo bundle ci-bundle.tar; then
             echo "NOTE: bundling the zstd image failed on this engine — known gap, continuing with the gzip image only."
-            IMGS="postgres:16"
+            IMGS="pgvector/pgvector:pg16-trixie"
             KINGO_BUNDLE_IMAGES="$IMGS" ./kingo bundle ci-bundle.tar
           fi
           # grep -c counts LINES, and manifest.json is one line — count

@@ -24,7 +24,7 @@ that second page is the one students come back to (addresses and logins, the
   those still setting up.
 - **Minimum specs**: 8 GB RAM (16 GB recommended), ~20 GB free disk — ~30 GB
   during a USB setup, where the ~14 GB file and the images it loads coexist.
-  Fresh installs run the **abp mode** (Langflow, n8n, CloudBeaver, Qdrant, PostgreSQL)
+  Fresh installs run the **abp mode** (Langflow, n8n, Mail, CloudBeaver, Qdrant, PostgreSQL)
   in a 4 GB machine; the full stack needs 6 GB under real use, which an 8 GB
   laptop cannot give. See "Modes" below for the numbers and the announcement.
 - **Classroom Wi-Fi fallback (USB bundle)**: if students show up without having
@@ -35,7 +35,7 @@ that second page is the one students come back to (addresses and logins, the
 
 **Prepare at home**: `./kingo bundle` writes `kingo-images-<arch>.tar` (~14 GB,
 measured 2026-08-21) with every image the stack needs, including the
-locally-built jupyterhub one. **A bundle is single-architecture** — `save`
+locally-built jupyterhub, langflow and mail ones. **A bundle is single-architecture** — `save`
 writes only the local image blobs, which match the machine that built them —
 so an arm64 tar will *not* run on an amd64 laptop, and vice versa. For a mixed
 class, build BOTH and put both on each stick:
@@ -179,12 +179,12 @@ committed `.env`.
 
 Images are pinned by tag — a class where two laptops run different versions is
 a class where half the room's screenshots don't match. The pins live in
-`compose.yml`, except the two local builds, which take theirs from the `FROM`
+`compose.yml`, except the three local builds, which take theirs from the `FROM`
 line of their Dockerfile:
 
 | Service | Pin | Where |
 |---|---|---|
-| PostgreSQL | `postgres:16` | `compose.yml` |
+| PostgreSQL | `pgvector/pgvector:pg16-trixie` (`postgres:16` on Debian trixie plus pgvector 0.8, for the mail assistant's search) | `compose.yml` |
 | Qdrant | `qdrant/qdrant:v1.19.0` | `compose.yml` |
 | JupyterLab | `quay.io/jupyter/scipy-notebook:2026-08-17` | `compose.yml` |
 | JupyterHub | `quay.io/jupyterhub/jupyterhub:5` | `jupyterhub/Dockerfile` |
@@ -193,6 +193,7 @@ line of their Dockerfile:
 | n8n | `n8nio/n8n:2.41.6` | `compose.yml` |
 | Metabase | `metabase/metabase:v0.60.25` | `compose.yml` |
 | CloudBeaver | `dbeaver/cloudbeaver:26.1.5` | `compose.yml` |
+| Mail | `docker.io/library/alpine:3.24` (isync 1.5.1, notmuch 0.40, goimapnotify 2.5.4) | `mail/Dockerfile` |
 
 The stack as a whole is versioned too (semver, annotated git tags plus a
 committed `VERSION` file): `v1.0.0` is what the first two cohorts installed.
@@ -204,7 +205,7 @@ class files (or "installed from a ZIP"), every container engine on the
 machine, and the platform — one paste that answers most "it doesn't work"
 mails.
 
-**Two of these are not exact**: `postgres:16` and `jupyterhub:5` follow their
+**Two of these are not exact**: `pg16-trixie` and `jupyterhub:5` follow their
 major line, so a fresh install today and one from last month can differ by a
 patch release, and a rebuild can move JupyterHub without anyone editing a
 file. Harmless so far, and CI's `smoke` would catch a bad patch — but it is
@@ -465,11 +466,11 @@ keeps the volumes, and `./kingo mode full` brings a service back with its data.
 
 | Mode | Services | Containers, typical / peak | Machine floor / target |
 |---|---|---|---|
-| `abp` (fresh installs) | Langflow, n8n, CloudBeaver, Qdrant, PostgreSQL | 2.8 / 4.1 GB | 3.5 / **4 GB** |
-| `full` | all 9 | 5.0 / 7.6 GB | 6 / **6 GB** |
+| `abp` (fresh installs) | Langflow, n8n, Mail, CloudBeaver, Qdrant, PostgreSQL | 2.8 / 4.1 GB | 3.5 / **4 GB** |
+| `full` | all 10 | 5.0 / 7.6 GB | 6 / **6 GB** |
 | `bi` | JupyterLab, JupyterHub, Jupyter MCP, Metabase, CloudBeaver, Qdrant, PostgreSQL | 2.8 / 4.6 GB | 4 / **4.5 GB** |
 | `langflow` | Langflow, PostgreSQL | 1.8 / 2.5 GB | 3 / **3.5 GB** |
-| `n8n` | n8n, PostgreSQL | 0.8 / 1.5 GB | 2 / **2.5 GB** |
+| `n8n` | n8n, Mail, PostgreSQL | 0.8 / 1.5 GB | 2 / **2.5 GB** |
 
 Where the numbers come from (2026-09-05, one Mac, podman machine): idle is
 measured; *typical* and *peak* add what the services do in class — a pandas
@@ -485,7 +486,10 @@ Qdrant joined `abp` on 2026-09-11 (the BioFuture RAG flow runs in Langflow,
 which `abp` runs, so its retrieval half has to run there too); measured the
 same day it holds 31 MB (a 270-chunk collection — `./kingo memory`), so it
 rides in `abp`'s existing budget and the floor / target are unchanged from
-v1.1.0.
+v1.1.0. Mail joined `abp`, `n8n` and `full` with the n8n workshop; its
+memory is not measured yet (a Python process and goimapnotify, with mbsync
+and notmuch running for seconds at a time) — measure it with `./kingo memory`
+before the workshop, and retune the table only if it matters.
 
 - **An 8 GB Mac**: the podman machine's memory is a fixed reservation once
   warmed up (no balloon device), so only a smaller machine gives macOS anything
@@ -506,7 +510,7 @@ v1.1.0.
   Resources page is read-only there).
 - **Every mode's images are always present**: `pull`, `update` and the USB
   bundle are mode-agnostic (~10 GB to download on a first internet install,
-  14.7 GB on disk), and `pull` also builds the two local images if they are
+  14.7 GB on disk), and `pull` also builds the three local images if they are
   missing — never rebuilds them — so a class-day `./kingo mode full` neither
   downloads nor builds anything. Announce mode switches freely, even on
   classroom Wi-Fi.
@@ -663,11 +667,43 @@ their flows, workflows, notebooks and databases — and they are not needed:
 the cleanup above is surgical. If you ever must reset anyway, export the data
 first (`podman volume export kingo_<name> -o <file>.tar` per `kingo_*` volume).
 
+## The mail service (n8n workshop)
+
+`mail` keeps one test mailbox per student in step with the tables of schema
+`n8n_workshop_mail` in `classroom` and sends what a person approved in n8n.
+It has no web page and no port; n8n and Langflow reach it only through
+Postgres. It runs in `abp`, `n8n` and `full`.
+
+| Command | What it does |
+|---|---|
+| `./kingo mail` | asks for the address of the student's test account, its app password, and the addresses the course mode may also send to; signs in once to check, sends nothing |
+| `./kingo mail seed` | puts the course case's sample mailbox into it and uploads it to the provider (once per account) |
+| `./kingo mail status` | account, folders, number of mails in Postgres, last sync, last error |
+| `./kingo mail reset` | forgets the account and the local copy of its mailbox (the volume `mail-data`); the mailbox at the provider and the rows in Postgres stay. The way to switch accounts |
+| `./kingo logs mail` | what it does, live |
+
+The logins for n8n and Langflow (host `postgres`, database `classroom`,
+password `KINGO_PASSWORD`, printed by `./kingo credentials`):
+`n8n_workshop_mail_n8n` for n8n (reads, proposes replies, approves through a
+function), `n8n_workshop_mail_agent` and `n8n_workshop_mail_reply` for
+Langflow (read only). `./kingo up` applies the schema and sets these
+passwords on every start; the course mode refuses to send anywhere but the
+student's own addresses and those `./kingo mail` allowed. If that step or
+the mail check in `smoke` fails, it is a warning: the rest of the stack is
+not held up by the mail service.
+
+Going back to a kingo without the mail service (the "Red light" recipe
+above, or any revert) leaves `kingo-mail` running, since the old kingo does
+not know it: remove it with `podman rm -f kingo-mail` (`docker rm -f` on
+Docker). Its volume stays for a later return.
+
 ## Verifying a machine
 
 - `./kingo doctor` — preflight (engine ready? memory? ports free?).
 - `./kingo smoke` — asserts exact health codes, that nothing is crash-looping,
-  that every port is bound to `127.0.0.1`, and that JupyterHub can launch a Lab.
+  that every port is bound to `127.0.0.1`, that JupyterHub can launch a Lab, and
+  that the mail service has its tools and reaches Postgres as its own role
+  (a warning only, except in CI).
 
 ## Open questions to settle (see PLAN-NATIVE-STACK.md §10)
 

@@ -1,0 +1,53 @@
+From: Mark Fondren <mark.fondren@enron.example>
+To: Stinson Gibner <stinson.gibner@enron.example>
+Subject: Erac Koch P+ spread options
+Date: Thu, 25 Jan 2001 12:07:00 +0000
+Message-ID: <v-1a22f722cb6dd601@kaminski.enron.example>
+X-Enron-Rebuilt: rebuilt from the quote in a later mail
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Price  1    =     WTI Cushing physical cash price  (WTI  Nymex 
+contract)       For example,  the April 2001
+                             WTI cushing price equals the Apr01 WTI Nymex 
+contract.
+
+
+ Price  2    =    Koch Oil posting for West Texas/New Mexico Intermediate.
+
+
+Koch P+   =    Price 1  -  Price  2
+
+
+  Price 2 is calculated by subtracting  3 spreads  from Price 1   
+  
+       1.    Koch Posting/Wti NYMEX basis spread  
+       2.    66.6%   (April01/May01  WTI Nymex spread)
+       3.    33.3%   (April01/Jun01  WTI Nymex spread)
+
+
+
+Example   using  1/24/2001 WTI settles       APR01       28.31
+                                                                              
+    MAY01       27.72
+                                                                              
+    JUN01        27.19 
+
+April 2001  Koch posting   =     April 2001 WTI NYMEX settlement   -   
+KOCH/NYMEX basis spread  -  .666(Apr/May)  -  .333(Apr/Jun)
+
+                                                  =       28.31     -    
+2.75     -    .666(.59)   -   .333(1.12)
+                                                  =       28.31     -    
+2.75     -     .3929        -   .37296
+                                                  =       24.794
+
+Koch P+    =   28.31   -    24.794
+                    =   3.516
+  
+  Please call with any questions
+
+
+Mark F
+ext   853-1982
