@@ -49,8 +49,8 @@ kept short; the full incident write-ups are in this file's history
   working engine exists. Do not make the guides Podman-only.
 - **Three images are built locally**, tagged `*:local`: JupyterHub
   (`jupyterhub/Dockerfile` — no published image runs hub+Lab standalone),
-  Langflow (`langflow/Dockerfile` — upstream + `langflow/requirements.txt` +
-  `uv`) and Mail (`mail/Dockerfile` — Alpine + mbsync, notmuch, goimapnotify and
+  Langflow (`langflow/Dockerfile` — upstream + `langflow/class-requirements.txt`
+  + `langflow/requirements.txt` + `uv`) and Mail (`mail/Dockerfile` — Alpine + mbsync, notmuch, goimapnotify and
   a small Python service; see "The mail service"). Anything that special-cases
   one (pull's base-image list, bundle, load's retag) must handle all three. `pull` builds them only when MISSING
   (`build_missing`; a USB `load` brings images without build cache), `update`
@@ -58,8 +58,18 @@ kept short; the full incident write-ups are in this file's history
   mode runs it.
 - **JupyterLab (:8888) stays** although JupyterHub exists — the Jupyter MCP
   server points at it.
-- **Class-wide Python packages go in `langflow/requirements.txt`**;
-  `kingo langflow pip install` is ephemeral by design. That file knowingly
+- **Class-wide Python packages go in `langflow/class-requirements.txt`, never
+  in `langflow/requirements.txt`**, which stays at its v1.4.0 content (on
+  `release-1.5`: its 1.5.0 content). Students edit that file themselves (the
+  whole class added `nemoguardrails` for Workshop I), and git refuses to pull a
+  commit that changes a file the folder changed too: an upstream change strands
+  every such folder on every update, and only a command typed on the laptop
+  gets it out (v1.4.0's ragas line did that, found 2026-11-04). The two files
+  must not pin one package differently, or the build fails. The class file
+  also holds `huggingface-hub<1.0`: without it a fresh build lifts the hub
+  past what the base image's transformers accepts (the file says why), and
+  the Dockerfile's import check fails the build.
+  `kingo langflow pip install` is ephemeral by design. `requirements.txt` knowingly
   overrides two pins of the base image (`datasets<4`, `pyarrow==19`; ragas 0.4
   needs newer): the build prints pip's "dependency conflicts" notice and exits
   0, and Langflow runs fine on them (2026-09-21) — do not pin pyarrow back. A
@@ -281,7 +291,7 @@ there with `./kingo update` alone?**
   command / port / service / `.env` variable students were told to use is gone
   or renamed. The announcement is longer than one line.
 - **MINOR** — yes, and something is new: a service, a `kingo` command, a class
-  package in `langflow/requirements.txt`, an image bump `update` applies.
+  package in `langflow/class-requirements.txt`, an image bump `update` applies.
 - **PATCH** — yes, and nothing is new: fixes, guides, the website, CI.
 
 A release is an annotated git tag AND the same string in the committed
@@ -361,7 +371,8 @@ difference students choose between.
 - `kingo` (bash) — the ONE CLI for Mac, Linux and Windows-in-WSL2; CI-tested
   on Linux with both engines.
 - `jupyterhub/`, `cloudbeaver/`, `postgres-init/` — service config;
-  `langflow/` — Dockerfile + requirements.txt for the local Langflow build;
+  `langflow/` — Dockerfile + class-requirements.txt (+ requirements.txt, frozen)
+  for the local Langflow build;
   `mail/` — the mail service (copied from the workshop repo, see above).
 - `setup/setup-mac.sh` (brew podman + machine; Homebrew is a guide
   prerequisite — the script refuses to install it, Frank's call) and

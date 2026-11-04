@@ -170,7 +170,8 @@ reinstall), you get Kingo 1.4 again: run the line once more.
 | `fatal: not a git repository` | Your folder came from the old ZIP download (Macs set up before 29 August). Ask your instructor. |
 | `fatal: the requested upstream branch 'origin/release-1.5' does not exist` | Nothing changed. Check your internet connection and run the line again. |
 | an `ERROR:` line | Nothing changed. Fix that error first ([Mac](USING-MAC.md#if-something-breaks), [Windows](USING-WINDOWS.md#if-something-breaks)), then run the line again. |
-| `WARN: the newest class files could not be applied` | Send that message to your instructor. |
+| `WARN: the newest class files could not be applied: this folder has local changes` | You probably added a package to `langflow/requirements.txt`, such as `nemoguardrails`. Kingo has it built in now. Run `git checkout -- langflow/requirements.txt`, then the line again. |
+| any other `WARN: the newest class files could not be applied` | Send that message to your instructor. |
 
 ## After the upgrade
 

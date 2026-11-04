@@ -378,15 +378,29 @@ updated since still tracks it.
 ## Python packages in Langflow
 
 Langflow is built locally (`langflow/Dockerfile`) on top of the upstream
-image, adding the packages in `langflow/requirements.txt` (statsmodels, ragas, …)
-plus `uv`. To give the whole class a new package: add one line to
-`langflow/requirements.txt`, commit + push, and announce **"run
-`./kingo update`"** — that one command works for every install kind
-(git installs pull; leftover ZIP-era Mac folders fetch the repo tarball
-automatically) and rebuilds the image. A student who needs something just for themselves:
-`./kingo langflow pip install <pkg>` (ephemeral — gone after `down`+`up` and
-after every update that changes the image, which is fine for one-offs; a
-package the class keeps using belongs in `requirements.txt`).
+image, adding the packages in `langflow/class-requirements.txt` (nemoguardrails, a
+huggingface-hub pin that keeps transformers importable)
+and `langflow/requirements.txt` (statsmodels, ragas, …) plus `uv`. To give the
+whole class a new package: add one line to `langflow/class-requirements.txt`,
+commit + push, and announce **"run `./kingo update`"** — that one command works
+for every install kind (git installs pull; leftover ZIP-era Mac folders fetch
+the repo tarball automatically) and rebuilds the image. A student who needs
+something just for themselves: `./kingo langflow pip install <pkg>` (ephemeral —
+gone after `down`+`up` and after every update that changes the image, which is
+fine for one-offs; a package the class keeps using belongs in
+`class-requirements.txt`).
+
+**Never change `langflow/requirements.txt` again.** Students edit it: for
+Workshop I the whole class added `nemoguardrails==0.24.1` to it. git refuses to
+pull a commit that changes a file the folder changed too, so every such folder
+stays where it is on every `./kingo update`, and only a command typed on the
+laptop gets it out (nothing in a release can, because the old script on the
+laptop does the pull). v1.4.0 (the ragas lines) did exactly that to every folder
+that had added the line on 1.3.x or older: they stayed there, the warning told
+them to undo the very line they were told to add, and the mail commands of 1.4.2
+never arrived. The way out for such a folder is in "A folder that cannot
+update". The same pin may stand in both files; two different pins of one
+package fail the build.
 
 **"IpcReadOptions size changed, may indicate binary incompatibility"** when a
 flow builds (the RAGAS Metrics Evaluator, 2026-09-21): a `./kingo langflow pip
@@ -548,7 +562,27 @@ already mode-aware because `credentials`/`status` mark what is off.
 
 ## A folder that cannot update
 
-`./kingo update` says
+**Most common: a changed `langflow/requirements.txt`.** `git status` in the
+student's `~/kingo-pod` lists it as `modified`, and `git diff
+langflow/requirements.txt` shows the line they added (in this course
+`nemoguardrails==0.24.1`, for Workshop I). `./kingo update` warns that the
+folder has local changes, and the version stays. Since v1.4.4 the class image
+has nemoguardrails itself, so the line can go. In their `~/kingo-pod`:
+
+| Step | Command |
+|---|---|
+| 1. drop the line | `git checkout -- langflow/requirements.txt` |
+| 2. get the class files | `git pull --ff-only` |
+| 3. back up flows and workflows | `./kingo backup` |
+| 4. update as usual | `./kingo update` |
+
+Steps 2–3 matter for folders on 1.3.x or older: their own `update` would go on
+running its old code after the pull and makes no backup, and n8n migrates its
+database on the way to 2.41. After step 2 every `./kingo` command is the new
+one. The backup folder carries the new version's name but holds the old data.
+If step 2 still refuses, another file was changed too: see below.
+
+**Otherwise** `./kingo update` says
 
 ```
 WARN: the newest class files could not be applied — updating images only for now.

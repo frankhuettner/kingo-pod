@@ -1,0 +1,26 @@
+# Python packages the whole class gets inside Langflow, added after v1.4.0.
+# Baked into the locally-built image together with requirements.txt (see
+# Dockerfile). To add one: add it HERE, commit, and have students run
+#   ./kingo update
+#
+# Never change requirements.txt again: students add their own packages there
+# (the whole class added nemoguardrails for Workshop I). git refuses to pull
+# a commit that changes a file the folder changed too, so an upstream change
+# to requirements.txt strands every such folder on every update. The v1.4.0
+# change (ragas) did exactly that to the folders that added the line before.
+#
+# NeMo Guardrails, for class flows (Workshop I, 4.2 Input Validation). Same
+# pin as Kingo 1.5 and as the line students added themselves: two different
+# pins of one package would fail the build. Checked against Langflow 1.8.0
+# (langchain-core 0.3.83, 2026-11-04): adds 4 packages (fastembed,
+# py-rust-stemmers, simpleeval and itself) and moves nothing else; LLMRails
+# starts. It needs no langchain of its own.
+nemoguardrails==0.24.1
+#
+# Keeps `import transformers` working. The base image's transformers 4.57
+# refuses to import with huggingface-hub 1.0 or newer. ragas wants datasets 4+,
+# and since datasets 5.1 (2026-10-05) the newest datasets wants huggingface-hub
+# 1.31+, so an unpinned build lifts it (to 1.33 or 2.x) and transformers stops
+# importing. Images built before that kept 0.36 with datasets 5.0.1, and this
+# pin builds exactly that again (checked 2026-11-04).
+huggingface-hub<1.0

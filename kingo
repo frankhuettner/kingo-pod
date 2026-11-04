@@ -1892,8 +1892,9 @@ cmd_load() {
 # ── langflow: manage Python packages inside the Langflow container ───────────
 # Thin passthrough to uv (baked into the locally-built image) running inside
 # kingo-langflow — real uv syntax, e.g.: ./kingo langflow pip install statsmodels
-# Packages the whole class needs belong in langflow/requirements.txt instead:
-# they are baked into the image (kingo update) and survive container recreation.
+# Packages the whole class needs belong in langflow/class-requirements.txt
+# instead: they are baked into the image (kingo update) and survive container
+# recreation. Never langflow/requirements.txt: students edit it (see that file).
 cmd_langflow() {
   select_engine
   if [ $# -eq 0 ]; then
@@ -1906,9 +1907,9 @@ usage: ./kingo langflow <uv command ...>     (runs uv inside the Langflow contai
   ./kingo langflow pip list                     what is installed?
 
 Heads-up: packages installed this way disappear when the container is recreated
-(./kingo down + up, or ./kingo update) — just run the install again. Packages the
-whole class needs belong in langflow/requirements.txt: those are baked into the
-image and survive everything.
+(./kingo down + up, or ./kingo update) — just run the install again. A package the
+whole class needs: ask the instructor to build it into the image, then it survives
+everything.
 
 Upgraded a compiled package (pyarrow, numpy, pandas)? Run  ./kingo restart langflow
 before building a flow — the running server still has the old one loaded, and the
