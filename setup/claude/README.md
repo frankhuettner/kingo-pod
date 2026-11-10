@@ -1,0 +1,27 @@
+# How `kingo claude` differs from a standard Claude Code
+
+`./kingo claude` (or `./kingo yolo`, the same without requests for permission) starts Claude Code set up for the course. This page
+says what is different from a Claude Code you install and start with `claude`, and where the course configures each part. The
+templates in this folder are what `kingo claude` copies into `kingo-pod/claude/` on the first start.
+
+Only a start with `./kingo claude` or `./kingo yolo` sets all this up. A plain `claude`, in any folder, is a standard
+Claude Code with Anthropic's settings, the student's own `~/.claude` and their own login. In `kingo-pod/claude` it
+also reads the folder's `.claude/settings.json` and `AGENTS.md`, but it runs without the sandbox, without the keys and
+without the way to OpenRouter.
+
+| | A standard Claude Code | Here, started with `./kingo claude` | Configured for the course in |
+|---|---|---|---|
+| Start | `claude`, in any folder | `./kingo claude` in the kingo-pod folder; `./kingo yolo` is the same without requests for permission. Claude works in `kingo-pod/claude` | `kingo-pod/kingo`, the script behind every `./kingo` command. Before Claude starts, it checks that n8n and Langflow run, asks for the student's keys the first time, copies `AGENTS.md`, `CLAUDE.md` and `.claude/settings.json` into `kingo-pod/claude/` the first time, and writes the nono profile. Then it starts Claude Code inside nono. |
+| Model and bill | Claude models, with an Anthropic account or key | GLM 5.3 Flash through OpenRouter, paid with the student's OpenRouter key | `kingo-pod/claude/.claude/settings.json` names the model, for every role (`ANTHROPIC_MODEL` and the lines `ANTHROPIC_DEFAULT_…_MODEL`). The nono profile sends Claude's requests to OpenRouter instead of Anthropic, and puts the student's OpenRouter key into them. |
+| Keys | kept by Claude Code itself | kept in `~/.config/kingo/`; Claude sees only stand-ins | `kingo-pod/kingo` asks for the student's OpenRouter and n8n keys, makes the Langflow key itself, and keeps them in `~/.config/kingo/`, readable only by the student. When it starts Claude, it hands them to nono, not to Claude. The nono profile says, for OpenRouter, n8n and Langflow, where nono's proxy puts the real key into a request. |
+| Files | Claude reads and writes wherever the student may, after asking | Claude writes only in `kingo-pod/claude` and `~/.kingo-claude`, reads `kingo-pod`, and nothing else; the operating system enforces it | The nono profile `~/.config/nono/profiles/kingo-claude.json` lists the folders Claude may read and write, and the few environment variables that reach Claude: other keys on the laptop do not. `kingo` writes it anew at every start from `kingo-pod/setup/claude/nono-profile.json`, so a change to it does not last. On top, `kingo-pod/claude/.claude/settings.json` forbids Claude to read `.env` files, `~/.ssh` and `~/.aws`. |
+| Sandbox | Claude Code's own sandbox, for commands only, if the student turn it on | nono, around all of Claude Code: its commands, and its own tools for files too | the nono profile. `kingo-pod/claude/.claude/settings.json` turns Claude Code's own sandbox off (`sandbox.enabled`): nono covers more. |
+| Settings and history | `~/.claude` | `~/.kingo-claude`; the student's own `~/.claude` stays untouched | `kingo-pod/kingo` starts Claude with `CLAUDE_CONFIG_DIR=~/.kingo-claude`: Claude Code keeps its settings, sessions and history there. An Anthropic login stored there, `kingo` removes at every start: the course does not use it, and Claude could read it. |
+| Instructions | a `CLAUDE.md` that the student write | `AGENTS.md`: the part about kingo-pod and the team's rules; `CLAUDE.md` only points to it | `kingo-pod/claude/AGENTS.md`, the student's to change, and `kingo-pod/claude/CLAUDE.md`, which holds only `@AGENTS.md`. `settings.json` makes Claude skip the `CLAUDE.md` of kingo-pod itself, which is for kingo-pod's developers (`claudeMdExcludes`). |
+| Memory | hidden in `~/.claude/projects/` | in `kingo-pod/claude/memory/`, where the student can read it | `kingo-pod/claude/.claude/settings.json` (`autoMemoryDirectory`) |
+| What leaves the laptop | the model's requests, plus usage data, error reports and feedback to Anthropic; pages on claude.ai (artifacts) and Remote Control, if the student use them | the model's requests, to OpenRouter only; usage data, error reports, feedback, pages on claude.ai and Remote Control are off | `kingo-pod/kingo` turns off pages on claude.ai, usage data, error reports and all traffic that is not needed, when it starts Claude. `kingo-pod/claude/.claude/settings.json` turns off the same, and also feedback (`DISABLE_FEEDBACK_COMMAND`), Remote Control (`disableRemoteControl`), pages on claude.ai (`enableArtifact`) and the check of each web address at Anthropic before Claude reads a page (`skipWebFetchPreflight`). |
+| Requests for permission | Claude asks before a command | the same; `./kingo yolo` turns them off | `kingo-pod/kingo`: `./kingo yolo` starts Claude with `--dangerously-skip-permissions`. The sandbox stays the same. |
+| Updates | Claude Code updates itself | no self-update: run the install line again | `kingo-pod/claude/.claude/settings.json`: `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` also turns off the self-update. |
+
+You may change `claude/.claude/settings.json` and `claude/AGENTS.md`: they are yours after the first start. The nono
+profile is written anew at every start, so a change there does not last.

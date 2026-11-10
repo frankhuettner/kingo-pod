@@ -994,6 +994,150 @@ cmd_mcp() {
   echo "  Authorization: Bearer ${MCP_TOKEN}"
 }
 
+# ── claude: Claude Code for the course, inside the nono sandbox ──────────────
+# Claude writes only in claude/ (the course folder, gitignored) and in its own
+# config ~/.kingo-claude, so a student's own ~/.claude is never touched. It may
+# read this folder but not change it. nono's proxy injects the keys for
+# OpenRouter, n8n and Langflow: Claude only ever sees placeholders. The keys
+# live in ~/.config/kingo/*.key (mode 600), outside everything the sandbox
+# grants. The templates are in setup/claude/; claude/ gets them once, and the
+# nono profile is rewritten on every start (ports, a kingo update).
+CLAUDE_KEYS="$HOME/.config/kingo"
+CLAUDE_NONO_MIN=59   # nono 0.59: env:// keys (0.50), the D-Bus fix (0.55); the profile is checked on 0.59 and 0.81
+
+claude_http() { # url header -> HTTP code (000: nothing answered)
+  curl -s -o /dev/null -m 10 -w '%{http_code}' -H "$2" "$1" 2>/dev/null || echo 000
+}
+
+claude_save_key() { # name key
+  mkdir -p "$CLAUDE_KEYS" && chmod 700 "$CLAUDE_KEYS"
+  ( umask 077; printf '%s' "$2" > "$CLAUDE_KEYS/$1.key" )
+}
+
+claude_ask_key() { # name prompt
+  local k
+  [ -t 0 ] || die "kingo claude needs your $1 key. Run it in a terminal, so that it can ask for the key."
+  read -r -s -p "$2 (it is not shown): " k; echo
+  [ -n "$k" ] || die "no key given — run ./kingo claude again"
+  claude_save_key "$1" "$k"
+}
+
+claude_make_langflow_key() { # Langflow runs with auto-login: a token, then a key named "claude"
+  local tok key
+  tok=$(curl -s -m 10 "http://127.0.0.1:${P_LANGFLOW}/api/v1/auto_login" 2>/dev/null \
+        | sed -n 's/.*"access_token": *"\([^"]*\)".*/\1/p') || true
+  [ -n "$tok" ] || return 1
+  key=$(curl -s -m 10 -X POST "http://127.0.0.1:${P_LANGFLOW}/api/v1/api_key/" \
+          -H "Authorization: Bearer $tok" -H 'Content-Type: application/json' -d '{"name":"claude"}' 2>/dev/null \
+        | sed -n 's/.*"api_key": *"\([^"]*\)".*/\1/p') || true
+  [ -n "$key" ] || return 1
+  claude_save_key langflow "$key"
+}
+
+claude_check_key() { # name code-from-claude_http what-to-do
+  case "$2" in
+    200) ;;
+    401|403) rm -f "$CLAUDE_KEYS/$1.key"
+             die "$1 did not accept the key. $3 Then run ./kingo claude again: it asks for the key." ;;
+    *) warn "could not check the $1 key (HTTP $2) — starting anyway" ;;
+  esac
+}
+
+cmd_claude() {
+  case "${1:-}" in
+    help|-h|--help)
+      echo "kingo claude [claude options]  start Claude Code for your project, in the nono sandbox."
+      echo "  Claude writes only in $KINGO_DIR/claude/, reads this folder, and works on n8n, Langflow and PostgreSQL."
+      echo "  The first start asks for your OpenRouter key and an n8n API key; keys are kept in $CLAUDE_KEYS/."
+      echo "  A key that a service refuses is deleted, and the next start asks again."
+      echo "  Claude asks before every command; ./kingo yolo lets it work"
+      echo "  without asking (the sandbox protects your laptop either way; ./kingo backup saves your workflows and flows)."
+      return ;;
+  esac
+  local dir="$KINGO_DIR/claude" tpl="$KINGO_DIR/setup/claude" cfg="$HOME/.kingo-claude"
+  local prof="${XDG_CONFIG_HOME:-$HOME/.config}/nono/profiles" v vmaj vmin esc
+
+  # ~/.local/bin goes first: Claude Code's native installer puts it there, and on WSL nono's
+  # install script too. An older Claude Code from npm or a Homebrew cask (on WSL even
+  # Windows' npm, via /mnt/c) must not win over it.
+  [ -d "$HOME/.local/bin" ] && PATH="$HOME/.local/bin:$PATH"
+  # Homebrew's libpq is keg-only (not linked into the PATH).
+  local d
+  for d in /opt/homebrew/opt/libpq/bin /usr/local/opt/libpq/bin; do
+    case ":$PATH:" in *":$d:"*) ;; *) [ -d "$d" ] && PATH="$PATH:$d" ;; esac
+  done
+  export PATH
+  command -v nono >/dev/null 2>&1 \
+    || die "nono is not installed. Mac: brew install nono — Windows (WSL): curl -fsSL https://nono.sh/install.sh | sh"
+  v=$(nono --version 2>/dev/null | sed -n 's/^nono \([0-9]*\)\.\([0-9]*\).*/\1 \2/p') || true
+  read -r vmaj vmin <<<"$v"
+  if [ -z "${vmaj:-}" ] || { [ "$vmaj" -eq 0 ] && [ "${vmin:-0}" -lt "$CLAUDE_NONO_MIN" ]; }; then
+    die "nono is too old ($(nono --version 2>/dev/null || echo '?')); kingo claude needs 0.$CLAUDE_NONO_MIN or newer. Mac: brew upgrade nono — Windows (WSL): curl -fsSL https://nono.sh/install.sh | sh"
+  fi
+  command -v claude >/dev/null 2>&1 \
+    || die "Claude Code is not installed. Install it with:  curl -fsSL https://claude.ai/install.sh | bash"
+  command -v psql >/dev/null 2>&1 \
+    || warn "psql is missing, so Claude cannot reach PostgreSQL. Mac: brew install libpq — Windows (WSL): sudo apt install postgresql-client"
+
+  if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ]; then
+    { check "$P_N8N" /healthz && check "$P_LANGFLOW" /health; } \
+      || die "n8n and Langflow must be running first: ./kingo up (in mode abp or full)"
+
+    [ -s "$CLAUDE_KEYS/openrouter.key" ] || claude_ask_key openrouter "Paste your OpenRouter key"
+    if [ ! -s "$CLAUDE_KEYS/n8n.key" ]; then
+      echo "Claude needs an API key for n8n. In n8n, open Settings, then n8n API, then Create an API key."
+      claude_ask_key n8n "Paste the n8n API key"
+    fi
+    if [ ! -s "$CLAUDE_KEYS/langflow.key" ] && ! claude_make_langflow_key; then
+      echo "Claude needs an API key for Langflow. In Langflow, open Settings, then Langflow API Keys, then Add New."
+      claude_ask_key langflow "Paste the Langflow API key"
+    fi
+    claude_check_key openrouter "$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $(cat "$CLAUDE_KEYS/openrouter.key")")" \
+      "Check it on openrouter.ai (Settings, Keys)."
+    claude_check_key n8n "$(claude_http "http://127.0.0.1:${P_N8N}/api/v1/workflows?limit=1" "X-N8N-API-KEY: $(cat "$CLAUDE_KEYS/n8n.key")")" \
+      "Make a new one in n8n (Settings, n8n API)."
+    claude_check_key langflow "$(claude_http "http://127.0.0.1:${P_LANGFLOW}/api/v1/flows/" "x-api-key: $(cat "$CLAUDE_KEYS/langflow.key")")" \
+      "Make a new one in Langflow (Settings, Langflow API Keys)."
+  fi
+
+  # The course folder gets the templates once; after that it is the student's.
+  esc=$(printf '%s' "$KINGO_DIR" | sed 's/[&|\\]/\\&/g')
+  mkdir -p "$dir/.claude"
+  [ -f "$dir/CLAUDE.md" ] || cp "$tpl/CLAUDE.md" "$dir/CLAUDE.md"
+  [ -f "$dir/AGENTS.md" ] || cp "$tpl/AGENTS.md" "$dir/AGENTS.md"
+  [ -f "$dir/.claude/settings.json" ] || sed "s|__KINGO_DIR__|$esc|g" "$tpl/settings.json" > "$dir/.claude/settings.json"
+  # The profile follows this folder: ports from .env.local, changes from kingo update.
+  mkdir -p "$prof"
+  sed -e "s|__N8N_PORT__|$P_N8N|g" -e "s|__LANGFLOW_PORT__|$P_LANGFLOW|g" "$tpl/nono-profile.json" > "$prof/kingo-claude.json"
+  # nono grants only folders that exist.
+  mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude"
+  case "$(uname -s)" in
+    Darwin) mkdir -p "$HOME/Library/Caches/claude-cli-nodejs" ;;
+    *)      mkdir -p "$HOME/.cache/claude-cli-nodejs" ;;
+  esac
+  # An Anthropic login made inside the sandbox lands here (nono blocks the keychain), where Claude itself can
+  # read it. The course does not use it: nono's ANTHROPIC_AUTH_TOKEN ranks above it.
+  if [ -f "$cfg/.credentials.json" ]; then
+    rm -f "$cfg/.credentials.json"
+    warn "removed an Anthropic login from $cfg: the course uses OpenRouter, and Claude could read the login there. Your own Claude Code login is not affected."
+  fi
+
+  if [ "${KINGO_CLAUDE_DRY_RUN:-}" = 1 ]; then
+    echo "dry run — would start in $dir:"
+    echo "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- claude --add-dir $KINGO_DIR $*"
+    return
+  fi
+  cd "$dir"
+  # Nothing goes to Anthropic: set here, outside the course folder, so editing settings.json cannot undo it.
+  CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
+  CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
+  PGHOST=127.0.0.1 PGPORT="$P_POSTGRES" PGUSER="$KINGO_USER" PGPASSWORD="$KINGO_PASSWORD" PGDATABASE=classroom \
+  OPENROUTER_API_KEY="$(cat "$CLAUDE_KEYS/openrouter.key")" \
+  KINGO_N8N_API_KEY="$(cat "$CLAUDE_KEYS/n8n.key")" \
+  KINGO_LANGFLOW_API_KEY="$(cat "$CLAUDE_KEYS/langflow.key")" \
+    exec nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- claude --add-dir "$KINGO_DIR" "$@"
+}
+
 # ── smoke: rigorous verification (exact codes + stability + bindings + hub) ───
 assert_loopback() {
   # Every published port MUST bind to 127.0.0.1 (plan §5). `compose config`
@@ -2438,6 +2582,8 @@ case "${1:-help}" in
   credentials|creds) cmd_credentials ;;
   version|--version) cmd_version ;;
   mcp)               cmd_mcp ;;
+  claude)            shift; cmd_claude "$@" ;;
+  yolo)              shift; cmd_claude --dangerously-skip-permissions "$@" ;;
   logs)              select_engine; shift; inactive_hint "$@"; compose logs --tail=100 -f "$@" ;;
   restart)           select_engine; ensure_ready; shift; inactive_hint "$@"; compose restart "$@" ;;
   mode)              shift; cmd_mode "${1:-}" ;;
@@ -2479,6 +2625,11 @@ kingo — classroom stack helper (Podman or Docker, no VM)
                       on a Mac can also set it (kingo memory 5 / 'auto' = by mode)
   kingo version       which stack am I running? (ask students for this)
   kingo mcp           print the Jupyter MCP endpoint + bearer token
+  kingo claude        start Claude Code for your project in a sandbox: it
+                      writes only in claude/ and works on n8n, Langflow and
+                      PostgreSQL (asks for your keys the first time)
+  kingo yolo          the same, but Claude works without asking you first
+                      (the sandbox protects your laptop either way)
   kingo logs [svc]    follow logs (e.g. kingo logs langflow)
   kingo restart [svc] restart everything or one service
   kingo pull          download all images, one at a time with retries

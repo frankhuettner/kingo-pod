@@ -1,0 +1,78 @@
+{
+  // nono profile for `kingo claude` — written to ~/.config/nono/profiles/kingo-claude.json
+  // on every start (ports filled in), from setup/claude/nono-profile.json.
+  // Claude writes only to the course folder (claude/) and its own config (~/.kingo-claude);
+  // kingo claude adds read access to the kingo-pod folder (--read). The network stays open.
+  // nono's proxy injects the keys for OpenRouter, n8n and Langflow, so Claude only ever
+  // sees placeholders. Checked with nono 0.59 and 0.81 (nono profile validate).
+  "extends": "default",
+  "meta": {
+    "name": "kingo-claude",
+    "version": "0.3.0",
+    "description": "Kingo: Claude Code via OpenRouter; writes only to the course folder; keys for OpenRouter, n8n and Langflow injected by the proxy"
+  },
+  "groups": {
+    "include": [
+      "git_config",
+      "node_runtime",
+      "python_runtime",
+      "unlink_protection",
+      { "name": "claude_cache_linux", "when": "linux" },
+      { "name": "linux_sysfs_read", "when": "linux" }
+    ]
+  },
+  "workdir": { "access": "readwrite" },
+  "filesystem": {
+    // A separate Claude config: the student's own ~/.claude stays untouched and invisible.
+    "allow": [
+      "$HOME/.kingo-claude",
+      "$HOME/.kingo-claude.lock",
+      "$HOME/.local/state/claude/locks",
+      "$HOME/.cache/claude",
+      { "path": "$HOME/Library/Caches/claude-cli-nodejs", "when": "macos" }
+    ],
+    // The Claude Code binary from the native installer.
+    "read": ["$HOME/.local/share/claude"]
+  },
+  "environment": {
+    // Only these variables reach Claude; everything else (other API keys, .env) is dropped.
+    "allow_vars": [
+      "PATH", "HOME", "USER", "LOGNAME", "SHELL",
+      "TERM", "TERM_PROGRAM", "COLORTERM", "LANG", "LC_*", "TZ",
+      "XDG_RUNTIME_DIR",
+      "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_TMPDIR", "TMPDIR",
+      "CLAUDE_CODE_DISABLE_ARTIFACT", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING",
+      "PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE"
+    ]
+  },
+  "network": {
+    // No allow_domain: the network stays open. The routes only inject keys.
+    "credentials": ["anthropic", "n8n", "langflow"],
+    "custom_credentials": {
+      // Named "anthropic" so nono sets ANTHROPIC_BASE_URL=http://127.0.0.1:<port>/anthropic.
+      "anthropic": {
+        "upstream": "https://openrouter.ai/api",
+        "credential_key": "env://OPENROUTER_API_KEY",
+        "env_var": "ANTHROPIC_AUTH_TOKEN",
+        "inject_header": "Authorization",
+        "credential_format": "Bearer {}"
+      },
+      // nono sets N8N_BASE_URL; Claude sends X-N8N-API-KEY: $N8N_API_KEY (a placeholder).
+      "n8n": {
+        "upstream": "http://127.0.0.1:__N8N_PORT__",
+        "credential_key": "env://KINGO_N8N_API_KEY",
+        "env_var": "N8N_API_KEY",
+        "inject_header": "X-N8N-API-KEY",
+        "credential_format": "{}"
+      },
+      // nono sets LANGFLOW_BASE_URL; Claude sends x-api-key: $LANGFLOW_API_KEY (a placeholder).
+      "langflow": {
+        "upstream": "http://127.0.0.1:__LANGFLOW_PORT__",
+        "credential_key": "env://KINGO_LANGFLOW_API_KEY",
+        "env_var": "LANGFLOW_API_KEY",
+        "inject_header": "x-api-key",
+        "credential_format": "{}"
+      }
+    }
+  }
+}
