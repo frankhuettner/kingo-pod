@@ -8,6 +8,7 @@ goes wrong. Bookmark it — you won't need the setup guide again.
 > **Jump to:** [Your services](#your-services) ·
 > [Everyday use](#everyday-use) · [Modes](#modes-which-services-run) ·
 > [Your files](#your-own-files--the-shared-folder) ·
+> [Claude Code](#claude-code--your-coding-agent) ·
 > [Update](#keeping-up-to-date) ·
 > [If something breaks](#if-something-breaks) · [FAQ](#faq)
 
@@ -73,6 +74,7 @@ then one command per job:
 | `./kingo mode` | which services run — and `./kingo mode full` / `abp` / … switches (see [Modes](#modes-which-services-run)) |
 | `./kingo memory` | how much memory the containers may use; `./kingo memory 5` changes it |
 | `./kingo mail` | set up the mailbox for the mail assistant (n8n workshop); `./kingo mail help` shows the rest |
+| `./kingo claude` | start Claude Code, your coding agent, in its sandbox (see [Claude Code](#claude-code--your-coding-agent)) |
 | `./kingo doctor` | something's wrong? start here |
 | `./kingo version` | which version am I running? (send this when you ask for help) |
 | `./kingo update` | get the newest class files + images (run it when the instructor announces an update) |
@@ -164,6 +166,81 @@ outside this one folder is reachable from Langflow.
 > from Finder or Terminal may then need `sudo rm`. Files **you** put in are
 > never affected. With Podman (the default) this does not happen.
 
+## Claude Code — your coding agent
+
+Claude Code is an AI that works with you in Terminal. It reads and writes
+files, runs commands, and in kingo-pod it can change your n8n workflows, your
+Langflow flows and your database. It uses the model GLM 5.3 Flash, paid with
+the OpenRouter key Yanbo gave you.
+
+It runs in a **sandbox** called nono: on your Mac it can write in one folder
+only, `~/kingo-pod/claude`. It can read the rest of `kingo-pod` to understand
+the stack, and nothing else on your Mac.
+
+**Install it once.** One line installs nono, the database tool `psql` and
+Claude Code:
+
+```
+brew install nono libpq && curl -fsSL https://claude.ai/install.sh | bash
+```
+
+> **Already use Claude Code?** Run the line anyway: it installs Claude Code
+> the way Anthropic recommends, or brings it up to date. Your own settings and
+> your login stay as they are. You installed it with Homebrew or npm instead?
+> Then you now have it twice. `./kingo claude` always takes the new one. To
+> keep only the new one, remove the old one: `brew uninstall --cask claude-code`
+> or `npm uninstall -g @anthropic-ai/claude-code`.
+
+**Make a key in n8n for Claude.** In n8n, click **Settings** at the bottom of
+the left sidebar, then **n8n API**, then **Create API key**. Label: `claude`.
+Expiration: **Never**. Click **Save** and copy the key: n8n shows it only once.
+
+**Start it:**
+
+```
+cd ~/kingo-pod && ./kingo claude
+```
+
+Always start it this way: only `./kingo claude` (or `./kingo yolo`) sets it
+up for the course. A plain `claude` is a standard Claude Code with
+Anthropic's settings — no sandbox, no keys, your own `~/.claude`.
+
+The first time, it asks for two keys: your OpenRouter key and the n8n key you
+just made. Paste each one and press Enter; you do not see a key as you paste
+it. The key for Langflow it makes by itself. Then Claude Code asks a few
+questions of its own: pick a look, and say **Yes** when it asks whether you
+trust the folder. To stop, type `/exit`. Every next time, `./kingo claude`
+starts it right away.
+
+**Tell it your team's rules.** Claude reads the file
+`~/kingo-pod/claude/AGENTS.md` at every start. Paste your team's copy of
+`ws2_rules.html` into it, as the file explains, then start Claude again. This
+line opens the file in TextEdit:
+
+```
+open -e ~/kingo-pod/claude/AGENTS.md
+```
+
+| Claude can | Claude cannot |
+|---|---|
+| read and write in `~/kingo-pod/claude` | write anywhere else on your Mac |
+| read `kingo-pod`: `compose.yml`, the guides | change `kingo-pod`, or run `./kingo` |
+| change your n8n workflows, Langflow flows and database | see your keys: it gets stand-ins |
+| look things up on the web | see your own Claude Code settings, if you use Claude Code already |
+
+**It asks before every command,** unless you start it with
+`./kingo yolo`. Inside the sandbox, Claude Code's requests for permission do not
+protect your Mac — the sandbox does that either way — but they show you every
+change to your workflows, flows and database before it happens. Without them,
+save your workflows and flows first with `./kingo backup` (your own tables are
+not in it). And only run a command in your
+own Terminal if you understand it: Claude cannot leave its sandbox, but a
+command you type can.
+
+> **A key stopped working?** `./kingo claude` checks the keys at every start.
+> A key that a service refuses is deleted, and the next start asks for it
+> again. The keys are kept in `~/.config/kingo/`, where Claude cannot read them.
+
 ## Keeping up to date
 
 **One line brings your installation up to date** — newest class files, images
@@ -206,6 +283,7 @@ what to do:
 | `Podman has no ready machine` / Podman won't start | Run `podman machine start`, then `./kingo up`. Still broken: `podman machine stop`, then `podman machine start`. |
 | `Docker is installed but not running` | Open the Docker Desktop app, wait until it says "running", try again. |
 | Mac feels slow / fans spin (8 GB Macs) | Run a lighter [mode](#modes-which-services-run): `./kingo mode abp` (4 GB) — or, for one tool at a time, `./kingo mode langflow` (3.5 GB) or `./kingo mode n8n` (2.5 GB). The containers keep their memory no matter what, so everything else on the Mac shares the rest — above all a browser with dozens of tabs, which alone can take 2–3 GB (the Langflow and n8n tabs count too): close what you do not need. `./kingo down` when you are not using the stack also helps. |
+| `brew: command not found` when you install Claude Code | The line needs Homebrew. It is missing, or Terminal does not find it. Do [Step 1 — Install Homebrew](STUDENT-GUIDE-MAC.md#step-1--install-homebrew), with its "Next steps" lines. Open a new Terminal window and run the line again. |
 | Anything else | `./kingo down`, then `./kingo up`. If it persists: screenshot the error and ask the instructor / TA. |
 
 ## FAQ

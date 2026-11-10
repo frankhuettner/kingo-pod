@@ -11,6 +11,7 @@ Everything with a `./kingo` in it is typed in the **Ubuntu** app, inside the
 > **Jump to:** [Your services](#your-services) ·
 > [Everyday use](#everyday-use) · [Modes](#modes-which-services-run) ·
 > [Your files](#your-own-files--the-shared-folder) ·
+> [Claude Code](#claude-code--your-coding-agent) ·
 > [Update](#keeping-up-to-date) ·
 > [If something breaks](#if-something-breaks) · [FAQ](#faq)
 
@@ -77,6 +78,7 @@ then one command per job:
 | `./kingo mode` | which services run — and `./kingo mode full` / `abp` / … switches (see [Modes](#modes-which-services-run)) |
 | `./kingo memory` | how much memory the containers have and use |
 | `./kingo mail` | set up the mailbox for the mail assistant (n8n workshop); `./kingo mail help` shows the rest |
+| `./kingo claude` | start Claude Code, your coding agent, in its sandbox (see [Claude Code](#claude-code--your-coding-agent)) |
 | `./kingo doctor` | something's wrong? start here |
 | `./kingo version` | which version am I running? (send this when you ask for help) |
 | `./kingo update` | get the newest class files + images (run it when the instructor announces an update) |
@@ -177,6 +179,81 @@ outside this one folder is reachable from Langflow.
 > folder end up owned by `root` inside Ubuntu — deleting those needs
 > `sudo rm`. Files **you** put in are never affected. With Podman (the
 > default) this does not happen.
+
+## Claude Code — your coding agent
+
+Claude Code is an AI that works with you in the Ubuntu app. It reads and
+writes files, runs commands, and in kingo-pod it can change your n8n
+workflows, your Langflow flows and your database. It uses the model GLM 5.3
+Flash, paid with the OpenRouter key Yanbo gave you.
+
+It runs in a **sandbox** called nono: on your laptop it can write in one
+folder only, `~/kingo-pod/claude`. It can read the rest of `kingo-pod` to
+understand the stack, and nothing else on your laptop.
+
+**Install it once.** One line installs nono, the database tool `psql` and
+Claude Code (it asks for your Linux password):
+
+```bash
+curl -fsSL https://nono.sh/install.sh | sh && sudo apt install -y postgresql-client && curl -fsSL https://claude.ai/install.sh | bash
+```
+
+> **Already use Claude Code?** Run the line anyway: it installs Claude Code
+> the way Anthropic recommends, or brings it up to date. Your own settings and
+> your login stay as they are. You installed it in Ubuntu with npm instead?
+> Then you now have it twice. `./kingo claude` always takes the new one. To
+> keep only the new one, remove the old one:
+> `npm uninstall -g @anthropic-ai/claude-code`.
+
+**Make a key in n8n for Claude.** In n8n, click **Settings** at the bottom of
+the left sidebar, then **n8n API**, then **Create API key**. Label: `claude`.
+Expiration: **Never**. Click **Save** and copy the key: n8n shows it only once.
+
+**Start it:**
+
+```bash
+cd ~/kingo-pod && ./kingo claude
+```
+
+Always start it this way: only `./kingo claude` (or `./kingo yolo`) sets it
+up for the course. A plain `claude` is a standard Claude Code with
+Anthropic's settings — no sandbox, no keys, your own `~/.claude`.
+
+The first time, it asks for two keys: your OpenRouter key and the n8n key you
+just made. Paste each one (right-click in the Ubuntu window) and press Enter;
+you do not see a key as you paste it. The key for Langflow it makes by itself.
+Then Claude Code asks a few questions of its own: pick a look, and say **Yes**
+when it asks whether you trust the folder. To stop, type `/exit`. Every next
+time, `./kingo claude` starts it right away.
+
+**Tell it your team's rules.** Claude reads the file
+`~/kingo-pod/claude/AGENTS.md` at every start. Paste your team's copy of
+`ws2_rules.html` into it, as the file explains, then start Claude again. This
+line opens the file in Notepad:
+
+```bash
+cd ~/kingo-pod/claude && notepad.exe AGENTS.md
+```
+
+| Claude can | Claude cannot |
+|---|---|
+| read and write in `~/kingo-pod/claude` | write anywhere else on your laptop |
+| read `kingo-pod`: `compose.yml`, the guides | change `kingo-pod`, or run `./kingo` |
+| change your n8n workflows, Langflow flows and database | see your keys: it gets stand-ins |
+| look things up on the web | see your own Claude Code settings, if you use Claude Code already |
+
+**It asks before every command,** unless you start it with
+`./kingo yolo`. Inside the sandbox, Claude Code's requests for permission do not
+protect your laptop — the sandbox does that either way — but they show you every
+change to your workflows, flows and database before it happens. Without them,
+save your workflows and flows first with `./kingo backup` (your own tables are
+not in it). And only run a command in your
+own Ubuntu window if you understand it: Claude cannot leave its sandbox, but a
+command you type can.
+
+> **A key stopped working?** `./kingo claude` checks the keys at every start.
+> A key that a service refuses is deleted, and the next start asks for it
+> again. The keys are kept in `~/.config/kingo/`, where Claude cannot read them.
 
 ## Keeping up to date
 

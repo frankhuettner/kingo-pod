@@ -9,6 +9,10 @@
 # Claude Code local session state
 .claude/
 
+# The course folder of `kingo claude` (the student's own work, made from
+# setup/claude/ on the first start) — never part of the class repo.
+/claude/
+
 # editor / local
 *.swp
 *.log
