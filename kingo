@@ -1108,7 +1108,8 @@ cmd_claude() {
   [ -f "$dir/.claude/settings.json" ] || sed "s|__KINGO_DIR__|$esc|g" "$tpl/settings.json" > "$dir/.claude/settings.json"
   # The profile follows this folder: ports from .env.local, changes from kingo update.
   mkdir -p "$prof"
-  sed -e "s|__N8N_PORT__|$P_N8N|g" -e "s|__LANGFLOW_PORT__|$P_LANGFLOW|g" "$tpl/nono-profile.json" > "$prof/kingo-claude.json"
+  sed -e "s|__N8N_PORT__|$P_N8N|g" -e "s|__LANGFLOW_PORT__|$P_LANGFLOW|g" -e "s|__POSTGRES_PORT__|$P_POSTGRES|g" \
+    "$tpl/nono-profile.json" > "$prof/kingo-claude.json"
   # nono grants only folders that exist.
   mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude"
   case "$(uname -s)" in

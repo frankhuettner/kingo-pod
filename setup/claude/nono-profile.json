@@ -2,14 +2,23 @@
   // nono profile for `kingo claude` — written to ~/.config/nono/profiles/kingo-claude.json
   // on every start (ports filled in), from setup/claude/nono-profile.json.
   // Claude writes only to the course folder (claude/) and its own config (~/.kingo-claude);
-  // kingo claude adds read access to the kingo-pod folder (--read). The network stays open.
-  // nono's proxy injects the keys for OpenRouter, n8n and Langflow, so Claude only ever
-  // sees placeholders. Checked with nono 0.59 and 0.81 (nono profile validate).
+  // kingo claude adds read access to the kingo-pod folder (--read). The network stays open:
+  // nono's proxy lets every host through. It injects the keys for OpenRouter, n8n and Langflow,
+  // so Claude only ever sees placeholders. psql goes to PostgreSQL directly (open_port).
+  // Checked with nono 0.81 (nono profile validate, nono run --dry-run); every key here exists in 0.59.
   "extends": "default",
   "meta": {
     "name": "kingo-claude",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "description": "Kingo: Claude Code via OpenRouter; writes only to the course folder; keys for OpenRouter, n8n and Langflow injected by the proxy"
+  },
+  "security": {
+    // Windows: WSL2 with Microsoft's kernel (6.6, Landlock V3) cannot force Claude's traffic through
+    // nono's proxy, and nono then refuses to start ("proxy-only network mode cannot be
+    // kernel-enforced"). With this line it starts and prints a warning. Files stay protected and the
+    // keys stay in the proxy; only the network is not locked, and this profile leaves it open anyway.
+    // No effect on a Mac.
+    "wsl2_proxy_policy": "insecure_proxy"
   },
   "groups": {
     "include": [
@@ -46,8 +55,11 @@
     ]
   },
   "network": {
-    // No allow_domain: the network stays open. The routes only inject keys.
+    // No allow_domain: the proxy lets every host through. The routes only inject keys.
     "credentials": ["anthropic", "n8n", "langflow"],
+    // With key routes, nono lets Claude connect only to nono's own proxy port.
+    // psql does not use the proxy, so the PostgreSQL port on localhost is opened here.
+    "open_port": [__POSTGRES_PORT__],
     "custom_credentials": {
       // Named "anthropic" so nono sets ANTHROPIC_BASE_URL=http://127.0.0.1:<port>/anthropic.
       "anthropic": {
