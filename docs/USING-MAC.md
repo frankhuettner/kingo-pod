@@ -186,7 +186,7 @@ brew install nono libpq && curl -fsSL https://claude.ai/install.sh | bash
 
 > **Already use Claude Code?** Run the line anyway: it installs Claude Code
 > the way Anthropic recommends, or brings it up to date. Your own settings and
-> your login stay as they are. You installed Claude Code with Homebrew or npm
+> your login stay as they are. Did you install Claude Code with Homebrew or npm
 > instead? Then you now have two installations. `./kingo claude` always takes
 > the new one. To
 > keep only the new one, remove the old one: `brew uninstall --cask claude-code`
