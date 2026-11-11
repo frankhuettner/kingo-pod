@@ -200,8 +200,9 @@ curl -fsSL https://nono.sh/install.sh | sh && sudo apt install -y postgresql-cli
 
 > **Already use Claude Code?** Run the line anyway: it installs Claude Code
 > the way Anthropic recommends, or brings it up to date. Your own settings and
-> your login stay as they are. You installed it in Ubuntu with npm instead?
-> Then you now have it twice. `./kingo claude` always takes the new one. To
+> your login stay as they are. You installed Claude Code in Ubuntu with npm
+> instead? Then you now have two installations. `./kingo claude` always takes
+> the new one. To
 > keep only the new one, remove the old one:
 > `npm uninstall -g @anthropic-ai/claude-code`.
 
