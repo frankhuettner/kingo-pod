@@ -1000,10 +1000,12 @@ cmd_mcp() {
 # read this folder but not change it. nono's proxy injects the keys for
 # OpenRouter, n8n and Langflow: Claude only ever sees placeholders. The keys
 # live in ~/.config/kingo/*.key (mode 600), outside everything the sandbox
-# grants. The templates are in setup/claude/; claude/ gets them once, and the
+# grants, and nono reads them from there: they are never in an environment
+# variable, which a program in the sandbox could read from the nono process
+# on a Mac. The templates are in setup/claude/; claude/ gets them once, and the
 # nono profile is rewritten on every start (ports, a kingo update).
 CLAUDE_KEYS="$HOME/.config/kingo"
-CLAUDE_NONO_MIN=59   # nono 0.59: env:// keys (0.50), the D-Bus fix (0.55); the profile is checked on 0.59 and 0.81
+CLAUDE_NONO_MIN=80   # nono 0.80: the profile's Seatbelt rule for PostgreSQL takes effect on a Mac; platform_overrides (0.68), the D-Bus fix (0.55)
 
 claude_http() { # url header -> HTTP code (000: nothing answered)
   curl -s -o /dev/null -m 10 -w '%{http_code}' -H "$2" "$1" 2>/dev/null || echo 000
@@ -1055,7 +1057,7 @@ cmd_claude() {
       return ;;
   esac
   local dir="$KINGO_DIR/claude" tpl="$KINGO_DIR/setup/claude" cfg="$HOME/.kingo-claude"
-  local prof="${XDG_CONFIG_HOME:-$HOME/.config}/nono/profiles" v vmaj vmin esc
+  local prof="${XDG_CONFIG_HOME:-$HOME/.config}/nono/profiles" v vmaj vmin esc kesc
 
   # ~/.local/bin goes first: Claude Code's native installer puts it there, and on WSL nono's
   # install script too. An older Claude Code from npm or a Homebrew cask (on WSL even
@@ -1107,8 +1109,15 @@ cmd_claude() {
   [ -f "$dir/AGENTS.md" ] || cp "$tpl/AGENTS.md" "$dir/AGENTS.md"
   [ -f "$dir/.claude/settings.json" ] || sed "s|__KINGO_DIR__|$esc|g" "$tpl/settings.json" > "$dir/.claude/settings.json"
   # The profile follows this folder: ports from .env.local, changes from kingo update.
+  # The PostgreSQL port goes into a sandbox rule there, so it must be a port and nothing else.
+  case "$P_POSTGRES" in
+    ''|0*|*[!0-9]*|??????*) die "KINGO_PORT_POSTGRES must be a port number, not '$P_POSTGRES'. Check .env.local." ;;
+  esac
+  [ "$P_POSTGRES" -le 65535 ] || die "KINGO_PORT_POSTGRES must be a port number, not '$P_POSTGRES'. Check .env.local."
+  kesc=$(printf '%s' "$CLAUDE_KEYS" | sed 's/[&|\\]/\\&/g')
   mkdir -p "$prof"
   sed -e "s|__N8N_PORT__|$P_N8N|g" -e "s|__LANGFLOW_PORT__|$P_LANGFLOW|g" -e "s|__POSTGRES_PORT__|$P_POSTGRES|g" \
+      -e "s|__KEYS_DIR__|$kesc|g" \
     "$tpl/nono-profile.json" > "$prof/kingo-claude.json"
   # nono grants only folders that exist.
   mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude"
@@ -1133,9 +1142,6 @@ cmd_claude() {
   CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
   CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
   PGHOST=127.0.0.1 PGPORT="$P_POSTGRES" PGUSER="$KINGO_USER" PGPASSWORD="$KINGO_PASSWORD" PGDATABASE=classroom \
-  OPENROUTER_API_KEY="$(cat "$CLAUDE_KEYS/openrouter.key")" \
-  KINGO_N8N_API_KEY="$(cat "$CLAUDE_KEYS/n8n.key")" \
-  KINGO_LANGFLOW_API_KEY="$(cat "$CLAUDE_KEYS/langflow.key")" \
     exec nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- claude --add-dir "$KINGO_DIR" "$@"
 }
 
