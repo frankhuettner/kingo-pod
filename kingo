@@ -1195,6 +1195,15 @@ cmd_claude() {
     warn "removed an Anthropic login from $cfg: the course uses OpenRouter, and Claude could read the login there. Your own Claude Code login is not affected."
   fi
 
+  # Claude Code 2.1.283 and newer start in auto mode: a model, here the course's, decides which commands run, and
+  # Claude no longer asks. The course starts in the mode that asks; Shift+Tab still switches to the others. A mode
+  # given on the command line (kingo yolo gives one) wins.
+  local a ask=1
+  for a in "$@"; do
+    case "$a" in --permission-mode|--permission-mode=*|--dangerously-skip-permissions) ask=0 ;; esac
+  done
+  if [ "$ask" = 1 ]; then set -- --permission-mode default "$@"; fi
+
   if [ "${KINGO_CLAUDE_DRY_RUN:-}" = 1 ]; then
     echo "dry run — would start in $dir:"
     echo "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- claude --add-dir $KINGO_DIR $*"
@@ -1202,7 +1211,10 @@ cmd_claude() {
   fi
   cd "$dir"
   # Nothing goes to Anthropic: set here, outside the course folder, so editing settings.json cannot undo it.
+  # CLAUDE_CODE_MAX_CONTEXT_TOKENS: Claude Code does not know the course's model, assumes a context of 200k tokens
+  # and warns about it at every start. Saying 200k here keeps that size and drops the warning.
   CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
+  CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
   CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
   PGHOST=127.0.0.1 PGPORT="$P_POSTGRES" PGUSER="$KINGO_USER" PGPASSWORD="$KINGO_PASSWORD" PGDATABASE=classroom \
     exec nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- claude --add-dir "$KINGO_DIR" "$@"
