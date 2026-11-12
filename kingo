@@ -1045,6 +1045,66 @@ claude_check_key() { # name code-from-claude_http what-to-do
   esac
 }
 
+# A copy of every n8n workflow and Langflow flow, taken before Claude starts:
+# one JSON file each, as the two APIs give it, in backups/flows/<time>/
+# (gitignored). Claude can read that folder but not write there, so a session
+# cannot spoil its own way back. A file can be imported again in n8n or in
+# Langflow. The ids and names come from the two databases with psql, because
+# JSON is not parsed on the host;
+# Langflow's own example flows (Starter Projects, no user) are left out.
+# The newest CLAUDE_BACKUP_KEEP folders stay. Never fatal: Claude starts without
+# a copy too, after a warning.
+CLAUDE_BACKUP_KEEP=10
+
+claude_backup_name() { # name id -> a file name that every file system takes
+  printf '%s__%s.json' "$(printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9._ ()-' '_' | cut -c1-80 | sed 's/^[.-]/_/')" "$2"
+}
+
+claude_backup_get() { # key-file header-name url file -> 0 if the file was written; the key stays out of the process list
+  printf 'header = "%s: %s"\n' "$2" "$(cat "$1")" | curl -sf -m 30 -K - -o "$4" "$3" 2>/dev/null && [ -s "$4" ] && return 0
+  rm -f "$4"
+  return 1
+}
+
+claude_backup_list() { # database sql -> lines "id<TAB>name", nothing if the database does not answer
+  PGPASSWORD="$KINGO_PASSWORD" psql -X -q -h 127.0.0.1 -p "$P_POSTGRES" -U "$KINGO_USER" -d "$1" -tA -F "$(printf '\t')" -c "$2" 2>/dev/null || true
+}
+
+claude_backup_flows() {
+  local root="$KINGO_DIR/backups/flows" dir id name n=0 m=0 all d k tab
+  tab="$(printf '\t')"
+  command -v psql >/dev/null 2>&1 \
+    || { warn "no copy of your workflows and flows was saved: psql is missing"; return 0; }
+  dir="$root/$(date +%Y-%m-%d-%H%M%S)"
+  mkdir -p "$dir/n8n" "$dir/langflow" 2>/dev/null \
+    || { warn "no copy of your workflows and flows was saved: could not create $dir"; return 0; }
+  echo "Saving a copy of your workflows and flows ..."
+  while IFS="$tab" read -r id name; do
+    case "$id" in ''|*[!A-Za-z0-9_-]*) continue ;; esac
+    claude_backup_get "$CLAUDE_KEYS/n8n.key" X-N8N-API-KEY "http://127.0.0.1:${P_N8N}/api/v1/workflows/$id" \
+      "$dir/n8n/$(claude_backup_name "$name" "$id")" && n=$((n + 1))
+  done <<<"$(claude_backup_list n8n 'select id, name from workflow_entity order by name')"
+  while IFS="$tab" read -r id name; do
+    case "$id" in ''|*[!A-Za-z0-9_-]*) continue ;; esac
+    claude_backup_get "$CLAUDE_KEYS/langflow.key" x-api-key "http://127.0.0.1:${P_LANGFLOW}/api/v1/flows/$id" \
+      "$dir/langflow/$(claude_backup_name "$name" "$id")" && m=$((m + 1))
+  done <<<"$(claude_backup_list langflow 'select id, name from flow where user_id is not null order by name')"
+  if [ "$n" -eq 0 ] && [ "$m" -eq 0 ]; then
+    rmdir "$dir/n8n" "$dir/langflow" "$dir" 2>/dev/null || true
+    warn "no copy of your workflows and flows was saved: n8n and Langflow gave none"
+    return 0
+  fi
+  echo "Saved $n n8n workflows and $m Langflow flows in backups/flows/${dir##*/}/"
+  # Keep the newest ones — only ours, by name.
+  all="$(ls -1 "$root" 2>/dev/null | LC_ALL=C grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}$' | LC_ALL=C sort || true)"
+  k=$(printf '%s\n' "$all" | wc -l | tr -d ' ')
+  while IFS= read -r d; do
+    [ "$k" -gt "$CLAUDE_BACKUP_KEEP" ] || break
+    rm -rf "${root:?}/$d"
+    k=$((k - 1))
+  done <<<"$all"
+}
+
 cmd_claude() {
   case "${1:-}" in
     help|-h|--help)
@@ -1052,6 +1112,7 @@ cmd_claude() {
       echo "  Claude writes only in $KINGO_DIR/claude/, reads this folder, and works on n8n, Langflow and PostgreSQL."
       echo "  The first start asks for your OpenRouter key and an n8n API key; keys are kept in $CLAUDE_KEYS/."
       echo "  A key that a service refuses is deleted, and the next start asks again."
+      echo "  Every start saves a copy of each n8n workflow and Langflow flow in $KINGO_DIR/backups/flows/ (the newest $CLAUDE_BACKUP_KEEP stay)."
       echo "  Claude asks before every command; ./kingo yolo lets it work"
       echo "  without asking (the sandbox protects your laptop either way; ./kingo backup saves your workflows and flows)."
       return ;;
@@ -1081,6 +1142,12 @@ cmd_claude() {
   command -v psql >/dev/null 2>&1 \
     || warn "psql is missing, so Claude cannot reach PostgreSQL. Mac: brew install libpq — Windows (WSL): sudo apt install postgresql-client"
 
+  # The PostgreSQL port goes into a sandbox rule in the profile, so it must be a port and nothing else.
+  case "$P_POSTGRES" in
+    ''|0*|*[!0-9]*|??????*) die "KINGO_PORT_POSTGRES must be a port number, not '$P_POSTGRES'. Check .env.local." ;;
+  esac
+  [ "$P_POSTGRES" -le 65535 ] || die "KINGO_PORT_POSTGRES must be a port number, not '$P_POSTGRES'. Check .env.local."
+
   if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ]; then
     { check "$P_N8N" /healthz && check "$P_LANGFLOW" /health; } \
       || die "n8n and Langflow must be running first: ./kingo up (in mode abp or full)"
@@ -1100,6 +1167,7 @@ cmd_claude() {
       "Make a new one in n8n (Settings, n8n API)."
     claude_check_key langflow "$(claude_http "http://127.0.0.1:${P_LANGFLOW}/api/v1/flows/" "x-api-key: $(cat "$CLAUDE_KEYS/langflow.key")")" \
       "Make a new one in Langflow (Settings, Langflow API Keys)."
+    claude_backup_flows
   fi
 
   # The course folder gets the templates once; after that it is the student's.
@@ -1109,11 +1177,6 @@ cmd_claude() {
   [ -f "$dir/AGENTS.md" ] || cp "$tpl/AGENTS.md" "$dir/AGENTS.md"
   [ -f "$dir/.claude/settings.json" ] || sed "s|__KINGO_DIR__|$esc|g" "$tpl/settings.json" > "$dir/.claude/settings.json"
   # The profile follows this folder: ports from .env.local, changes from kingo update.
-  # The PostgreSQL port goes into a sandbox rule there, so it must be a port and nothing else.
-  case "$P_POSTGRES" in
-    ''|0*|*[!0-9]*|??????*) die "KINGO_PORT_POSTGRES must be a port number, not '$P_POSTGRES'. Check .env.local." ;;
-  esac
-  [ "$P_POSTGRES" -le 65535 ] || die "KINGO_PORT_POSTGRES must be a port number, not '$P_POSTGRES'. Check .env.local."
   kesc=$(printf '%s' "$CLAUDE_KEYS" | sed 's/[&|\\]/\\&/g')
   mkdir -p "$prof"
   sed -e "s|__N8N_PORT__|$P_N8N|g" -e "s|__LANGFLOW_PORT__|$P_LANGFLOW|g" -e "s|__POSTGRES_PORT__|$P_POSTGRES|g" \
