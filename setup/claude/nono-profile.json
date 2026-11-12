@@ -4,20 +4,20 @@
   // Claude writes only to the course folder (claude/) and its own config (~/.kingo-claude);
   // kingo claude adds read access to the kingo-pod folder (--read). The network stays open:
   // nono's proxy lets every host through. It injects the keys for OpenRouter, n8n and Langflow,
-  // so Claude only ever sees placeholders. psql goes to PostgreSQL directly (open_port).
-  // Checked with nono 0.81 (nono profile validate, nono run --dry-run); every key here exists in 0.59.
+  // which nono reads from the files in __KEYS_DIR__: the keys are never in an environment variable.
+  // psql goes to PostgreSQL directly: one rule for that port, at the end of this file.
+  // Needs nono 0.80. Checked on a Mac with nono 0.81 (nono profile validate, nono run --dry-run).
   "extends": "default",
   "meta": {
     "name": "kingo-claude",
-    "version": "0.3.1",
+    "version": "0.4.0",
     "description": "Kingo: Claude Code via OpenRouter; writes only to the course folder; keys for OpenRouter, n8n and Langflow injected by the proxy"
   },
   "security": {
     // Windows: WSL2 with Microsoft's kernel (6.6, Landlock V3) cannot force Claude's traffic through
     // nono's proxy, and nono then refuses to start ("proxy-only network mode cannot be
-    // kernel-enforced"). With this line it starts and prints a warning. Files stay protected and the
-    // keys stay in the proxy; only the network is not locked, and this profile leaves it open anyway.
-    // No effect on a Mac.
+    // kernel-enforced"). With this line it starts and prints a warning: on that kernel, the network
+    // is not locked. No effect on a Mac.
     "wsl2_proxy_policy": "insecure_proxy"
   },
   "groups": {
@@ -58,13 +58,12 @@
     // No allow_domain: the proxy lets every host through. The routes only inject keys.
     "credentials": ["anthropic", "n8n", "langflow"],
     // With key routes, nono lets Claude connect only to nono's own proxy port.
-    // psql does not use the proxy, so the PostgreSQL port on localhost is opened here.
-    "open_port": [__POSTGRES_PORT__],
+    // psql does not use the proxy: see the PostgreSQL rule at the end of this file.
     "custom_credentials": {
       // Named "anthropic" so nono sets ANTHROPIC_BASE_URL=http://127.0.0.1:<port>/anthropic.
       "anthropic": {
         "upstream": "https://openrouter.ai/api",
-        "credential_key": "env://OPENROUTER_API_KEY",
+        "credential_key": "file://__KEYS_DIR__/openrouter.key",
         "env_var": "ANTHROPIC_AUTH_TOKEN",
         "inject_header": "Authorization",
         "credential_format": "Bearer {}"
@@ -72,7 +71,7 @@
       // nono sets N8N_BASE_URL; Claude sends X-N8N-API-KEY: $N8N_API_KEY (a placeholder).
       "n8n": {
         "upstream": "http://127.0.0.1:__N8N_PORT__",
-        "credential_key": "env://KINGO_N8N_API_KEY",
+        "credential_key": "file://__KEYS_DIR__/n8n.key",
         "env_var": "N8N_API_KEY",
         "inject_header": "X-N8N-API-KEY",
         "credential_format": "{}"
@@ -80,11 +79,22 @@
       // nono sets LANGFLOW_BASE_URL; Claude sends x-api-key: $LANGFLOW_API_KEY (a placeholder).
       "langflow": {
         "upstream": "http://127.0.0.1:__LANGFLOW_PORT__",
-        "credential_key": "env://KINGO_LANGFLOW_API_KEY",
+        "credential_key": "file://__KEYS_DIR__/langflow.key",
         "env_var": "LANGFLOW_API_KEY",
         "inject_header": "x-api-key",
         "credential_format": "{}"
       }
     }
+  },
+  // PostgreSQL, the one port besides the proxy that Claude may connect to.
+  // Mac: a rule of its own for exactly this connection. nono's open_port would also let every
+  // program in the sandbox listen on any port (Seatbelt cannot limit listening to one port).
+  // nono puts such a rule after its own "(deny network*)" only since 0.80; before, it has no effect.
+  "unsafe_macos_seatbelt_rules": [
+    "(allow network-outbound (remote tcp \"localhost:__POSTGRES_PORT__\"))"
+  ],
+  // Linux and Windows (WSL2): open_port, which is limited to this port there.
+  "platform_overrides": {
+    "linux": { "network": { "open_port": [__POSTGRES_PORT__] } }
   }
 }
