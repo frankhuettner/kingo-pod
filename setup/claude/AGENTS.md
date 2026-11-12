@@ -44,6 +44,8 @@ The sandbox puts the real keys into your requests. Use the variables exactly as 
 
 1. Change workflows and flows through the n8n and Langflow APIs, never in the databases `n8n` and `langflow`.
 2. Before you change a workflow or a flow, save its current JSON in `backups/` in this folder.
+   `./kingo claude` also saves every workflow and flow at each start, one JSON file each, in
+   `backups/flows/` of the kingo-pod folder. You can read these files to put something back; you cannot change them.
 3. Ask before you delete anything: a workflow, a flow, a table, a row.
 4. Explain what you are about to do in plain words before you do it. The student is learning.
 5. When you ask the student something, number the questions (1., 2., 3.), so that they can answer by number.
