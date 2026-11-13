@@ -55,6 +55,32 @@ part_lock() {
   has "$out" twice-42 || { show "$out"; fail "the lock does not start under itself"; }
   ok "the lock starts under itself"
 
+  say "the network still works under the lock: a name of the internet, a page over HTTPS"
+  out=$(try 30 getent hosts github.com)
+  [ -n "$out" ] || fail "without the lock the name github.com does not resolve here: the check below would prove nothing"
+  out=$(try 30 "${LOCK[@]}" getent hosts github.com)
+  [ -n "$out" ] || fail "under the lock the name github.com does not resolve"
+  out=$(try 40 "${LOCK[@]}" curl -s -m 20 -o /dev/null -w 'https=%{http_code}' https://github.com)
+  has "$out" https=200 || { show "$out"; fail "under the lock curl did not get a page over HTTPS"; }
+  ok "github.com resolves, and curl gets the page"
+
+  if [ "$(uname -m)" = x86_64 ] && command -v gcc >/dev/null 2>&1; then
+    say "a call in the 32-bit convention (int 0x80), where socket has another number"
+    local dir; dir=$(mktemp -d)
+    gcc -O0 -o "$dir/int80" "$HERE/probe_int80.c" || fail "probe_int80.c did not compile"
+    out=$(try 10 "$dir/int80")
+    case "$out" in
+      int80-socket=-38) ok "this kernel takes no 32-bit calls at all: nothing to check" ;;
+      int80-socket=-*)  fail "without the lock the 32-bit call failed in an unexpected way ($out)" ;;
+      int80-socket=*)
+        out=$(try 10 "${LOCK[@]}" "$dir/int80")
+        [ "$out" = int80-socket=-38 ] || fail "under the lock a 32-bit call was not refused ($out)"
+        ok "without the lock it makes a Unix socket; under the lock it is refused as not there" ;;
+      *) show "$out"; fail "the 32-bit probe printed nothing usable" ;;
+    esac
+    rm -rf "$dir"
+  fi
+
   say "Docker's socket: curl, the docker command, Node.js"
   out=$(try 20 curl -s -m 5 -o /dev/null -w 'ping=%{http_code}' --unix-socket "$DOCKER_SOCK" http://d/_ping)
   has "$out" ping=200 || { show "$out"; fail "without the lock Docker does not answer: the checks below would prove nothing"; }
