@@ -1,4 +1,5 @@
-"""Setting up an account (`mailctl setup`, behind `kingo mail`): check the login, find the folders.
+"""Setting up an account (`mailctl config`, behind `kingo mail`): check the login, find the folders, and see which
+of the case's mails the account holds already.
 
 Signs in once over IMAP and once over SMTP; sends nothing. Folder names come from the server's
 SPECIAL-USE flags (\\Sent, \\Drafts, \\All, \\Archive), with common names as a fallback.
@@ -16,6 +17,8 @@ from .settings import Config
 GMAIL = {"gmail.com", "googlemail.com"}
 
 _LIST = re.compile(r'^\((?P<flags>[^)]*)\)\s+(?P<delim>"[^"]*"|NIL)\s+(?P<name>.+)$')
+_MESSAGE_ID = re.compile(rb"^message-id:[ \t]*(.*(?:\r?\n[ \t].*)*)", re.I | re.M)
+FETCH_BATCH = 2000   # mails per FETCH: Kaminski's mailbox in two rounds, a big real one without a huge answer
 
 
 def defaults(address):
@@ -54,6 +57,21 @@ def encode_utf7(name):
             wide.append(ch)
     flush()
     return "".join(out)
+
+
+def quoted(folder):
+    """A folder's name as an IMAP command takes it: modified UTF-7, in quotes."""
+    return '"' + encode_utf7(folder).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def message_id(value):
+    """A Message-ID as two of them are compared: without the angle brackets and the line breaks of a folded header,
+    in small letters. None stays None."""
+    if not value:
+        return None
+    if isinstance(value, bytes):
+        value = value.decode("ascii", "replace")
+    return re.sub(r"\s+", "", value).strip("<>").lower() or None
 
 
 def parse_list(lines):
@@ -137,11 +155,54 @@ def folder_counts(cfg, paths, password=None):
         with imaplib.IMAP4_SSL(cfg.imap_host, cfg.imap_port, ssl_context=ctx, timeout=30) as m:
             m.login(cfg.address, password)
             for _, f in pairs:
-                quoted = '"' + encode_utf7(f).replace("\\", "\\\\").replace('"', '\\"') + '"'
-                typ, data = m.status(quoted, "(MESSAGES)")
+                typ, data = m.status(quoted(f), "(MESSAGES)")
                 hit = re.search(rb"MESSAGES (\d+)", data[0] or b"") if typ == "OK" and data else None
                 far[f] = int(hit.group(1)) if hit else None
     return [(local, count_maildir(paths.folder(local)), far[f]) for local, f in pairs]
+
+
+def seed_folders(cfg):
+    """The provider's folders a seed fills: on Gmail All Mail, which holds Sent too; elsewhere the archive folder
+    (unless it is still to be created) and Sent."""
+    keys = ["archive"] if cfg.gmail else (["sent"] if cfg.create_archive else ["archive", "sent"])
+    return [cfg.folders[k] for k in keys if cfg.folders.get(k)]
+
+
+def provider_message_ids(cfg, password=None):
+    """The Message-IDs of every mail in seed_folders(cfg), read in one pass (FETCH of that one header, FETCH_BATCH
+    mails at a time, read-only): which of the case's mails the account holds already, so a second kingo-pod on the
+    same test account uploads none of them twice (Frank, 7 Nov 2026: "es soll selbst erkennen"). In tests from the
+    Maildir that plays the provider. Raises when a folder cannot be read: then nobody can tell what is there."""
+    ids = set()
+    if cfg.test_far_maildir:
+        for f in seed_folders(cfg):
+            for sub in ("cur", "new"):
+                d = Path(cfg.test_far_maildir) / f / sub
+                for p in sorted(d.iterdir()) if d.is_dir() else []:
+                    if p.is_file() and not p.name.startswith("."):
+                        hit = _MESSAGE_ID.search(p.read_bytes().replace(b"\r\n", b"\n").split(b"\n\n", 1)[0])
+                        ids.add(message_id(hit.group(1)) if hit else None)
+        ids.discard(None)
+        return ids
+    ctx = ssl.create_default_context()
+    with imaplib.IMAP4_SSL(cfg.imap_host, cfg.imap_port, ssl_context=ctx, timeout=60) as m:
+        m.login(cfg.address, password)
+        for f in seed_folders(cfg):
+            typ, data = m.select(quoted(f), readonly=True)
+            if typ != "OK":
+                raise RuntimeError(f"cannot open the folder {f}: {data}")
+            n = int(data[0])
+            for start in range(1, n + 1, FETCH_BATCH):
+                typ, data = m.fetch(f"{start}:{min(start + FETCH_BATCH - 1, n)}", "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+                if typ != "OK":
+                    raise RuntimeError(f"cannot read the folder {f}: {data}")
+                for part in data:
+                    if isinstance(part, tuple):
+                        hit = _MESSAGE_ID.search(part[1])
+                        if hit:
+                            ids.add(message_id(hit.group(1)))
+    ids.discard(None)
+    return ids
 
 
 def check_smtp(host, port, tls, address, password):

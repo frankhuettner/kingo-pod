@@ -23,6 +23,7 @@ from pathlib import Path
 
 from psycopg.types.json import Jsonb
 
+from .account import message_id
 from .persona import EXAMPLE_ADDRESS, Persona
 from .settings import INBOX, SENT, case_dir
 
@@ -44,6 +45,13 @@ def case_name():
         if name:
             return name
     return CASE_NAME
+
+
+def case_owner():
+    """Whose mails the case holds, for a sentence: "Kaminski's" from case.json's name, else "the case's"."""
+    f = case_dir() / CASE_FILE
+    name = json.loads(f.read_text(encoding="utf-8")).get("name") if f.is_file() else None
+    return f"{name.split()[-1]}'s" if name else "the case's"
 
 
 def case_address():
@@ -145,23 +153,48 @@ def vector_text(b64):
     return "[" + ",".join(f"{x:.9g}" for x in struct.unpack(f"<{len(raw) // 4}f", raw)) + "]"
 
 
-def seed(paths, cfg, force=False, conn=None):
+def check_not_seeded(paths, cfg, conn=None):
+    """Raise AlreadySeeded if this account got the case mailbox before: the volume notes it, and with `conn` so does
+    the table n8n_workshop_mail.seeded, which outlives `kingo mail reset`."""
+    if paths.seeded.exists():
+        raise AlreadySeeded(f"already seeded ({paths.seeded.read_text().strip()}); nothing is copied twice")
+    if conn is not None:
+        row = conn.execute("SELECT seeded_at FROM n8n_workshop_mail.seeded WHERE address = %s",
+                           (cfg.address.lower(),)).fetchone()
+        if row:
+            raise AlreadySeeded(f"already seeded: {cfg.address} got the case mailbox on {row['seeded_at']:%Y-%m-%d} "
+                               f"(a reset does not change that); nothing is copied twice")
+
+
+def case_message_ids():
+    """The Message-IDs of the case's old mails (Archive and Sent), as account.message_id writes them; None for a mail
+    without one, which nothing can find at the provider. Every mail of the Enron case has its own
+    (<v-...@kaminski.enron.example>), and fill() leaves it alone."""
+    src = case_dir() / "maildir"
+    out = []
+    for case_folder in ("Archive", "Sent"):
+        d = src / case_folder / "cur"
+        for f in sorted(d.iterdir()) if d.is_dir() else []:
+            if not f.name.startswith("."):
+                out.append(message_id(header(f.read_bytes(), "Message-ID")))
+    return out
+
+
+def seed(paths, cfg, force=False, conn=None, present=None):
     """Put the case's old mails into the local folders: Archive -> the archive folder, Sent -> Sent.
 
     Only once per account: after `kingo mail reset` the Maildir has lost mbsync's state, and a seed would upload
     every mail a second time. The volume notes it, and with `conn` so does the table n8n_workshop_mail.seeded,
     which outlives the reset. A mail already in its folder is skipped (by its file name, before the ",U=" that
     mbsync adds), so a seed that stopped half way can simply run again (Frank, 3 Nov 2026: "kann man das
-    idempotent machen?").
+    idempotent machen?"). So is a mail whose Message-ID is in `present`, the Message-IDs the provider holds
+    (account.provider_message_ids): a second kingo-pod on the same test account, a new laptop, gets them from the
+    provider instead (Frank, 7 Nov 2026). With all of them there, nothing is copied and the account is noted as
+    seeded all the same.
     """
-    if paths.seeded.exists() and not force:
-        raise AlreadySeeded(f"already seeded ({paths.seeded.read_text().strip()}); nothing is copied twice")
+    if not force:
+        check_not_seeded(paths, cfg, conn)
     address = cfg.address.lower()
-    if conn is not None and not force:
-        row = conn.execute("SELECT seeded_at FROM n8n_workshop_mail.seeded WHERE address = %s", (address,)).fetchone()
-        if row:
-            raise AlreadySeeded(f"already seeded: {cfg.address} got the case mailbox on {row['seeded_at']:%Y-%m-%d} "
-                               f"(a reset does not change that); nothing is copied twice")
     src = case_dir() / "maildir"
     if not src.is_dir():
         raise RuntimeError(f"no case mailbox at {src}")
@@ -176,7 +209,10 @@ def seed(paths, cfg, force=False, conn=None):
             n += 1
             if _seed_name(f.name) in here:
                 continue
-            raw = fill(f.read_bytes(), cfg.address)
+            raw = f.read_bytes()
+            if present is not None and message_id(header(raw, "Message-ID")) in present:
+                continue
+            raw = fill(raw, cfg.address)
             date = header(raw, "Date")
             mtime = parsedate_to_datetime(date).timestamp() if date else None
             _deliver(paths.folder(local), f.name, raw, mtime)
