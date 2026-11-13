@@ -290,7 +290,8 @@ jobs:
   # through Docker, Podman's API socket or the systemd user manager it could read and write outside the sandbox.
   # So `kingo claude` starts Claude Code through setup/claude/no_unix_sockets.py. This job runs the real nono with
   # the course profile. Each way out is tried twice: without that lock it must work (or the check proves nothing),
-  # with it it must not. Both processor types, because the lock names system calls by number.
+  # with it it must not. Then the real Claude Code runs under the lock, a turn and a first session in a terminal,
+  # with a stand-in for the model. Both processor types, because the lock names system calls by number.
   claude-sandbox:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20

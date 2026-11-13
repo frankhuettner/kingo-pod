@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Start a program that cannot open Unix sockets. Linux only: `kingo claude` starts Claude Code through it there.
 
-    python3 no_unix_sockets.py claude --add-dir ...
+    python3 -I no_unix_sockets.py claude --add-dir ...
 
 Why. nono keeps Claude Code away from files. Under Linux it does not keep a program from connecting to a Unix socket:
 Landlock, which nono uses there, does not look at connect(2), and nono's own guard for it needs seccomp user
