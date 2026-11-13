@@ -1210,9 +1210,16 @@ cmd_claude() {
     return
   fi
   cd "$dir"
+  # WSL sets XDG_RUNTIME_DIR=/run/user/<uid>/ even when systemd made no login session; then the folder does not exist,
+  # nono's terminal proxy cannot write its config there, and the start dies with "Failed to create PTY proxy" (the TA,
+  # 13 Nov 2026). Without the variable nono starts, so drop it when its folder is missing or not writable.
+  if [ -n "${XDG_RUNTIME_DIR:-}" ] && { [ ! -d "$XDG_RUNTIME_DIR" ] || [ ! -w "$XDG_RUNTIME_DIR" ]; }; then
+    unset XDG_RUNTIME_DIR
+  fi
   # Nothing goes to Anthropic: set here, outside the course folder, so editing settings.json cannot undo it.
-  # CLAUDE_CODE_MAX_CONTEXT_TOKENS: Claude Code does not know the course's model, assumes a context of 200k tokens
-  # and warns about it at every start. Saying 200k here keeps that size and drops the warning.
+  # CLAUDE_CODE_MAX_CONTEXT_TOKENS: Claude Code does not know the course's model, assumes a context size (200k tokens,
+  # or 1m in the version the TA had on 13 Nov 2026) and warns about it at every start. Saying 200k here drops the
+  # warning and makes Claude Code compact a long session at 200k. The model itself takes 1m tokens (OpenRouter).
   CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
   CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
   CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
