@@ -313,3 +313,6 @@ jobs:
 
       - name: Inside nono, with the course profile
         run: bash .github/scripts/claude-sandbox.sh sandbox
+
+      - name: Claude Code itself, with a stand-in for the model
+        run: bash .github/scripts/claude-sandbox.sh claude

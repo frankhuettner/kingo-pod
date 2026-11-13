@@ -7,6 +7,7 @@
 #
 #   claude-sandbox.sh lock      the lock by itself
 #   claude-sandbox.sh sandbox   inside nono with the course profile: Docker, Podman, the systemd user manager
+#   claude-sandbox.sh claude    Claude Code itself inside nono, with a stand-in for the model (fake_model.py)
 #
 # Each way out is tried twice. Without the lock it must work, or the check would prove nothing. With the lock it
 # must not work.
@@ -96,6 +97,8 @@ prepare() {
 # in_sandbox command ...: run it as kingo claude runs Claude Code; prints its output and nono's
 in_sandbox() {
   ( cd "$KINGO_DIR/claude" &&
+    CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" \
     PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
       timeout 180 nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- "$@" 2>&1 ) || true
@@ -170,9 +173,63 @@ part_sandbox() {
   show "$out" 3
 }
 
+# ── Claude Code itself ───────────────────────────────────────────────────────
+# One turn of the real Claude Code, started as kingo claude starts it: inside nono, with the course profile and the
+# course settings. Only the model is a stand-in: fake_model.py takes OpenRouter's place in the profile, asks Claude
+# Code to run one command with its Bash tool, and notes what comes back. The command is the way out through Docker.
+part_claude() {
+  local port=18765 profile="$HOME/.config/nono/profiles/kingo-claude.json" probe out log pid i
+
+  say "what kingo claude would start"
+  prepare
+  sed -i "s|https://openrouter.ai/api|http://127.0.0.1:$port|" "$profile"
+  grep -q "\"upstream\": \"http://127.0.0.1:$port\"" "$profile" || fail "the nono profile has no line for OpenRouter that the stand-in could take"
+  ok "in the nono profile, the stand-in takes OpenRouter's place"
+  docker pull -q alpine >/dev/null
+  probe="docker run --rm --network none -v $OUTSIDE:/h:ro alpine cat /h/secret.txt; echo the-command-ended"
+
+  # turn <log> command ...: one turn; the command and its arguments start Claude Code inside the sandbox
+  turn() {
+    log=$1; shift
+    : > "$log"
+    /usr/bin/python3 "$HERE/fake_model.py" "$port" "$log" "$probe" &
+    pid=$!
+    for i in $(seq 1 20); do curl -s -m 2 -o /dev/null "http://127.0.0.1:$port/ready" && break; sleep 0.5; done
+    out=$(in_sandbox "$@" --add-dir "$KINGO_DIR" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    /usr/bin/python3 - "$log" <<'PY'
+import json, sys
+for line in open(sys.argv[1]):
+    e = json.loads(line)
+    if e.get("method") == "POST":
+        print("         | request: %s; model %s; %s tools; key %r; results %r" % (
+            e.get("kind"), e.get("model"), e.get("tools"), e.get("key"), [r[:90] for r in e.get("results", [])]))
+PY
+  }
+  results() { /usr/bin/python3 -c 'import json, sys; print("\n".join(r for l in open(sys.argv[1]) for r in json.loads(l).get("results", [])))' "$1"; }
+
+  say "Claude Code without the lock: its Bash tool reaches Docker (this is the gap)"
+  turn "$CFG/tmp/model-plain.jsonl" claude
+  has "$out" KINGO-PROBE-DONE || { show "$out" 40; fail "Claude Code did not finish a turn inside nono, even without the lock"; }
+  has "$(results "$log")" the-command-ended || { show "$out" 40; fail "Claude Code did not run the command of the stand-in"; }
+  has "$(cat "$log")" '"key": "Bearer ci-placeholder"' || fail "nono's proxy did not put the key from ~/.config/kingo into the request"
+  has "$(results "$log")" "$SECRET" || { show "$(results "$log")" 12; fail "without the lock the file did not come out through Claude Code's Bash tool: the check would prove nothing"; }
+  ok "the turn finished; the key came from nono's proxy; the file outside came back in the tool result"
+
+  say "Claude Code with the lock, as kingo claude starts it"
+  turn "$CFG/tmp/model-locked.jsonl" "${LOCK[@]}" claude
+  has "$out" KINGO-PROBE-DONE || { show "$out" 40; fail "Claude Code did not finish a turn under the lock"; }
+  has "$(results "$log")" the-command-ended || { show "$out" 40; fail "under the lock Claude Code did not run the command of the stand-in"; }
+  if has "$(results "$log")" "$SECRET"; then fail "with the lock the file still came out through Claude Code's Bash tool"; fi
+  ok "the turn finished, the Bash tool ran the command, and the file outside did not come back"
+  show "$(results "$log")" 4
+}
+
 case "${1:-}" in
   lock)    part_lock ;;
   sandbox) part_sandbox ;;
-  *) echo "usage: claude-sandbox.sh lock|sandbox"; exit 2 ;;
+  claude)  part_claude ;;
+  *) echo "usage: claude-sandbox.sh lock|sandbox|claude"; exit 2 ;;
 esac
 printf '\nAll checks of "%s" passed.\n' "$1"
