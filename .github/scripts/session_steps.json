@@ -1,0 +1,7 @@
+{"until": "KINGO-PROBE-DONE", "seconds": 150, "steps": [
+  {"name": "theme", "see": "Choose the text style", "send": "\r"},
+  {"name": "security notes", "see": "Security notes", "send": "\r"},
+  {"name": "trust the folder", "see": "Yes, I trust this folder", "send": ["\u001b[B", "\r"]},
+  {"name": "the prompt", "see": "manual mode on", "send": ["Run the probe.", "\r"]},
+  {"name": "yes to the command", "see": "Do you want to proceed\\?", "send": "\r"}
+]}
