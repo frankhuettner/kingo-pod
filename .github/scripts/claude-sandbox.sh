@@ -7,7 +7,8 @@
 #
 #   claude-sandbox.sh lock      the lock by itself
 #   claude-sandbox.sh sandbox   inside nono with the course profile: Docker, Podman, the systemd user manager
-#   claude-sandbox.sh claude    Claude Code itself inside nono, with a stand-in for the model (fake_model.py)
+#   claude-sandbox.sh claude    one turn of Claude Code inside nono, with a stand-in for the model (fake_model.py)
+#   claude-sandbox.sh session   a session of Claude Code in a terminal, as a student has it (pty_session.py)
 #
 # Each way out is tried twice. Without the lock it must work, or the check would prove nothing. With the lock it
 # must not work.
@@ -94,15 +95,19 @@ prepare() {
   ok "kingo claude starts Claude Code through the lock, and has written the nono profile"
 }
 
-# in_sandbox command ...: run it as kingo claude runs Claude Code; prints its output and nono's
-in_sandbox() {
+# kingo_env command ...: run it in the course folder with the variables that kingo claude sets for Claude Code
+kingo_env() {
   ( cd "$KINGO_DIR/claude" &&
     CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
     CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" \
     PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
-      timeout 180 nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- "$@" 2>&1 ) || true
+      "$@" )
 }
+SANDBOX=(nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" --)   # the line of kingo claude
+
+# in_sandbox command ...: run it as kingo claude runs Claude Code; prints its output and nono's
+in_sandbox() { kingo_env timeout 180 "${SANDBOX[@]}" "$@" 2>&1 || true; }
 
 # way_out <name> <text that only comes out when the way works> command ...
 way_out() {
@@ -174,40 +179,60 @@ part_sandbox() {
 }
 
 # ── Claude Code itself ───────────────────────────────────────────────────────
-# One turn of the real Claude Code, started as kingo claude starts it: inside nono, with the course profile and the
-# course settings. Only the model is a stand-in: fake_model.py takes OpenRouter's place in the profile, asks Claude
-# Code to run one command with its Bash tool, and notes what comes back. The command is the way out through Docker.
-part_claude() {
-  local port=18765 profile="$HOME/.config/nono/profiles/kingo-claude.json" probe out log pid i
+# The real Claude Code, started as kingo claude starts it: inside nono, with the course profile and the course
+# settings. Only the model is a stand-in: fake_model.py takes OpenRouter's place in the profile, asks Claude Code to
+# run one command with its Bash tool, and notes what comes back. The command is the way out through Docker.
+MODEL_PORT=18765
+MODEL_PID=""
 
+stand_in() {  # prepare, and put the stand-in where OpenRouter is in the nono profile
+  local profile="$HOME/.config/nono/profiles/kingo-claude.json"
   say "what kingo claude would start"
   prepare
-  sed -i "s|https://openrouter.ai/api|http://127.0.0.1:$port|" "$profile"
-  grep -q "\"upstream\": \"http://127.0.0.1:$port\"" "$profile" || fail "the nono profile has no line for OpenRouter that the stand-in could take"
+  sed -i "s|https://openrouter.ai/api|http://127.0.0.1:$MODEL_PORT|" "$profile"
+  grep -q "\"upstream\": \"http://127.0.0.1:$MODEL_PORT\"" "$profile" \
+    || fail "the nono profile has no line for OpenRouter that the stand-in could take"
   ok "in the nono profile, the stand-in takes OpenRouter's place"
   docker pull -q alpine >/dev/null
-  probe="docker run --rm --network none -v $OUTSIDE:/h:ro alpine cat /h/secret.txt; echo the-command-ended"
+  PROBE="docker run --rm --network none -v $OUTSIDE:/h:ro alpine cat /h/secret.txt; echo the-command-ended"
+}
 
-  # turn <log> command ...: one turn; the command and its arguments start Claude Code inside the sandbox
-  turn() {
-    log=$1; shift
-    : > "$log"
-    /usr/bin/python3 "$HERE/fake_model.py" "$port" "$log" "$probe" &
-    pid=$!
-    for i in $(seq 1 20); do curl -s -m 2 -o /dev/null "http://127.0.0.1:$port/ready" && break; sleep 0.5; done
-    out=$(in_sandbox "$@" --add-dir "$KINGO_DIR" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
-    kill "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
-    /usr/bin/python3 - "$log" <<'PY'
+model_start() {  # model_start <log>
+  local i
+  : > "$1"
+  /usr/bin/python3 "$HERE/fake_model.py" "$MODEL_PORT" "$1" "$PROBE" &
+  MODEL_PID=$!
+  for i in $(seq 1 20); do curl -s -m 2 -o /dev/null "http://127.0.0.1:$MODEL_PORT/ready" && return 0; sleep 0.5; done
+  fail "the stand-in for the model did not start"
+}
+
+model_stop() {  # model_stop <log>: stop it and print what it was asked
+  kill "$MODEL_PID" 2>/dev/null || true
+  wait "$MODEL_PID" 2>/dev/null || true
+  /usr/bin/python3 - "$1" <<'PY'
 import json, sys
 for line in open(sys.argv[1]):
     e = json.loads(line)
     if e.get("method") == "POST":
-        print("         | request: %s; model %s; %s tools; key %r; results %r" % (
-            e.get("kind"), e.get("model"), e.get("tools"), e.get("key"), [r[:90] for r in e.get("results", [])]))
+        print("         | request: %s; model %s; %s tools; results %r" % (
+            e.get("kind"), e.get("model"), e.get("tools"), [r[:90] for r in e.get("results", [])]))
 PY
+}
+
+# results <log>: the text of the tool results that Claude Code sent back
+results() { /usr/bin/python3 -c 'import json, sys; print("\n".join(r for l in open(sys.argv[1]) for r in json.loads(l).get("results", [])))' "$1"; }
+
+part_claude() {
+  local out log
+
+  stand_in
+  # turn <log> command ...: one turn without a terminal; the command and its arguments start Claude Code in the sandbox
+  turn() {
+    log=$1; shift
+    model_start "$log"
+    out=$(in_sandbox "$@" --add-dir "$KINGO_DIR" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
+    model_stop "$log"
   }
-  results() { /usr/bin/python3 -c 'import json, sys; print("\n".join(r for l in open(sys.argv[1]) for r in json.loads(l).get("results", [])))' "$1"; }
 
   say "Claude Code without the lock: its Bash tool reaches Docker (this is the gap)"
   turn "$CFG/tmp/model-plain.jsonl" claude
@@ -226,10 +251,42 @@ PY
   show "$(results "$log")" 4
 }
 
+# ── a session in a terminal ──────────────────────────────────────────────────
+# What a student does at the first ./kingo claude under Linux: the start screens, a prompt, yes to the command.
+# The command line is the one kingo claude runs, with the lock. pty_session.py plays the student and keeps every
+# screen; the model is the stand-in again.
+part_session() {
+  local log="$CFG/tmp/model-session.jsonl" screens="$CFG/tmp/session-screens.txt" rc=0
+
+  stand_in
+  /usr/bin/python3 -c 'import pyte' 2>/dev/null \
+    || /usr/bin/python3 -m pip install --user --break-system-packages -q pyte 2>/dev/null \
+    || sudo apt-get install -y -q python3-pyte >/dev/null \
+    || fail "pyte, which pty_session.py needs, could not be installed"
+  /usr/bin/python3 -c 'import pyte' || fail "pyte, which pty_session.py needs, is not there"
+
+  say "a first session: theme, security notes, trust in the folder, a prompt, yes to the command"
+  model_start "$log"
+  kingo_env timeout 300 /usr/bin/python3 "$HERE/pty_session.py" "$HERE/session_steps.json" "$screens" \
+    "${SANDBOX[@]}" "${LOCK[@]}" claude --add-dir "$KINGO_DIR" --permission-mode default || rc=$?
+  model_stop "$log"
+  echo "         the last screen:"
+  awk '/^===== /{buf=""} {buf=buf"\n"$0} END{print buf}' "$screens" | grep -v '^$' | cut -c1-150 | sed 's/^/         | /'
+  if [ "$rc" != 0 ]; then
+    echo "         all screens:"; sed 's/^/         | /' "$screens" | cut -c1-170
+    fail "the session did not get to the model's last words"
+  fi
+  has "$(results "$log")" the-command-ended || fail "in the session Claude Code did not run the command of the stand-in"
+  if has "$(results "$log")" "$SECRET"; then fail "in the session the file outside came out through Claude Code's Bash tool"; fi
+  ok "the session went through, the Bash tool ran the command after the yes, and the file outside did not come back"
+  show "$(results "$log")" 4
+}
+
 case "${1:-}" in
   lock)    part_lock ;;
   sandbox) part_sandbox ;;
   claude)  part_claude ;;
-  *) echo "usage: claude-sandbox.sh lock|sandbox|claude"; exit 2 ;;
+  session) part_session ;;
+  *) echo "usage: claude-sandbox.sh lock|sandbox|claude|session"; exit 2 ;;
 esac
 printf '\nAll checks of "%s" passed.\n' "$1"

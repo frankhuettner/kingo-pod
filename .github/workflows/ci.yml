@@ -336,3 +336,6 @@ jobs:
 
       - name: Claude Code itself, with a stand-in for the model
         run: bash .github/scripts/claude-sandbox.sh claude
+
+      - name: A session of Claude Code in a terminal, with the lock
+        run: bash .github/scripts/claude-sandbox.sh session
