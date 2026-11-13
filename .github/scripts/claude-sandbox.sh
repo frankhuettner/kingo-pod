@@ -16,7 +16,7 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 KINGO_DIR=$(cd "$HERE/../.." && pwd)
-LOCK=(/usr/bin/python3 "$KINGO_DIR/setup/claude/no_unix_sockets.py")
+LOCK=(/usr/bin/python3 -I "$KINGO_DIR/setup/claude/no_unix_sockets.py")   # as in kingo
 DOCKER_SOCK=/var/run/docker.sock
 CFG="$HOME/.kingo-claude"
 OUTSIDE="$HOME/outside"            # a folder the sandbox does not grant
@@ -116,7 +116,7 @@ prepare() {
   printf '%s\n' "$SECRET" > "$OUTSIDE/secret.txt"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo claude did not get as far as the start of Claude Code"
   show "$dry" 3
-  has "$dry" "-- /usr/bin/python3 $KINGO_DIR/setup/claude/no_unix_sockets.py claude --add-dir $KINGO_DIR --permission-mode default" \
+  has "$dry" "-- /usr/bin/python3 -I $KINGO_DIR/setup/claude/no_unix_sockets.py claude --add-dir $KINGO_DIR --permission-mode default" \
     || fail "under Linux, kingo claude would start Claude Code without the lock"
   ok "kingo claude starts Claude Code through the lock, and has written the nono profile"
 }

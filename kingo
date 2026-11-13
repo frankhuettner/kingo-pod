@@ -1213,9 +1213,10 @@ cmd_claude() {
   # Podman's API socket, which the setup turns on, and the systemd user manager listen on such sockets and work
   # outside the sandbox. So Claude Code starts through setup/claude/no_unix_sockets.py, which takes Unix sockets away
   # from Claude Code and from everything it starts; the top of that file says how and why. A Mac needs none of this:
-  # there nono's rules for the network cover Unix sockets.
+  # there nono's rules for the network cover Unix sockets. With -I, Python takes nothing from the environment and
+  # nothing from the folder it starts in, which is the one folder Claude Code can write to.
   if [ "$(uname -s)" = Linux ]; then
-    set -- /usr/bin/python3 "$tpl/no_unix_sockets.py" "$@"
+    set -- /usr/bin/python3 -I "$tpl/no_unix_sockets.py" "$@"
   fi
 
   if [ "${KINGO_CLAUDE_DRY_RUN:-}" = 1 ]; then
