@@ -379,6 +379,28 @@ difference students choose between.
   send stays at `sending` for a person to check — it never sends a row twice
   by itself.
 
+## `kingo claude` (Claude Code in the nono sandbox)
+
+- **Under Linux and Windows (WSL2), Claude Code starts through
+  `setup/claude/no_unix_sockets.py`; keep it in the launch line, with no switch
+  around it.** nono does not cover Unix sockets there: Landlock does not see
+  `connect(2)`, and nono's own guard (`linux.af_unix_mediation`) needs seccomp
+  user notification, which WSL2 lacks. Docker, Podman's API socket (which
+  `setup-linux.sh` turns on) and the systemd user manager listen on such sockets
+  and work OUTSIDE the sandbox: one `docker run -v` from inside read a file
+  outside it (found under WSL2, 2026-11-13). The file takes Unix sockets away
+  with a plain seccomp filter; it names system calls by number, per processor
+  type. A Mac needs none of this: the profile's key routes put nono into proxy
+  mode, and there its network rules cover Unix sockets. Dropping the key routes
+  from the profile would open the same gap on a Mac.
+- **The CI job `claude-sandbox` is the proof, on x86-64 and arm64**: with the
+  real nono and the course profile, each way out (Docker, Podman, systemd) is
+  tried without the lock, where it must WORK or the check proves nothing, and
+  with it, where it must not. Then the real Claude Code runs a turn and a first
+  terminal session against a stand-in for the model
+  (`.github/scripts/fake_model.py`, `pty_session.py`). A new Claude Code start
+  screen shows up as a failed session step, with every screen in the log.
+
 ## Layout
 
 - `compose.yml` — the 10-service stack (ports via `KINGO_PORT_*`; profiles =
