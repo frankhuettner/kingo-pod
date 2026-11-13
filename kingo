@@ -2163,31 +2163,37 @@ EOF
 # the tables of schema n8n_workshop_mail in `classroom` and sends what a person
 # approved in n8n. Its account — address, app password, the local copy of the
 # mailbox and mbsync's sync state — lives in the volume mail-data, never in the
-# files from git. setup, seed and status run mailctl inside the container.
+# files from git. config, seed and status run mailctl inside the container.
 MAIL_VOLUME=kingo_mail-data
 cmd_mail() {
   local sub it=-i a
-  case "${1:-}" in -h|--help) ;; -*) set -- setup "$@" ;; esac   # ./kingo mail --address … = setup
-  sub="${1:-setup}"
+  case "${1:-}" in -h|--help) ;; -*) set -- config "$@" ;; esac   # ./kingo mail --address … = config
+  sub="${1:-config}"
   [ $# -gt 0 ] && shift
   case "$sub" in
     help|-h|--help)
       cat <<'EOF'
-usage: ./kingo mail [setup | seed | status | reset]
+usage: ./kingo mail [config | seed | status | reset]
 
-  ./kingo mail          set up the mailbox: the address of your test account, its app
-                        password, and the addresses the course mode may also send to.
-                        Signs in once to check, sends nothing.
-  ./kingo mail seed     put the course case's sample mailbox into it; the mails are
-                        uploaded to the provider. Run it again if the upload seems
-                        stuck: it copies nothing twice and wakes the upload.
+  ./kingo mail config   set up the mailbox: the address of your test account, its app
+                        password, the addresses the course mode may also send to, and
+                        the sender name; Enter takes the suggestion in [brackets].
+                        Signs in once to check, sends nothing. Then it looks which of
+                        the case's mails your account holds already and offers to
+                        upload only the others: a second kingo-pod on the same account
+                        uploads nothing twice. (./kingo mail and ./kingo mail setup
+                        do the same.)
+  ./kingo mail seed     put the course case's sample mailbox into it; the mails your
+                        account does not hold yet are uploaded to the provider. Run it
+                        again if the upload seems stuck: it copies nothing twice and
+                        wakes the upload.
   ./kingo mail status   account, folders, last sync, last error, and each folder here
                         and at the provider: while the numbers differ, it still syncs
   ./kingo mail reset    forget the account and the local copy of its mailbox — the way to
                         switch accounts. The mailbox at the provider stays as it is.
 EOF
       return 0 ;;
-    setup|seed|status|reset) ;;
+    config|setup|seed|status|reset) ;;
     *) die "unknown: ./kingo mail $sub — ./kingo mail help lists what it does" ;;
   esac
   select_engine
@@ -2205,16 +2211,16 @@ EOF
       $ENGINE volume rm "$MAIL_VOLUME" >/dev/null || die "could not delete the volume $MAIL_VOLUME — see the error above"
     fi
     compose up -d mail
-    echo "Done. Set the account up again with: ./kingo mail"
+    echo "Done. Set the account up again with: ./kingo mail config"
     return 0
   fi
   container_up Mail || die "the mail container is not running — start the stack first:  ./kingo up"
   case "$sub" in
-    setup)
+    config|setup)
       # Typing at a terminal gets -t, so the password stays hidden even when the
       # output goes to a pipe (| tee). Without a terminal: --password-stdin --yes.
       [ -t 0 ] && it=-it
-      $ENGINE exec "$it" kingo-mail mailctl setup "$@" ;;
+      $ENGINE exec "$it" kingo-mail mailctl config "$@" ;;
     seed)   $ENGINE exec kingo-mail mailctl seed "$@" ;;
     status) $ENGINE exec kingo-mail mailctl status ;;
   esac
@@ -2724,7 +2730,7 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo pull          download all images, one at a time with retries
   kingo langflow ...  run uv inside the Langflow container to manage Python
                       packages (e.g. kingo langflow pip install statsmodels)
-  kingo mail          set up the mailbox of the mail assistant (test account +
+  kingo mail config   set up the mailbox of the mail assistant (test account +
                       app password); 'kingo mail help' shows seed, status, reset
   kingo bundle [file] save all images into one arch-stamped tar for USB sticks
                       (instructor; default kingo-images-<arch>.tar; records its

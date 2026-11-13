@@ -1,8 +1,10 @@
 """mailctl: the commands of the mail container.
 
   mailctl run                the service (the container's main process)
-  mailctl setup              set up the account: address, app password, allowed addresses (kingo mail)
-  mailctl seed [--force]     put the case's sample mailbox into the Maildir and upload it (kingo mail seed)
+  mailctl config             set up the account: address, app password, allowed addresses, sender name; then the
+                             case's mailbox, only the mails the account does not hold yet (kingo mail; also: setup)
+  mailctl seed [--force]     put the case's sample mailbox into the Maildir and upload what the provider does not
+                             hold yet (kingo mail seed)
   mailctl wake [source]      ask the running service for a sync (the watcher uses it)
   mailctl status             account, folders and the last sync
 """
@@ -19,12 +21,13 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="mailctl", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("run")
-    s = sub.add_parser("setup")
+    s = sub.add_parser("config", aliases=["setup"])   # setup: the name of the homework's 3 Nov text
     s.add_argument("--address")
     s.add_argument("--password-stdin", action="store_true", help="read the app password from stdin")
     s.add_argument("--imap-host")
     s.add_argument("--smtp-host")
     s.add_argument("--allowed", help="comma-separated addresses the course mode may send to")
+    s.add_argument("--name", help="the sender name on the mails it sends")
     s.add_argument("--yes", action="store_true", help="no questions; take the defaults")
     s = sub.add_parser("seed")
     s.add_argument("--force", action="store_true", help="seed again (uploads every mail a second time)")
@@ -35,7 +38,8 @@ def main(argv=None):
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s",
                         datefmt="%Y-%m-%d %H:%M:%S", stream=sys.stdout)
-    return {"run": cmd_run, "setup": cmd_setup, "seed": cmd_seed, "wake": cmd_wake, "status": cmd_status}[args.cmd](args)
+    return {"run": cmd_run, "config": cmd_config, "setup": cmd_config, "seed": cmd_seed, "wake": cmd_wake,
+            "status": cmd_status}[args.cmd](args)
 
 
 def cmd_run(args):
@@ -49,7 +53,14 @@ def _ask(prompt, default=""):
     return answer or default
 
 
-def cmd_setup(args):
+def _yes(prompt, default=True):
+    answer = input(f"{prompt} {'[Y/n]' if default else '[y/N]'}: ").strip().lower()
+    return default if not answer else not answer.startswith("n")
+
+
+def cmd_config(args):
+    """The account, then the case's mailbox (Frank, 7 Nov 2026: "kingo mail config", every question with a
+    suggestion that Enter takes)."""
     paths = settings.Paths()
     old = settings.load(paths)
     address = args.address or _ask("Mail address of your test account", old.address if old else "")
@@ -58,10 +69,18 @@ def cmd_setup(args):
               f"those mails into {address}. Forget the old account first: ./kingo mail reset\n"
               f"(with dev.sh: ./dev.sh reset)", file=sys.stderr)
         return 2
+    same = old is not None and address.lower() == old.address.lower()
+    saved = settings.read_password(paths) if same and paths.password.exists() else ""
     if args.password_stdin:
-        password = sys.stdin.readline().strip()
+        password = sys.stdin.readline().strip() or saved
+    elif args.yes and saved:
+        password = saved
     else:
-        password = getpass.getpass("App password (input stays hidden): ")
+        password = getpass.getpass("App password (input stays hidden)"
+                                   + (" [Enter keeps the saved one]" if saved else "") + ": ").strip() or saved
+    if not password:
+        print("No app password: nothing changed.", file=sys.stderr)
+        return 1
     d = account.defaults(address)
     imap_host = args.imap_host or (d["imap_host"] if args.yes or "gmail" in d["imap_host"] else _ask("IMAP server", d["imap_host"]))
     smtp_host = args.smtp_host or (d["smtp_host"] if args.yes or "gmail" in d["smtp_host"] else _ask("SMTP server", d["smtp_host"]))
@@ -73,19 +92,35 @@ def cmd_setup(args):
         print("Course mode: replies go only to your own address and its plus addresses (name+anything@...).")
         allowed = _ask("Other addresses it may send to, e.g. your SKKU address (comma-separated, or empty)",
                        ",".join(old.allowed) if old else "").split(",")
+    with_case = (settings.case_dir() / "maildir").is_dir()   # without a course case: only the account
+    name = (old.name if old and old.name else "") or (case.case_name() if with_case else "")
+    if args.name is not None:
+        name = args.name.strip()
+    elif not args.yes:
+        name = _ask("Sender name on the mails it sends", name)
     print(f"Signing in to {imap_host} and {smtp_host} ... (nothing is sent)")
     try:
         cfg, password = account.configure(address, password, imap_host, smtp_host, allowed=allowed)
     except Exception as e:
         print(f"Sign-in failed: {e}", file=sys.stderr)
         return 1
-    if old:
-        cfg.name = old.name
+    cfg.name = name
     settings.save(paths, cfg, password)
     print(f"OK. Folders: sent = {cfg.folders['sent']}, drafts = {cfg.folders['drafts']}, "
           f"archive = {cfg.folders['archive']}{' (will be created)' if cfg.create_archive else ''}")
     print(f"Course mode sends to {cfg.address}, its plus addresses" + (f" and {', '.join(cfg.allowed)}." if cfg.allowed else "."))
-    return 0
+    print(f"Sender name: {cfg.name or cfg.address}.")
+    if not with_case:
+        return 0
+    try:
+        conn = db.connect()
+    except Exception as e:
+        print(f"The account is saved, but Postgres is not reachable ({e}). Once kingo-pod runs: ./kingo mail seed",
+              file=sys.stderr)
+        return 1
+    with conn:
+        rc = _case_mailbox(paths, cfg, conn, confirm=(lambda prompt: True) if args.yes else _yes)
+        return _documents(conn) or rc
 
 
 def cmd_seed(args):
@@ -99,39 +134,76 @@ def cmd_seed(args):
     except Exception as e:
         print(f"Not seeded: cannot reach Postgres, which notes the accounts already seeded: {e}", file=sys.stderr)
         return 1
-    rc = 0
     with conn:
-        try:
-            counts = case.seed(paths, cfg, force=args.force, conn=conn)
-        except case.AlreadySeeded as e:   # the documents may still need loading, e.g. after `kingo update`
-            # Seeding again is the one answer when the upload seems stuck: it wakes the sync, which goes on where
-            # it stopped (Frank, 3 Nov 2026, after an upload that stood still at 2,420 of 3,244).
-            print(f"Mailbox: {e}. The upload goes on now; ./kingo mail status shows how far it is.")
+        rc = _case_mailbox(paths, cfg, conn, force=args.force)
+        return _documents(conn) or rc
+
+
+def _case_mailbox(paths, cfg, conn, force=False, confirm=None):
+    """The case's old mails into the account, but only those the provider does not hold yet (Frank, 7 Nov 2026, on a
+    second kingo-pod with the same test Gmail account: "es soll selbst erkennen"). They are found by Message-ID:
+    each mail of the case has its own, and only a seed puts it into an account, so nothing else can look like one.
+    If the provider cannot be read, nothing is copied. `confirm(prompt)` asks before an upload (kingo mail); without
+    it (kingo mail seed) the upload is what was asked for. --force copies as before, without asking the provider.
+    Returns 0 or 1."""
+    where = "your test Gmail account" if cfg.gmail else "your test account"
+    try:
+        if not force:
+            case.check_not_seeded(paths, cfg, conn)
+            ids = case.case_message_ids()
             try:
-                db.wake(conn, action="sync", source="seed")
+                held = account.provider_message_ids(cfg, None if cfg.test_far_maildir else settings.read_password(paths))
             except Exception as e:
-                print(f"(The service goes on with its next run: {e})")
-        except RuntimeError as e:
-            print(f"Mailbox not seeded: {e}", file=sys.stderr)
-            rc = 1
-        else:
-            if not cfg.name:
-                cfg.name = case.case_name()
-                settings.save(paths, cfg)
-            print("Mailbox: " + ", ".join(f"{n} mails in {f}" for f, n in counts.items()) + ". Uploading starts now.")
-            print("./kingo mail status shows how far it is.")
-            try:
-                db.wake(conn, action="sync", source="seed")
-            except Exception as e:
-                print(f"(The service will upload them on its next run: {e})")
-        try:
-            docs = case.load_documents(conn)
-        except Exception as e:   # no file, no table (an old schema), a vector of the wrong length
-            print(f"Documents not loaded: {str(e).strip()}", file=sys.stderr)
-            rc = 1
-        else:
-            print(f"Documents: {docs['chunks']} chunks from {docs['documents']} documents, ready for search.")
-    return rc
+                print(f"Mailbox: cannot read the mails in {where} ({e}), so nobody can tell which are there already. "
+                      f"Nothing is uploaded. Try again: ./kingo mail seed", file=sys.stderr)
+                return 1
+            total, there = len(ids), sum(1 for i in ids if i in held)
+            print(f"{where[0].upper()}{where[1:]} holds {there:,} of {total:,} of {case.case_owner()} mails.")
+            missing = total - there
+            if missing and confirm and not confirm(f"Upload the {missing:,} missing ones now?" if there else "Upload them now?"):
+                print("Nothing uploaded. To upload them later: ./kingo mail seed")
+                return 0
+        counts = case.seed(paths, cfg, force=force, conn=conn, present=None if force else held)
+    except case.AlreadySeeded as e:   # the documents may still need loading, e.g. after `kingo update`
+        # Seeding again is the one answer when the upload seems stuck: it wakes the sync, which goes on where
+        # it stopped (Frank, 3 Nov 2026, after an upload that stood still at 2,420 of 3,244).
+        print(f"Mailbox: {e}. The upload goes on now; ./kingo mail status shows how far it is.")
+        _wake(conn, "(The service goes on with its next run: {})")
+        return 0
+    except RuntimeError as e:
+        print(f"Mailbox not seeded: {e}", file=sys.stderr)
+        return 1
+    if not cfg.name:
+        cfg.name = case.case_name()
+        settings.save(paths, cfg)
+    if force or not there:
+        print("Mailbox: " + ", ".join(f"{n} mails in {f}" for f, n in counts.items()) + ". Uploading starts now.")
+    elif missing:
+        print(f"Mailbox: {missing:,} mails to upload, the other {there:,} are there already. Uploading starts now.")
+    else:
+        print("Mailbox: nothing to upload. kingo-pod now copies them from Gmail into its database."
+              if cfg.gmail else "Mailbox: nothing to upload. kingo-pod now copies them into its database.")
+    print("./kingo mail status shows how far it is.")
+    _wake(conn, "(The service will upload them on its next run: {})")
+    return 0
+
+
+def _wake(conn, note):
+    try:
+        db.wake(conn, action="sync", source="seed")
+    except Exception as e:
+        print(note.format(e))
+
+
+def _documents(conn):
+    """The case documents into n8n_workshop_mail.chunks; 0 or 1."""
+    try:
+        docs = case.load_documents(conn)
+    except Exception as e:   # no file, no table (an old schema), a vector of the wrong length
+        print(f"Documents not loaded: {str(e).strip()}", file=sys.stderr)
+        return 1
+    print(f"Documents: {docs['chunks']} chunks from {docs['documents']} documents, ready for search.")
+    return 0
 
 
 def cmd_wake(args):
@@ -144,7 +216,7 @@ def cmd_status(args):
     paths = settings.Paths()
     cfg = settings.load(paths)
     if not cfg:
-        print("Not set up yet: ./kingo mail")
+        print("Not set up yet: ./kingo mail config")
         return 1
     print(f"Account:     {cfg.address} ({cfg.imap_host}, {cfg.smtp_host})")
     print(f"Folders:     " + ", ".join(f"{k} = {v}" for k, v in cfg.folders.items()))

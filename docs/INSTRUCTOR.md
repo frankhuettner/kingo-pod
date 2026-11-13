@@ -725,8 +725,8 @@ Postgres. It runs in `abp`, `n8n` and `full`.
 
 | Command | What it does |
 |---|---|
-| `./kingo mail` | asks for the address of the student's test account, its app password, and the addresses the course mode may also send to; signs in once to check, sends nothing |
-| `./kingo mail seed` | puts the course case's sample mailbox into it and uploads it to the provider (once per account; run again, it copies nothing twice and wakes a stuck upload) |
+| `./kingo mail config` | asks for the address of the student's test account, its app password, the addresses the course mode may also send to, and the sender name, each with a suggestion that Enter takes; signs in once to check, sends nothing. Then it reads the Message-IDs at the provider and offers to upload only the case mails the account does not hold yet, so a second kingo-pod (a new laptop, a second macOS user) on the same account uploads nothing twice. `./kingo mail` and `./kingo mail setup` do the same |
+| `./kingo mail seed` | puts the course case's sample mailbox into it and uploads what the provider does not hold yet (once per account; run again, it copies nothing twice and wakes a stuck upload; if the provider cannot be read, it uploads nothing) |
 | `./kingo mail status` | account, folders, number of mails in Postgres, last sync, last error, each folder here and at the provider |
 | `./kingo mail reset` | forgets the account and the local copy of its mailbox (the volume `mail-data`); the mailbox at the provider and the rows in Postgres stay. The way to switch accounts |
 | `./kingo logs mail` | what it does, live |
