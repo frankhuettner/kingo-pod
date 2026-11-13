@@ -265,3 +265,51 @@ jobs:
       - name: Tear down
         if: always()
         run: ./kingo down || true
+
+  # Under Linux, and so under Windows (WSL2), nono does not keep a program in the sandbox away from Unix sockets:
+  # through Docker, Podman's API socket or the systemd user manager it could read and write outside the sandbox.
+  # So `kingo claude` starts Claude Code through setup/claude/no_unix_sockets.py. This job runs the real nono with
+  # the course profile. Each way out is tried twice: without that lock it must work (or the check proves nothing),
+  # with it it must not. Both processor types, because the lock names system calls by number.
+  claude-sandbox:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nono and Claude Code, with the lines of the homework
+        run: |
+          curl -fsSL https://nono.sh/install.sh | sh
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: A user session with systemd, as on a student's Ubuntu
+        # The runner user has no login session. Lingering starts its systemd user manager, which the Podman setup
+        # of setup-linux.sh needs too.
+        run: |
+          sudo loginctl enable-linger "$(id -un)"
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+          for i in $(seq 1 20); do [ -S "$XDG_RUNTIME_DIR/bus" ] && break; sleep 1; done
+          [ -S "$XDG_RUNTIME_DIR/bus" ]
+          command -v podman >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y podman uidmap; }
+
+      - name: Versions
+        run: |
+          uname -srm
+          nono --version
+          claude --version
+          /usr/bin/python3 --version
+          docker --version
+          podman --version
+          systemctl --version | head -1
+
+      - name: The lock by itself
+        run: bash .github/scripts/claude-sandbox.sh lock
+
+      - name: Inside nono, with the course profile
+        run: bash .github/scripts/claude-sandbox.sh sandbox

@@ -1141,6 +1141,9 @@ cmd_claude() {
     || die "Claude Code is not installed. Install it with:  curl -fsSL https://claude.ai/install.sh | bash"
   command -v psql >/dev/null 2>&1 \
     || warn "psql is missing, so Claude cannot reach PostgreSQL. Mac: brew install libpq — Windows (WSL): sudo apt install postgresql-client"
+  if [ "$(uname -s)" = Linux ] && [ ! -x /usr/bin/python3 ]; then
+    die "python3 is missing, and under Linux and Windows (WSL) the sandbox needs it. Install it with:  sudo apt install -y python3"
+  fi
 
   # The PostgreSQL port goes into a sandbox rule in the profile, so it must be a port and nothing else.
   case "$P_POSTGRES" in
@@ -1203,10 +1206,21 @@ cmd_claude() {
     case "$a" in --permission-mode|--permission-mode=*|--dangerously-skip-permissions) ask=0 ;; esac
   done
   if [ "$ask" = 1 ]; then set -- --permission-mode default "$@"; fi
+  set -- claude --add-dir "$KINGO_DIR" "$@"
+
+  # Linux and Windows (WSL2): there nono does not keep a program in the sandbox from connecting to a Unix socket
+  # (found on 13 Nov 2026 under WSL2: one "docker run -v" from inside the sandbox read a file outside it). Docker,
+  # Podman's API socket, which the setup turns on, and the systemd user manager listen on such sockets and work
+  # outside the sandbox. So Claude Code starts through setup/claude/no_unix_sockets.py, which takes Unix sockets away
+  # from Claude Code and from everything it starts; the top of that file says how and why. A Mac needs none of this:
+  # there nono's rules for the network cover Unix sockets.
+  if [ "$(uname -s)" = Linux ]; then
+    set -- /usr/bin/python3 "$tpl/no_unix_sockets.py" "$@"
+  fi
 
   if [ "${KINGO_CLAUDE_DRY_RUN:-}" = 1 ]; then
     echo "dry run — would start in $dir:"
-    echo "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- claude --add-dir $KINGO_DIR $*"
+    echo "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- $*"
     return
   fi
   cd "$dir"
@@ -1224,7 +1238,7 @@ cmd_claude() {
   CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
   CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
   PGHOST=127.0.0.1 PGPORT="$P_POSTGRES" PGUSER="$KINGO_USER" PGPASSWORD="$KINGO_PASSWORD" PGDATABASE=classroom \
-    exec nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- claude --add-dir "$KINGO_DIR" "$@"
+    exec nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- "$@"
 }
 
 # ── smoke: rigorous verification (exact codes + stability + bindings + hub) ───
