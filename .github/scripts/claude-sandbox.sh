@@ -473,6 +473,27 @@ HTML
   rm -f "$dir/look-write-probe"
   ok "inside the sandbox, the browser, nono and their folders cannot be written"
 
+  # A font that the user installed: the browser must draw its letters, not boxes. Reports, and fails only on boxes.
+  say "a font that the user installed (~/.local/share/fonts)"
+  mkdir -p "$HOME/.local/share/fonts"
+  if curl -fsSL -m 60 -o "$HOME/.local/share/fonts/Pacifico-Regular.ttf" https://raw.githubusercontent.com/google/fonts/main/ofl/pacifico/Pacifico-Regular.ttf; then
+    fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1 || true
+    glyphs() { sed -n 's/.*<title>GLYPHS=\([^<]*\)<.*/\1/p' | head -n 1; }
+    out=$("$BROWSER_BIN" --headless --no-sandbox --disable-gpu --virtual-time-budget=3000 --user-data-dir="$CFG/tmp/font-outside" --dump-dom "file://$HERE/font_check.html#Pacifico" 2>/dev/null | glyphs)
+    echo "         | outside the sandbox: ${out:-nothing}"
+    if [ "$out" = "Pacifico:own" ]; then
+      out=$(in_sandbox "${LOCK[@]}" "$BROWSER_BIN" --headless --no-sandbox --disable-gpu --virtual-time-budget=3000 --user-data-dir="$CFG/tmp/font-inside" --dump-dom "file://$HERE/font_check.html#Pacifico" | glyphs)
+      echo "         | inside the sandbox:  ${out:-nothing}"
+      [ "$out" != "Pacifico:boxes" ] || fail "inside the sandbox, a font that the user installed is drawn as boxes"
+      [ "$out" = "Pacifico:own" ] && ok "the browser draws the user's font inside the sandbox" \
+        || echo "   RESULT  inside the sandbox the user's font is not drawn with its own letters: ${out:-nothing}"
+    else
+      echo "   RESULT  the font did not arrive in the browser outside the sandbox either: nothing to compare"
+    fi
+  else
+    echo "   RESULT  the font could not be downloaded: not checked"
+  fi
+
   say "look inside nono, under the lock: a short page"
   out=$(in_sandbox "${LOCK[@]}" look look-cv.html)
   has "$out" "in 1 picture(s)" || { show "$out" 12; fail "look made no picture of a short page"; }
@@ -657,7 +678,7 @@ PYTHON
     "custom_credentials": {
       "anthropic": {
         "upstream": "http://127.0.0.1:$MODEL_PORT",
-        "credential_key": "file://$other",
+        "credential_key": "file://__KEYS_DIR__/other.key",
         "env_var": "ANTHROPIC_API_KEY",
         "inject_header": "x-api-key",
         "credential_format": "{}"
