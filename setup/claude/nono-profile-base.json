@@ -11,7 +11,7 @@
   "extends": "default",
   "meta": {
     "name": "kingo-claude-base",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "description": "Kingo: Claude Code via OpenRouter; writes only to the folder it starts in; the OpenRouter key injected by the proxy"
   },
   "security": {
@@ -57,7 +57,8 @@
       "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_TMPDIR", "TMPDIR",
       "CLAUDE_CODE_DISABLE_ARTIFACT", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING",
       "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
-      "KINGO_BROWSER", "KINGO_BROWSER_MODE"
+      "KINGO_BROWSER", "KINGO_BROWSER_MODE",
+      "GIT_CONFIG_NOSYSTEM"
     ]
   },
   "network": {
