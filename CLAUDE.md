@@ -396,6 +396,18 @@ difference students choose between.
   `--version` and `ldd`). In `~/.kingo-claude` or the course folder, a program
   in the sandbox could swap them and would run outside at the next start. The
   CI part `look` tries to write there from inside and must fail.
+- **Two profiles: `kingo-claude-base` (`nono-profile-base.json`) and the course
+  profile `kingo-claude`, which extends it.** nono joins lists and never takes
+  a base entry away, so what every start needs (folders, variables, the route
+  to the model, the rule for `look`) goes into the base, and only n8n, Langflow
+  and PostgreSQL into the course profile. `./kingo claude --in <folder>` starts
+  with the base profile and reads only `setup/claude`. A student's
+  `my-nono-profile.json` (gitignored, in this folder, where the sandbox cannot
+  write) must extend `kingo-claude`. The CI part `own` checks all three.
+- **`claude_in_folder` decides which folder `--in` takes.** It must keep out
+  every folder in which a program of the sandbox could write something that
+  runs outside later: the home folder, hidden folders, kingo-pod and any
+  folder that holds kingo-pod.
 - **`look` on a Mac needs the `mach-register` rule in the profile** (Chrome's
   helper programs). Without it `look` falls back to `--single-process`, which
   cannot wait for a page's scripts. The CI job `claude-look-mac` runs both.

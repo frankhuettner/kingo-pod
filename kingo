@@ -1310,6 +1310,45 @@ claude_browser_cmd() { # ./kingo claude browser: get the browser, or say why it 
   fi
 }
 
+# ── kingo claude --in <folder>: the same Claude Code for a folder of your own ──
+# Without the course: no n8n, no Langflow, no PostgreSQL, and the pod need not run. Claude Code writes in that
+# folder and nowhere else, with the profile "kingo-claude-base" (setup/claude/nono-profile-base.json). kingo puts
+# no file into the folder: the settings come from setup/claude/settings-in.json and the text below, on the command
+# line. What Claude Code is told there, in place of the course's AGENTS.md:
+CLAUDE_IN_HINT='You were started with "./kingo claude --in" and run in a sandbox (nono). You can write only in the folder you were started in. The sandbox is there so that a mistake cannot harm this laptop: a wrong command, a wrong path, a file deleted by accident. It is not a puzzle and not a test of you: do not look for a way around it. When it blocks something, say what was blocked and stop. Never ask the user to run a command in their own terminal that you could not run here, and never suggest starting you without ./kingo claude.'
+
+# The folder must be one that Claude Code may get as a whole. Prints its full path, or says why not and fails.
+claude_in_folder() { # folder
+  local want=$1 dir home rel pod
+  case "$want" in
+    /mnt/*) die "$want is a Windows folder. kingo claude --in takes a folder in Linux, for example ~/projects/thesis: there the sandbox is tested. To move files between Windows and that folder, open it in Windows with: explorer.exe ." ;;
+  esac
+  [ -d "$want" ] || die "there is no folder $want. Make it first:  mkdir -p $want"
+  dir=$(cd "$want" && pwd -P) || die "cannot open the folder $want"
+  home=$(cd "$HOME" && pwd -P)
+  pod=$(cd "$KINGO_DIR" && pwd -P)
+  case "$dir" in
+    /mnt/*) die "$want is a Windows folder ($dir). kingo claude --in takes a folder in Linux, for example ~/projects/thesis." ;;
+  esac
+  case "$dir/" in
+    "$home"/?*) ;;
+    *) die "kingo claude --in takes a folder inside your home folder ($home), not $dir and not the home folder itself: Claude Code may write everywhere in the folder you give it." ;;
+  esac
+  rel=${dir#"$home"/}
+  case "$rel" in
+    .*) die "$dir is a hidden folder of your home folder, where programs keep their settings and keys. Choose a folder for your work, for example ~/projects/thesis." ;;
+    Desktop|Documents|Downloads|Pictures|Music|Movies|Library|Library/*)
+      die "$dir is too wide: Claude Code may write everywhere in the folder you give it. Choose a folder inside it, or make one:  mkdir -p ~/projects/thesis" ;;
+  esac
+  case "$dir/" in
+    "$pod"/*) die "$dir is kingo-pod or a folder in it. For the course, start Claude Code with:  ./kingo claude" ;;
+  esac
+  case "$pod/" in
+    "$dir"/*) die "$dir holds kingo-pod ($pod). Claude Code could then change kingo itself. Choose a folder that kingo-pod is not in." ;;
+  esac
+  printf '%s' "$dir"
+}
+
 cmd_claude() {
   case "${1:-}" in
     browser) claude_browser_cmd; return ;;
@@ -1328,9 +1367,27 @@ cmd_claude() {
       echo "  ./kingo claude browser gets it again, and says what is missing when it does not run."
       echo "  Claude asks before every command; ./kingo yolo lets it work"
       echo "  without asking (the sandbox protects your laptop either way; ./kingo backup saves your workflows and flows)."
+      echo "kingo claude --in <folder> [claude options]  the same Claude Code for a folder of your own, without the course:"
+      echo "  Claude writes only in that folder. No n8n, no Langflow, no database; the pod need not run."
+      echo "  The folder is inside your home folder, and not a Windows folder (/mnt/c/...)."
+      echo "Your own additions to the sandbox of the course: copy setup/claude/my-nono-profile.example.json to"
+      echo "  $KINGO_DIR/my-nono-profile.json and change it. Claude can read that file and not change it."
       return ;;
   esac
+  # --in <folder>, anywhere before Claude Code's own options (./kingo yolo --in ... puts an option first)
+  local in_dir="" a keep=() take=0
+  for a in "$@"; do
+    if [ "$take" = 1 ]; then in_dir=$a; take=2; continue; fi
+    if [ "$a" = "--in" ] && [ "$take" = 0 ]; then take=1; continue; fi
+    keep+=("$a")
+  done
+  [ "$take" != 1 ] || die "kingo claude --in needs a folder, for example:  ./kingo claude --in ~/projects/thesis"
+  if [ "$take" = 2 ]; then
+    in_dir=$(claude_in_folder "$in_dir") || exit 1
+    set -- ${keep[@]+"${keep[@]}"}
+  fi
   local dir="$KINGO_DIR/claude" tpl="$KINGO_DIR/setup/claude" cfg="$HOME/.kingo-claude"
+  [ -z "$in_dir" ] || dir=$in_dir
   local prof="${XDG_CONFIG_HOME:-$HOME/.config}/nono/profiles" v vmaj vmin esc kesc nono=nono
 
   # ~/.local/bin goes first: Claude Code's native installer puts it there, and on WSL nono's
@@ -1360,7 +1417,7 @@ cmd_claude() {
   fi
   command -v claude >/dev/null 2>&1 \
     || die "Claude Code is not installed. Install it with:  curl -fsSL https://claude.ai/install.sh | bash"
-  command -v psql >/dev/null 2>&1 \
+  [ -n "$in_dir" ] || command -v psql >/dev/null 2>&1 \
     || warn "psql is missing, so Claude cannot reach PostgreSQL. Mac: brew install libpq — Windows (WSL): sudo apt install postgresql-client"
   if [ "$(uname -s)" = Linux ] && [ ! -x /usr/bin/python3 ]; then
     die "python3 is missing, and under Linux and Windows (WSL) the sandbox needs it. Install it with:  sudo apt install -y python3"
@@ -1372,7 +1429,15 @@ cmd_claude() {
   esac
   [ "$P_POSTGRES" -le 65535 ] || die "KINGO_PORT_POSTGRES must be a port number, not '$P_POSTGRES'. Check .env.local."
 
-  if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ]; then
+  if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ] && [ -n "$in_dir" ]; then
+    # A folder of your own: only the key for the model, and the browser for look.
+    [ -s "$CLAUDE_KEYS/openrouter.key" ] || claude_ask_key openrouter "Paste your OpenRouter key"
+    claude_check_key openrouter "$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $(cat "$CLAUDE_KEYS/openrouter.key")")" \
+      "Check it on openrouter.ai (Settings, Keys)."
+    if [ "${KINGO_CLAUDE_NO_BROWSER:-}" != 1 ] && claude_browser_get; then
+      claude_browser_check_packages "$(claude_browser_path)" || true
+    fi
+  elif [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ]; then
     { check "$P_N8N" /healthz && check "$P_LANGFLOW" /health; } \
       || die "n8n and Langflow must be running first: ./kingo up (in mode abp or full)"
 
@@ -1399,17 +1464,43 @@ cmd_claude() {
   fi
 
   # The course folder gets the templates once; after that it is the student's.
+  # A folder given with --in gets no file from kingo.
   esc=$(printf '%s' "$KINGO_DIR" | sed 's/[&|\\]/\\&/g')
-  mkdir -p "$dir/.claude"
-  [ -f "$dir/CLAUDE.md" ] || cp "$tpl/CLAUDE.md" "$dir/CLAUDE.md"
-  [ -f "$dir/AGENTS.md" ] || cp "$tpl/AGENTS.md" "$dir/AGENTS.md"
-  [ -f "$dir/.claude/settings.json" ] || sed "s|__KINGO_DIR__|$esc|g" "$tpl/settings.json" > "$dir/.claude/settings.json"
-  # The profile follows this folder: ports from .env.local, changes from kingo update.
+  if [ -z "$in_dir" ]; then
+    mkdir -p "$dir/.claude"
+    [ -f "$dir/CLAUDE.md" ] || cp "$tpl/CLAUDE.md" "$dir/CLAUDE.md"
+    [ -f "$dir/AGENTS.md" ] || cp "$tpl/AGENTS.md" "$dir/AGENTS.md"
+    [ -f "$dir/.claude/settings.json" ] || sed "s|__KINGO_DIR__|$esc|g" "$tpl/settings.json" > "$dir/.claude/settings.json"
+  fi
+  # The profiles follow this folder: ports from .env.local, changes from kingo update. Two files: the base
+  # profile, and the course profile, which extends it.
   kesc=$(printf '%s' "$CLAUDE_KEYS" | sed 's/[&|\\]/\\&/g')
   mkdir -p "$prof"
-  sed -e "s|__N8N_PORT__|$P_N8N|g" -e "s|__LANGFLOW_PORT__|$P_LANGFLOW|g" -e "s|__POSTGRES_PORT__|$P_POSTGRES|g" \
-      -e "s|__KEYS_DIR__|$kesc|g" \
-    "$tpl/nono-profile.json" > "$prof/kingo-claude.json"
+  local f
+  for f in nono-profile-base.json:kingo-claude-base.json nono-profile.json:kingo-claude.json; do
+    sed -e "s|__N8N_PORT__|$P_N8N|g" -e "s|__LANGFLOW_PORT__|$P_LANGFLOW|g" -e "s|__POSTGRES_PORT__|$P_POSTGRES|g" \
+        -e "s|__KEYS_DIR__|$kesc|g" \
+      "$tpl/${f%%:*}" > "$prof/${f##*:}"
+  done
+  # Which profile nono starts with. For the course, the student may add to the sandbox: my-nono-profile.json in
+  # this folder, which Claude can read and not change. It must extend the course profile, so that it adds to the
+  # course's sandbox and takes the place of nothing; nono joins the two. kingo fills in __KINGO_DIR__.
+  local profile=kingo-claude mine="$KINGO_DIR/my-nono-profile.json"
+  if [ -n "$in_dir" ]; then
+    profile=kingo-claude-base
+  elif [ -f "$mine" ]; then
+    grep -Eq '^[[:space:]]*"extends"[[:space:]]*:[[:space:]]*"kingo-claude"[[:space:]]*,?[[:space:]]*$' "$mine" \
+      || die "my-nono-profile.json needs the line  \"extends\": \"kingo-claude\",  so that it adds to the sandbox of the course and takes nothing of it away. See setup/claude/my-nono-profile.example.json."
+    sed "s|__KINGO_DIR__|$esc|g" "$mine" > "$prof/kingo-claude-mine.json"
+    if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ] && ! "$nono" profile validate "$prof/kingo-claude-mine.json" >/dev/null 2>&1; then
+      "$nono" profile validate "$prof/kingo-claude-mine.json" 2>&1 | tail -n 8 >&2 || true
+      die "nono does not take my-nono-profile.json (the lines above say why). Claude Code was not started. To start without your own profile, rename the file."
+    fi
+    profile=kingo-claude-mine
+    echo "The sandbox follows your own profile too: $mine"
+  else
+    rm -f "$prof/kingo-claude-mine.json"
+  fi
   # nono grants only folders that exist.
   mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude" \
            "$CLAUDE_SHARE/browsers"
@@ -1437,8 +1528,15 @@ cmd_claude() {
   for a in "$@"; do
     case "$a" in --append-system-prompt|--append-system-prompt=*|--append-system-prompt-file|--append-system-prompt-file=*|--system-prompt|--system-prompt=*|--system-prompt-file|--system-prompt-file=*) hint=0 ;; esac
   done
-  if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_LOOK_HINT"; fi
-  set -- claude --add-dir "$KINGO_DIR" "$@"
+  if [ -n "$in_dir" ]; then
+    # no AGENTS.md from kingo there: what the sandbox is comes on the command line, with the hint for look
+    if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT $CLAUDE_LOOK_HINT"
+    elif [ "$hint" = 1 ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT"; fi
+    set -- claude --settings "$tpl/settings-in.json" "$@"
+  else
+    if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_LOOK_HINT"; fi
+    set -- claude --add-dir "$KINGO_DIR" "$@"
+  fi
 
   # Linux and Windows (WSL2): there nono does not keep a program in the sandbox from connecting to a Unix socket
   # (found on 13 Nov 2026 under WSL2: one "docker run -v" from inside the sandbox read a file outside it). Docker,
@@ -1451,12 +1549,22 @@ cmd_claude() {
     set -- /usr/bin/python3 -I "$tpl/no_unix_sockets.py" "$@"
   fi
 
+  # What the sandbox may read besides the folder it starts in: for the course all of kingo-pod; for a folder of
+  # your own only setup/claude, where look, the lock and the settings are.
+  local reads="$KINGO_DIR"
+  [ -z "$in_dir" ] || reads="$tpl"
   if [ "${KINGO_CLAUDE_DRY_RUN:-}" = 1 ]; then
     echo "dry run — would start in $dir:"
-    echo "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- $*"
+    echo "  nono run --profile $profile --allow-cwd --read $reads -- $*"
     return
   fi
   cd "$dir"
+  if [ -n "$in_dir" ]; then
+    echo "Claude Code works in $dir: it can write there and nowhere else on this laptop."
+    if grep -qi microsoft /proc/version 2>/dev/null && command -v wslpath >/dev/null 2>&1; then
+      echo "In Windows, this folder is: $(wslpath -w "$dir" 2>/dev/null || true)"
+    fi
+  fi
   # WSL sets XDG_RUNTIME_DIR=/run/user/<uid>/ even when systemd made no login session; then the folder does not exist,
   # nono's terminal proxy cannot write its config there, and the start dies with "Failed to create PTY proxy" (the TA,
   # 13 Nov 2026). Without the variable nono starts, so drop it when its folder is missing or not writable.
@@ -1477,11 +1585,14 @@ cmd_claude() {
   # With the variable, nono does not ask. It still prints what it refused.
   CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
   CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
+  # PostgreSQL for psql, for the course only (the base profile would not let these variables through either).
+  if [ -z "$in_dir" ]; then
+    export PGHOST=127.0.0.1 PGPORT="$P_POSTGRES" PGUSER="$KINGO_USER" PGPASSWORD="$KINGO_PASSWORD" PGDATABASE=classroom
+  fi
   CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
-  PGHOST=127.0.0.1 PGPORT="$P_POSTGRES" PGUSER="$KINGO_USER" PGPASSWORD="$KINGO_PASSWORD" PGDATABASE=classroom \
   PATH="$tpl/bin:$PATH" KINGO_BROWSER="$(claude_browser_path)" \
   NONO_NO_SAVE_PROMPT=1 \
-    exec "$nono" run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- "$@"
+    exec "$nono" run --profile "$profile" --allow-cwd --read "$reads" -- "$@"
 }
 
 # ── smoke: rigorous verification (exact codes + stability + bindings + hub) ───

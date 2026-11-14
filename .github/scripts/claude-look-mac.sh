@@ -63,8 +63,8 @@ grep -q "^CLAUDE_NONO_VERSION=$("$NONO_BIN" --version | sed -n 's/^nono \([0-9.]
   || fail "the nono that kingo downloaded says another version than kingo names: $("$NONO_BIN" --version)"
 "$NONO_BIN" profile validate "$HOME/.config/nono/profiles/kingo-claude.json" > "$CFG/tmp/validate.log" 2>&1 \
   || { show "$(cat "$CFG/tmp/validate.log")" 6; fail "nono does not take the course profile"; }
-grep -q 'allow mach-register (global-name-prefix .*org.chromium.Chromium.MachPortRendezvousServer\.' "$HOME/.config/nono/profiles/kingo-claude.json" \
-  || fail "the course profile has no rule for Chrome's Mach service"
+grep -q 'allow mach-register (global-name-prefix .*org.chromium.Chromium.MachPortRendezvousServer\.' "$HOME/.config/nono/profiles/kingo-claude-base.json" \
+  || fail "the base profile, which the course profile extends, has no rule for Chrome's Mach service"
 ok "nono is the one kingo downloaded ($("$NONO_BIN" --version | head -n 1)), and it takes the course profile"
 
 say "kingo gets the browser"
@@ -144,11 +144,12 @@ ok "one picture, and look says that it did not wait for scripts"
 MODE=""
 
 say "a profile without the rule for the Mach service: look must fall back to one program"
-COPY="$CFG/tmp/kingo-claude-without-mach-rule.json"
-python3 - "$HOME/.config/nono/profiles/kingo-claude.json" "$COPY" <<'PYTHON'
+# the rule is in the base profile, and nothing else is in its list: a copy of the base profile with an empty list
+COPY="$CFG/tmp/kingo-claude-base-without-mach-rule.json"
+python3 - "$HOME/.config/nono/profiles/kingo-claude-base.json" "$COPY" <<'PYTHON'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
-new, n = re.subn(r',\s*"\(allow mach-register [^\n]*"\n', "\n", text)
+new, n = re.subn(r'\n\s*"\(allow mach-register [^\n]*"\n', "\n", text)
 assert n == 1, n
 open(sys.argv[2], "w", encoding="utf-8").write(new)
 PYTHON
@@ -165,6 +166,45 @@ ok "without the rule, look runs Chrome as one program: $n picture(s), and it say
 out=$(in_sandbox look look-cv.html --pdf)
 [ "$(head -c 4 "$DIR/look/look-cv.pdf" 2>/dev/null)" = "%PDF" ] || { show "$out" 30; fail "without the rule, look --pdf made no PDF"; }
 ok "without the rule, the PDF comes too"
+say "a folder of one's own (kingo claude --in), and the student's own profile, on a Mac"
+OWN="$HOME/projects/thesis"; MINE="$KINGO_DIR/my-nono-profile.json"
+rm -rf "$OWN" "$MINE"; mkdir -p "$OWN" "$HOME/Documents"
+for d in / "$HOME" "$HOME/Documents" "$HOME/Library" "$KINGO_DIR" "$(dirname "$KINGO_DIR")"; do
+  if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$d" 2>&1); then show "$out" 3; fail "kingo claude --in took the folder $d"; fi
+done
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$OWN") || fail "kingo claude --in did not get as far as the start of Claude Code"
+has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- claude --settings $KINGO_DIR/setup/claude/settings-in.json --permission-mode default --append-system-prompt You were started with" \
+  || { show "$dry" 3; fail "kingo claude --in would not start Claude Code with the base profile and its own settings"; }
+[ -z "$(ls -A "$OWN")" ] || fail "kingo put a file into the folder"
+out=$( ( cd "$OWN" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 \
+    PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
+    "$NONO_BIN" run --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" -- \
+    sh -c 'echo "n8n=${N8N_BASE_URL:-none} model=${ANTHROPIC_BASE_URL:+set}"; : >> here.txt && echo WROTE-HERE; cat "$1/VERSION" 2>&1; ( : >> "$1/setup/claude/x" ) 2>/dev/null && echo WROTE-KINGO; cp "$1/setup/claude/README.md" page.md && look "$2" | head -n 1; git init -q . && git add -A && git -c user.name=ci -c user.email=ci@example.com commit -q -m one && echo "commits=$(git log --oneline | wc -l | tr -d " ")"' \
+    sh "$KINGO_DIR" "$DIR/look-cv.html" ) 2>&1 || true )
+has "$out" "n8n=none model=set" || { show "$out" 20; fail "the base profile has something of the course in it, or lost the way to the model"; }
+has "$out" WROTE-HERE || { show "$out" 20; fail "the sandbox could not write in the folder"; }
+if has "$out" "$(cat "$KINGO_DIR/VERSION")"; then fail "the rest of kingo-pod can be read from a folder of one's own"; fi
+if has "$out" WROTE-KINGO; then fail "setup/claude can be written from a folder of one's own"; fi
+has "$out" "commits=1" || { show "$out" 20; fail "git does not work in the folder inside the sandbox"; }
+ok "in a folder of one's own: it writes there, reads setup/claude and not the rest of kingo-pod, nothing of the course, git works"
+
+out=$(in_sandbox sh -c ': >> "$1" && echo WROTE || echo refused' sh "$KINGO_DIR/shared/own-probe.txt")
+has "$out" refused || { show "$out" 12; fail "with the course profile alone, the sandbox can already write in shared"; }
+cp "$KINGO_DIR/setup/claude/my-nono-profile.example.json" "$MINE"
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo claude did not start with the example of my-nono-profile.json"
+has "$dry" "nono run --profile kingo-claude-mine --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "kingo does not start nono with the student's profile"; }
+PROFILE=kingo-claude-mine
+out=$(in_sandbox sh -c 'for f in "$@"; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done; echo "n8n=${N8N_BASE_URL:+set}"' sh \
+  "$KINGO_DIR/shared/own-probe.txt" "$KINGO_DIR/own-probe.txt" "$MINE")
+PROFILE=kingo-claude
+show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused|n8n=)')" 5
+has "$out" "WROTE $KINGO_DIR/shared/own-probe.txt" || { show "$out" 20; fail "with the example profile, the sandbox still cannot write in shared"; }
+[ "$(printf '%s\n' "$out" | grep -c '^refused ')" = 2 ] || fail "with the example profile, the sandbox can write kingo-pod or the profile itself"
+has "$out" "n8n=set" || fail "with the example profile, the route to n8n of the course profile is gone"
+rm -f "$MINE" "$KINGO_DIR/shared/own-probe.txt"
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo claude did not start after the profile was removed"
+ok "the example of my-nono-profile.json lets the sandbox write in shared, and kingo-pod and the profile itself stay closed"
+
 PROFILE=kingo-claude
 out=$(in_sandbox look look-cv.html)
 has "$out" "in 1 picture(s)" || { show "$out" 30; fail "the last picture, for the upload, did not come"; }
