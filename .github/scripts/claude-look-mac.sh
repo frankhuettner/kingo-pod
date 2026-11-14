@@ -346,7 +346,7 @@ ok "login: no OpenRouter, nono's proxy and certificate, its own config folder; t
 # address: nono reads all traffic to it and lets through only what has a route. Without a route, nono answers 502
 # and Claude Code ends with "Unable to connect to Anthropic services" (Frank's Mac, 14 Nov 2026).
 say "through nono's proxy, the login's sandbox reaches the other addresses on Anthropic's login host"
-HELLO='for u in https://platform.claude.com/v1/oauth/hello https://api.anthropic.com/api/hello; do echo "code=$(curl -s -o /dev/null -m 30 --cacert "$NODE_EXTRA_CA_CERTS" -w "%{http_code}" "$u") $u"; done'
+HELLO='for u in https://platform.claude.com/v1/oauth/hello https://api.anthropic.com/api/hello; do c=000; for i in 1 2 3; do c=$(curl -s -o /dev/null -m 30 --cacert "$NODE_EXTRA_CA_CERTS" -w "%{http_code}" "$u"); [ "$c" = 000 ] || break; sleep 3; done; echo "code=$c $u"; done'
 # the comparison: a copy of the profile of the login without platform.claude.com among the hosts with a route
 sed 's|"api_hosts": \["https://api.anthropic.com", "https://platform.claude.com"\]|"api_hosts": ["https://api.anthropic.com"]|' "$PROF/kingo-claude-login.json" > "$PROF/kingo-claude-login-ci.json"
 if grep -q '"https://platform.claude.com"\]' "$PROF/kingo-claude-login-ci.json"; then fail "the copy of the profile still has the route for platform.claude.com"; fi
