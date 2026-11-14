@@ -127,6 +127,8 @@ prepare() {
   grep -q '^  NONO_NO_SAVE_PROMPT=1 \\$' "$KINGO_DIR/kingo" \
     || fail "kingo claude does not start nono with NONO_NO_SAVE_PROMPT=1: nono would ask to change the profile when a session ends"
   ok "kingo claude starts nono with NONO_NO_SAVE_PROMPT=1"
+  grep -q '^  GIT_CONFIG_NOSYSTEM=1 \\$' "$KINGO_DIR/kingo" \
+    || fail "kingo claude does not set GIT_CONFIG_NOSYSTEM=1: git in the sandbox would stop at /etc/gitconfig where that file exists"
   grep -q '^  PATH="\$tpl/bin:\$PATH" KINGO_BROWSER="\$(claude_browser_path)" \\$' "$KINGO_DIR/kingo" \
     || fail "kingo claude does not put look on the PATH or does not say where the browser is"
   # nono: the one that kingo downloaded (./kingo claude nono, in the workflow), and no other
@@ -152,7 +154,7 @@ kingo_env() {
     CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" \
     PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
-    NONO_NO_SAVE_PROMPT=1 \
+    NONO_NO_SAVE_PROMPT=1 GIT_CONFIG_NOSYSTEM=1 \
     PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
       "$@" )
 }
@@ -544,7 +546,7 @@ part_own() {
       CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
       CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
       CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" \
-      NONO_NO_SAVE_PROMPT=1 \
+      NONO_NO_SAVE_PROMPT=1 GIT_CONFIG_NOSYSTEM=1 \
       PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
         timeout 180 "${base[@]}" "$@" ) 2>&1 || true
   }
@@ -609,6 +611,12 @@ part_own() {
   ok "it writes in the folder, reads setup/claude, and neither the rest of kingo-pod nor a file outside; nothing of the course"
 
   say "git keeps versions: in the folder, and in the course folder"
+  # Without GIT_CONFIG_NOSYSTEM, git stops where the system has an /etc/gitconfig, which the sandbox refuses.
+  if [ -e /etc/gitconfig ]; then
+    out=$(in_folder "${LOCK[@]}" env -u GIT_CONFIG_NOSYSTEM sh -c 'git init -q probe-repo 2>&1; cd probe-repo && git -c user.name=ci -c user.email=ci@example.com commit -q --allow-empty -m x 2>&1; echo "commit-exit=$?"')
+    rm -rf "$dir/probe-repo"
+    printf '         | this machine has an /etc/gitconfig; without the variable: %s\n' "$(printf '%s\n' "$out" | grep -E 'commit-exit=|fatal' | tr '\n' ' ' | cut -c1-150)"
+  fi
   printf 'first\n' > "$dir/git-probe.txt"
   out=$(in_folder "${LOCK[@]}" sh -c "$GIT")
   has "$out" "commits=2" || { show "$out" 20; fail "git does not work in a folder of one's own inside the sandbox"; }
