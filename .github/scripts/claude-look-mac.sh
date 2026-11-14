@@ -10,7 +10,8 @@
 #     allows exactly that name. Without the rule, look starts Chrome as one program (--single-process), which
 #     cannot wait for a page's scripts.
 # The checks: kingo gets its own nono and the browser; a program in the sandbox cannot change either; look makes
-# pictures and a PDF inside nono with the course profile and waits for scripts; under a copy of the profile without
+# pictures and a PDF inside nono with the course profile and waits for scripts; browse fills in a form and opens a
+# page of the internet through nono's proxy; under a copy of the profile without
 # the rule, look falls back to one program and says so.
 set -euo pipefail
 
@@ -21,6 +22,7 @@ DIR="$KINGO_DIR/claude"
 PROFILE=kingo-claude
 MODE=""                            # KINGO_BROWSER_MODE; kingo claude sets none
 NONO_BIN=""
+NODE_BIN_FOR_BROWSE="" PW_DIR=""   # Node.js and playwright-core for browse; filled in after kingo claude browser
 
 say()  { printf '\n── %s\n' "$*"; }
 ok()   { printf '   ok    %s\n' "$*"; }
@@ -33,6 +35,7 @@ in_sandbox() {
   ( cd "$DIR" &&
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 \
     PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" KINGO_BROWSER_MODE="$MODE" \
+    KINGO_NODE="$NODE_BIN_FOR_BROWSE" KINGO_PLAYWRIGHT="$PW_DIR" \
       "$NONO_BIN" run --profile "$PROFILE" --allow-cwd --read "$KINGO_DIR" -- "$@" ) 2>&1 || true
 }
 pictures() { # <how many> <name>
@@ -50,6 +53,7 @@ dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo c
 show "$dry" 2
 has "$dry" "--append-system-prompt When you have written or changed an HTML page, look at it" \
   || fail "kingo claude does not tell Claude Code how to look at a page"
+has "$dry" "run it with: browse <script.js>" || fail "kingo claude does not tell Claude Code how to try a page with browse"
 if has "$dry" no_unix_sockets.py; then fail "on a Mac, kingo claude would start Claude Code through the lock for Linux"; fi
 ok "kingo claude tells Claude Code how to look at a page"
 
@@ -74,6 +78,11 @@ BROWSER_BIN=$(find "$HOME/.local/share/kingo/browsers" -type f -name chrome-head
 [ -x "$BROWSER_BIN" ] || fail "the browser is not in ~/.local/share/kingo/browsers"
 [ ! -e "$CFG/browsers" ] || fail "there is a browser in $CFG, a folder the sandbox can write"
 ok "the browser is there: $BROWSER_BIN"
+NODE_BIN_FOR_BROWSE=$(ls "$HOME"/.local/share/kingo/node/*/node 2>/dev/null | head -n 1)
+PW_DIR=$(ls -d "$HOME"/.local/share/kingo/playwright/*/ 2>/dev/null | head -n 1); PW_DIR=${PW_DIR%/}
+[ -x "$NODE_BIN_FOR_BROWSE" ] || fail "kingo claude browser did not get Node.js into ~/.local/share/kingo/node"
+[ -f "$PW_DIR/node_modules/playwright-core/package.json" ] || fail "kingo claude browser did not get playwright-core into ~/.local/share/kingo/playwright"
+ok "Node.js $("$NODE_BIN_FOR_BROWSE" --version) and playwright-core, for browse"
 
 cat > "$DIR/look-cv.html" <<'HTML'
 <!doctype html><html><head><meta charset="utf-8"><title>Probe</title>
@@ -109,12 +118,24 @@ rm -rf "$DIR/look"
 say "the sandbox cannot change what kingo downloaded"
 out=$(in_sandbox sh -c 'for f in "$@"; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done' sh \
   "$DIR/look-write-probe" "$BROWSER_BIN" "$(dirname "$BROWSER_BIN")/new-file" "$NONO_BIN" "$(dirname "$NONO_BIN")/new-file" \
-  "$HOME/.local/share/kingo/new-file")
-show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused) ')" 6
+  "$HOME/.local/share/kingo/new-file" "$NODE_BIN_FOR_BROWSE" "$(dirname "$NODE_BIN_FOR_BROWSE")/new-file" \
+  "$PW_DIR/node_modules/playwright-core/package.json" "$PW_DIR/new-file")
+show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused) ')" 10
 has "$out" "WROTE $DIR/look-write-probe" || { show "$out" 20; fail "the probe proves nothing: it could not write in the course folder either"; }
-[ "$(printf '%s\n' "$out" | grep -c '^refused ')" = 5 ] || fail "a program in the sandbox can write where kingo keeps nono or the browser"
+[ "$(printf '%s\n' "$out" | grep -c '^refused ')" = 9 ] || fail "a program in the sandbox can write where kingo keeps nono, the browser, Node.js or playwright-core"
 rm -f "$DIR/look-write-probe"
-ok "inside the sandbox, the browser, nono and their folders cannot be written"
+ok "inside the sandbox, the browser, nono, Node.js, playwright-core and their folders cannot be written"
+
+# browse: a script as Claude would write it fills in a form and sends it; then a page of the internet. On a Mac,
+# Chrome does not take HTTPS_PROXY: browse-setup.js gives it nono's proxy, or the page would not come.
+say "browse inside nono: a form is filled in and sent, and a page of the internet comes"
+out=$(in_sandbox browse "$HERE/browse_check.js" "$HERE/browse_shop.html" look/browse-shop.png https://github.com/)
+show "$(printf '%s\n' "$out" | grep '^BROWSE-')" 3
+has "$out" "BROWSE-SAID Thank you, Mina: 1 Coffee" || { show "$out" 20; fail "browse did not fill in and send the form inside the sandbox"; }
+python3 "$HERE/png_check.py" "$DIR/look/browse-shop.png" | sed 's/^/         | /' || fail "browse made no picture of the page"
+printf '%s\n' "$out" | grep '^BROWSE-TITLE ' | grep -q GitHub || { show "$out" 20; fail "browse did not get a page of the internet inside the sandbox"; }
+ok "browse filled in the form, read the answer, made a picture, and opened github.com"
+rm -rf "$DIR/look"
 
 # A font that the user installed: the system knows it by name; when the sandbox cannot read its file, the browser
 # draws a box for every letter (found on 14 Nov 2026 with Pretendard). Reports, and fails only on boxes.

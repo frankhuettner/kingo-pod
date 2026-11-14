@@ -1007,7 +1007,8 @@ cmd_mcp() {
 CLAUDE_KEYS="$HOME/.config/kingo"
 # What kingo downloads for Claude Code, nono and the browser, goes here: outside everything the sandbox may write.
 # kingo starts both files outside the sandbox (nono itself; the browser for --version and ldd), so a program inside
-# the sandbox must not be able to swap them. The sandbox may read the browser, and nothing else of this folder.
+# the sandbox must not be able to swap them. The sandbox may read the browser, Node.js and playwright-core (for browse),
+# and nothing else of this folder.
 CLAUDE_SHARE="$HOME/.local/share/kingo"
 
 # ── kingo claude: its own nono ───────────────────────────────────────────────
@@ -1190,9 +1191,26 @@ mac-x64:89c56fb080ab4e9ba76656d5669af2b2dfc313c11434871e8f4e351c08a5ffca
 linux64:77a6442fd3c8acd3bef9e1067fc26f5ef464277d22f0e8cb58dc3e4077a3e458
 linux-arm64:e1262e9f4f244c441dcb54aa0e9abe4cf7b266ab02dc666fd975bd55aba9b3dc
 "
+# Node.js and playwright-core, so that Claude can try a page as a person would: fill in a form, press a button, read
+# the answer. `browse try.js` (setup/claude/bin/browse) runs such a script with this Node.js, and in it
+# chromium.launch() starts the browser above (setup/claude/browse-setup.js). Fixed versions with checksums, kept
+# next to the browser, read only for the sandbox; ./kingo claude browser gets them with the browser. Never fatal.
+# Not Playwright's MCP server or its CLI: both open a Unix socket for their browser, and the sandbox refuses that
+# (under Linux kingo's lock refuses every Unix socket); playwright-core by itself needs none (tried on 14 Nov 2026).
+# Node.js: the checksums are those of SHASUMS256.txt of the release, whose signature was checked with the keys of
+# nodejs/release-keys. playwright-core: the file of the npm registry, whose sha512 matched the registry's.
+CLAUDE_NODE_VERSION=24.22.3
+CLAUDE_NODE_SUMS="
+darwin-arm64:ff6e17d4874b76d272212b908cc020d6e815fba5a6c7eaaa06add725840307fd
+darwin-x64:977614af0504c81045e7fd85596dbca0e5f951b96681516dadafedcca8c447f7
+linux-x64:061ec3e3062115705b56b51fa9cc330ab50d34b6969387d4e4b1a50c6809acc2
+linux-arm64:261af2af250dfd7e9f25cf151d1b2713a0adf8f10a9ad116c4947f68627affe8
+"
+CLAUDE_PLAYWRIGHT_VERSION=1.65.1
+CLAUDE_PLAYWRIGHT_SUM=6f5a60be62a4fddfbe7d10c448d8fbd54547da3358f2f8a04211440471ee863e
 # What Claude Code is told at every start, in addition to AGENTS.md: that file is the student's after the first
 # start, so a line added to its template would not reach the course folders that exist.
-CLAUDE_LOOK_HINT='When you have written or changed an HTML page, look at it before you say it is done. Run: look <file.html> (add --width 600 for a phone, --pdf for the page as it prints). It makes pictures of the whole page in the folder look/. Read them with the Read tool and check the layout.'
+CLAUDE_LOOK_HINT='When you have written or changed an HTML page, look at it before you say it is done. Run: look <file.html> (add --width 600 for a phone, --pdf for the page as it prints). It makes pictures of the whole page in the folder look/. Read them with the Read tool and check the layout. To try a page as a person would (fill in a form, press a button, read the answer), write a short Node.js script that uses require("playwright-core") and run it with: browse <script.js> (browse --help shows an example). There chromium.launch() starts the same browser; open a file with "file://" and its full path. Pages on the internet work too. A web server that you start yourself cannot be reached in the sandbox.'
 
 claude_browser_platform() { # -> the name of this machine in Chrome for Testing, or nothing
   case "$(uname -s)-$(uname -m)" in
@@ -1285,6 +1303,79 @@ claude_browser_get() {
   echo "The browser is in $dir/$CLAUDE_BROWSER_VERSION."
 }
 
+claude_node_platform() { # -> the name of this machine in the releases of Node.js, or nothing
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64)                echo darwin-arm64 ;;
+    Darwin-x86_64)               echo darwin-x64 ;;
+    Linux-x86_64)                echo linux-x64 ;;
+    Linux-aarch64|Linux-arm64)   echo linux-arm64 ;;
+  esac
+}
+
+claude_node_path() { printf '%s/node/%s/node' "$CLAUDE_SHARE" "$CLAUDE_NODE_VERSION"; }
+claude_playwright_dir() { printf '%s/playwright/%s' "$CLAUDE_SHARE" "$CLAUDE_PLAYWRIGHT_VERSION"; }
+
+# Downloads Node.js when it is not there: only the program node, not npm. Returns 0 when it is there afterwards.
+claude_node_get() {
+  local bin plat url dir tmp want got top
+  plat=$(claude_node_platform)
+  [ -n "$plat" ] || { warn "there is no Node.js for this machine ($(uname -s) $(uname -m)), so Claude cannot try pages."; return 1; }
+  bin=$(claude_node_path)
+  [ -x "$bin" ] && return 0
+  want=$(printf '%s\n' "$CLAUDE_NODE_SUMS" | sed -n "s/^$plat://p")
+  top="node-v$CLAUDE_NODE_VERSION-$plat"
+  url="https://nodejs.org/dist/v$CLAUDE_NODE_VERSION/$top.tar.gz"
+  dir="$CLAUDE_SHARE/node"
+  tmp="$dir/.get-$$"
+  rm -rf "$tmp"; mkdir -p "$tmp/out" || { warn "could not make $tmp, so Node.js was not installed."; return 1; }
+  echo "Getting Node.js $CLAUDE_NODE_VERSION, with which Claude tries pages (once, about 50 MB) ..."
+  if [ -t 2 ]; then curl -fL --progress-bar -o "$tmp/node.tar.gz" "$url"; else curl -fsSL -o "$tmp/node.tar.gz" "$url"; fi \
+    || { rm -rf "$tmp"; warn "the download of Node.js did not work, so Claude cannot try pages. ./kingo claude browser tries again."; return 1; }
+  got=$(file_sha256 "$tmp/node.tar.gz")
+  if [ -z "$got" ] || [ "$got" != "$want" ]; then
+    rm -rf "$tmp"
+    warn "the downloaded Node.js is not the file kingo expects (checksum ${got:-unknown}), so it was not installed. ./kingo claude browser tries again."
+    return 1
+  fi
+  { tar -xzf "$tmp/node.tar.gz" -C "$tmp" "$top/bin/node" "$top/LICENSE" &&
+    mv "$tmp/$top/bin/node" "$tmp/out/node" && mv "$tmp/$top/LICENSE" "$tmp/out/LICENSE" && chmod +x "$tmp/out/node"; } \
+    || { rm -rf "$tmp"; warn "could not unpack Node.js, so Claude cannot try pages."; return 1; }
+  # this version in, every other version out
+  find "$dir" -mindepth 1 -maxdepth 1 ! -name ".get-$$" -exec rm -rf {} + 2>/dev/null || true
+  mv "$tmp/out" "$dir/$CLAUDE_NODE_VERSION" && rm -rf "$tmp"
+  [ -x "$bin" ] || { warn "Node.js was unpacked, but $bin is not there."; return 1; }
+  echo "Node.js is in $dir/$CLAUDE_NODE_VERSION."
+}
+
+# Downloads playwright-core from the npm registry when it is not there. It needs no other package.
+claude_playwright_get() {
+  local root dir tmp want got url
+  root=$(claude_playwright_dir)
+  [ -f "$root/node_modules/playwright-core/package.json" ] && return 0
+  want=$CLAUDE_PLAYWRIGHT_SUM
+  url="https://registry.npmjs.org/playwright-core/-/playwright-core-$CLAUDE_PLAYWRIGHT_VERSION.tgz"
+  dir="$CLAUDE_SHARE/playwright"
+  tmp="$dir/.get-$$"
+  rm -rf "$tmp"; mkdir -p "$tmp/out/node_modules" || { warn "could not make $tmp, so playwright-core was not installed."; return 1; }
+  echo "Getting playwright-core $CLAUDE_PLAYWRIGHT_VERSION, with which Claude tries pages (once, about 3 MB) ..."
+  curl -fsSL -o "$tmp/playwright-core.tgz" "$url" \
+    || { rm -rf "$tmp"; warn "the download of playwright-core did not work, so Claude cannot try pages. ./kingo claude browser tries again."; return 1; }
+  got=$(file_sha256 "$tmp/playwright-core.tgz")
+  if [ -z "$got" ] || [ "$got" != "$want" ]; then
+    rm -rf "$tmp"
+    warn "the downloaded playwright-core is not the file kingo expects (checksum ${got:-unknown}), so it was not installed. ./kingo claude browser tries again."
+    return 1
+  fi
+  { tar -xzf "$tmp/playwright-core.tgz" -C "$tmp" && mv "$tmp/package" "$tmp/out/node_modules/playwright-core"; } \
+    || { rm -rf "$tmp"; warn "could not unpack playwright-core, so Claude cannot try pages."; return 1; }
+  find "$dir" -mindepth 1 -maxdepth 1 ! -name ".get-$$" -exec rm -rf {} + 2>/dev/null || true
+  mv "$tmp/out" "$root" && rm -rf "$tmp"
+  [ -f "$root/node_modules/playwright-core/package.json" ] || { warn "playwright-core was unpacked, but it is not in $root."; return 1; }
+  echo "playwright-core is in $root."
+}
+
+claude_browse_get() { claude_node_get && claude_playwright_get; }   # what browse needs besides the browser
+
 # Linux: says which packages are missing. In a terminal it asks whether it shall install them (a fresh Ubuntu under
 # WSL has none of them, and a warning before the start of Claude Code scrolls away: Frank's Windows laptop, 14 Nov
 # 2026). Without a terminal, or after a "no", it names the one line that installs them. Returns 1 when some are missing.
@@ -1318,11 +1409,13 @@ claude_browser_check_packages() { # browser
 claude_browser_cmd() { # ./kingo claude browser: get the browser, or say why it does not run
   local bin
   claude_browser_get || return 1
+  claude_browse_get || return 1
   bin=$(claude_browser_path)
   claude_browser_check_packages "$bin" || return 1
   if "$bin" --version >/dev/null 2>&1; then
     echo "The browser is ready: $("$bin" --version 2>/dev/null | head -n 1)"
     echo "In ./kingo claude, Claude looks at a page with:  look page.html"
+    echo "and tries one (fills in a form, presses a button) with:  browse script.js"
   else
     warn "the browser is installed but does not start: $bin --version"
     return 1
@@ -1443,6 +1536,7 @@ cmd_claude() {
       echo "  The first start gets nono $CLAUDE_NONO_VERSION, the sandbox: kingo starts its own, not one that is installed."
       echo "  ./kingo claude nono gets it again, and says which nono kingo claude starts."
       echo "  The first start gets a browser, so that Claude can look at the pages it writes (look page.html)."
+      echo "  With Node.js and playwright-core, which come with it, Claude also tries a page: fills in a form (browse script.js)."
       echo "  ./kingo claude browser gets it again, and says what is missing when it does not run."
       echo "  Claude asks before every command; ./kingo yolo lets it work"
       echo "  without asking (the sandbox protects your laptop either way; ./kingo backup saves your workflows and flows)."
@@ -1535,6 +1629,7 @@ cmd_claude() {
     fi
     if [ "${KINGO_CLAUDE_NO_BROWSER:-}" != 1 ] && claude_browser_get; then
       claude_browser_check_packages "$(claude_browser_path)" || true
+      claude_browse_get || true
     fi
   elif [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ]; then
     { check "$P_N8N" /healthz && check "$P_LANGFLOW" /health; } \
@@ -1561,6 +1656,7 @@ cmd_claude() {
     # Never fatal: without the browser Claude starts as before.
     if [ "${KINGO_CLAUDE_NO_BROWSER:-}" != 1 ] && claude_browser_get; then
       claude_browser_check_packages "$(claude_browser_path)" || true
+      claude_browse_get || true
     fi
   fi
 
@@ -1699,7 +1795,7 @@ cmd_claude() {
   # The variables that kingo sets for nono and Claude Code; the profile lets them through. One list, so that the
   # dry run can name them and no line can fall out unseen (on 14 Nov 2026 a comment line between two lines of
   # variables cut five of them off: bash took the first lines for a command of their own).
-  # look (setup/claude/bin) and its browser: PATH and KINGO_BROWSER. On a Mac, Chrome registers a Mach service
+  # look and browse (setup/claude/bin): PATH, KINGO_BROWSER, and for browse KINGO_NODE and KINGO_PLAYWRIGHT. On a Mac, Chrome registers a Mach service
   # for its helper programs, which nono's sandbox refuses by itself; the core profile has one rule that allows
   # exactly this name. Should a Mac still refuse it, look starts Chrome as one program (--single-process) and says
   # that it could not wait for scripts. KINGO_BROWSER_MODE=single before ./kingo claude asks for that from the start.
@@ -1716,6 +1812,7 @@ cmd_claude() {
     CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1
     "CLAUDE_CONFIG_DIR=$cfg" "CLAUDE_CODE_TMPDIR=$cfg/tmp" "TMPDIR=$cfg/tmp"
     "PATH=$tpl/bin:$PATH" "KINGO_BROWSER=$(claude_browser_path)"
+    "KINGO_NODE=$(claude_node_path)" "KINGO_PLAYWRIGHT=$(claude_playwright_dir)"
     GIT_CONFIG_NOSYSTEM=1 NONO_NO_SAVE_PROMPT=1
   )
   # CLAUDE_CODE_MAX_CONTEXT_TOKENS: Claude Code does not know the course's model, assumes a context size (200k tokens,
