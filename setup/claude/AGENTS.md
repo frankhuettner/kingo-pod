@@ -10,6 +10,8 @@ not make up rules of your own.
 
 - Started with `./kingo claude`, you run in a sandbox (nono). You can write only in this folder. You can read the
   kingo-pod folder one level up (`compose.yml`, `kingo`, `docs/`) to understand the stack, but you cannot change it.
+- The sandbox is there so that a mistake cannot harm the student's laptop: a wrong command, a wrong path, a file
+  deleted by accident. It is not a puzzle and not a test of you. Do not look for a way around it.
 - You cannot run `./kingo` or `podman`. If a service is down, ask the student to run `./kingo up` in their terminal.
 - When the sandbox blocks something, say so and stop. Never ask the student to run a command in their own terminal
   that you could not run here, except the one line that opens a page you wrote (see "How you work"), and never

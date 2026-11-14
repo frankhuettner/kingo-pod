@@ -1,0 +1,78 @@
+{
+  // nono profile "kingo-claude-core": the sandbox of `kingo claude` without a way to a model.
+  // Written to ~/.config/nono/profiles/kingo-claude-core.json on every start, from this file.
+  // No start uses it alone. Two profiles extend it, and each adds one way to a model:
+  //   kingo-claude-base   (nono-profile-base.json)   OpenRouter, with your key
+  //   kingo-claude-login  (nono-profile-login.json)  Anthropic, with your login (./kingo claude --login)
+  // and "kingo-claude-course" (nono-profile-course.json) adds n8n, Langflow and PostgreSQL to either.
+  // Here: what Claude Code may read, the variables it gets, and the rule for look.
+  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
+  "extends": "default",
+  "meta": {
+    "name": "kingo-claude-core",
+    "version": "0.6.0",
+    "description": "Kingo: the sandbox of Claude Code without a way to a model; other profiles extend it"
+  },
+  "security": {
+    // Windows: WSL2 with Microsoft's kernel (6.6, Landlock V3) cannot force Claude's traffic through
+    // nono's proxy, and nono then refuses to start ("proxy-only network mode cannot be
+    // kernel-enforced"). With this line it starts and prints a warning: on that kernel, the network
+    // is not locked. No effect on a Mac.
+    "wsl2_proxy_policy": "insecure_proxy"
+  },
+  "groups": {
+    "include": [
+      "git_config",
+      "node_runtime",
+      "python_runtime",
+      "unlink_protection",
+      { "name": "claude_cache_linux", "when": "linux" },
+      { "name": "linux_sysfs_read", "when": "linux" }
+    ]
+  },
+  "workdir": { "access": "readwrite" },
+  "filesystem": {
+    // Claude Code's own config folder is not here: each way to a model has its own
+    // (~/.kingo-claude, ~/.kingo-claude-login), named in the profile of that way.
+    "allow": [
+      "$HOME/.local/state/claude/locks",
+      "$HOME/.cache/claude",
+      { "path": "$HOME/Library/Caches/claude-cli-nodejs", "when": "macos" }
+    ],
+    // The Claude Code binary from the native installer, and the browser that kingo downloads for look. Read only:
+    // kingo starts the browser outside the sandbox too (--version, ldd), so the sandbox must not be able to change it.
+    // And the fonts that the user installed. The system knows them by name; when the browser of look cannot read
+    // their files, a page that names such a font (for example Pretendard) shows a box for every letter.
+    // nono leaves out a folder that does not exist.
+    "read": [
+      "$HOME/.local/share/claude", "$HOME/.local/share/kingo/browsers",
+      { "path": "$HOME/Library/Fonts", "when": "macos" },
+      { "path": "$HOME/.local/share/fonts", "when": "linux" },
+      { "path": "$HOME/.fonts", "when": "linux" }
+    ]
+  },
+  "environment": {
+    // Only these variables reach Claude; everything else (other API keys, .env) is dropped.
+    // SHLVL counts how many shells deep a program runs. Without it, the bash that runs Claude Code's commands
+    // takes itself for the first shell of a remote login and reads /etc/bash.bashrc and ~/.bashrc first. The
+    // sandbox refuses both, and every result of a command then starts with two lines "Permission denied".
+    "allow_vars": [
+      "PATH", "HOME", "USER", "LOGNAME", "SHELL", "SHLVL",
+      "TERM", "TERM_PROGRAM", "COLORTERM", "LANG", "LC_*", "TZ",
+      "XDG_RUNTIME_DIR",
+      "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_TMPDIR", "TMPDIR",
+      "CLAUDE_CODE_DISABLE_ARTIFACT", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING",
+      "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+      "KINGO_BROWSER", "KINGO_BROWSER_MODE",
+      "GIT_CONFIG_NOSYSTEM"
+    ]
+  },
+  // For look, on a Mac. Chrome registers a Mach service for its helper programs, named
+  // org.chromium.Chromium.MachPortRendezvousServer.<its process number>; nono's sandbox allows no mach-register,
+  // and Chrome then stops at its start. The rule allows names with exactly this beginning and no other. It gives
+  // no file and no network. What it leaves open: a program in the sandbox could take such a name before a Chromium
+  // outside the sandbox with that process number asks for it, and that Chromium would then not start.
+  "unsafe_macos_seatbelt_rules": [
+    "(allow mach-register (global-name-prefix \"org.chromium.Chromium.MachPortRendezvousServer.\"))"
+  ]
+}

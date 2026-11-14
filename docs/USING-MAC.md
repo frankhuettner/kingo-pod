@@ -75,6 +75,7 @@ then one command per job:
 | `./kingo memory` | how much memory the containers may use; `./kingo memory 5` changes it |
 | `./kingo mail` | set up the mailbox for the mail assistant (n8n workshop); `./kingo mail help` shows the rest |
 | `./kingo claude` | start Claude Code, your coding agent, in its sandbox (see [Claude Code](#claude-code--your-coding-agent)) |
+| `./kingo claude --login` | the same with your Claude subscription in place of OpenRouter (see [Your Claude subscription](#your-claude-subscription-optional)) |
 | `./kingo doctor` | something's wrong? start here |
 | `./kingo version` | which version am I running? (send this when you ask for help) |
 | `./kingo update` | get the newest class files + images (run it when the instructor announces an update) |
@@ -177,12 +178,15 @@ It runs in a **sandbox** called nono: on your Mac it can write in one folder
 only, `~/kingo-pod/claude`. It can read the rest of `kingo-pod` to understand
 the stack, and nothing else on your Mac.
 
-**Install it once.** One line installs nono, the database tool `psql` and
-Claude Code:
+**Install it once.** One line installs the database tool `psql` and Claude
+Code:
 
 ```
-brew install nono libpq && curl -fsSL https://claude.ai/install.sh | bash
+brew install libpq && curl -fsSL https://claude.ai/install.sh | bash
 ```
+
+nono you do not install: `./kingo claude` gets the version it needs by
+itself, the first time you start it.
 
 > **Already use Claude Code?** Run the line anyway: it installs Claude Code
 > the way Anthropic recommends, or brings it up to date. Your own settings and
@@ -213,6 +217,11 @@ questions of its own: pick a look, and say **Yes** when it asks whether you
 trust the folder. To stop, type `/exit`. Every next time, `./kingo claude`
 starts it right away.
 
+> **Hard to read?** Type `/theme` in Claude Code and pick another look.
+> `/theme` changes only the colors of the text. The background is not Claude
+> Code's: it belongs to your terminal, and you change it in the settings of the
+> terminal (in Terminal: **Terminal**, **Settings**, **Profiles**).
+
 **Tell it your team's rules.** Claude reads the file
 `~/kingo-pod/claude/AGENTS.md` at every start. Paste your team's copy of
 `ws2_rules.html` into it, as the file explains, then start Claude again. This
@@ -241,6 +250,49 @@ command you type can.
 > **A key stopped working?** `./kingo claude` checks the keys at every start.
 > A key that a service refuses is deleted, and the next start asks for it
 > again. The keys are kept in `~/.config/kingo/`, where Claude cannot read them.
+
+### Your Claude subscription (optional)
+
+Do you have a Claude subscription (Pro or Max)? Then Claude Code can use it in
+place of the OpenRouter key: Anthropic's models, paid by your subscription.
+The course does not need this. Everything else stays the same: the sandbox,
+n8n, Langflow and the database.
+
+```bash
+cd ~/kingo-pod && ./kingo claude --login
+```
+
+The first start opens your browser. Log in to Claude there and allow the
+access. Terminal then says `Logged in.`, and Claude Code starts.
+Every next time, `./kingo claude --login` starts Claude Code right away.
+
+- **Back to OpenRouter:** start with `./kingo claude`, as before. Both ways
+  stay set up, side by side.
+- **One session at a time.** Two sessions with `--login` at once can break the
+  login.
+- **Claude Code says that you are not logged in?** Run `./kingo claude logout`,
+  then start with `--login` again.
+- **End the login:** `./kingo claude logout`.
+
+Where the files are:
+
+| What | Where |
+|---|---|
+| your work | `~/kingo-pod/claude`, the same folder as without `--login` |
+| settings and history of the sessions with `--login` | `~/.kingo-claude-login` |
+| settings and history of the sessions without it | `~/.kingo-claude` |
+| your login | `~/.local/state/nono/oauth-capture` |
+
+The login is kept by nono, outside the sandbox, for up to 90 days. Only you
+can read that folder on your Mac; it is not encrypted. Claude Code gets
+stand-ins, which are of no use outside the sandbox. To remove the login from
+your Mac for good, log out and delete the folder in Terminal:
+
+```bash
+./kingo claude logout && rm -rf ~/.local/state/nono/oauth-capture
+```
+
+The folder holds only this login, unless you use nono for other tools too.
 
 ## Keeping up to date
 

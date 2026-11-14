@@ -1,0 +1,14 @@
+{
+  // nono profile "kingo-claude-login-course": the course with your Anthropic login in place of OpenRouter.
+  // Written to ~/.config/nono/profiles/kingo-claude-login-course.json on every start, from this file.
+  // `./kingo claude --login` starts Claude Code with this profile. It names two profiles, and nono puts them together:
+  //   kingo-claude-login   (nono-profile-login.json)   the Anthropic login, and Claude Code's config folder
+  //   kingo-claude-course  (nono-profile-course.json)  n8n, Langflow and PostgreSQL
+  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.81.
+  "extends": ["kingo-claude-login", "kingo-claude-course"],
+  "meta": {
+    "name": "kingo-claude-login-course",
+    "version": "0.6.0",
+    "description": "Kingo: Claude Code with an Anthropic login; writes only to the course folder; keys for n8n and Langflow injected by the proxy"
+  }
+}

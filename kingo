@@ -1005,7 +1005,78 @@ cmd_mcp() {
 # on a Mac. The templates are in setup/claude/; claude/ gets them once, and the
 # nono profile is rewritten on every start (ports, a kingo update).
 CLAUDE_KEYS="$HOME/.config/kingo"
+# What kingo downloads for Claude Code, nono and the browser, goes here: outside everything the sandbox may write.
+# kingo starts both files outside the sandbox (nono itself; the browser for --version and ldd), so a program inside
+# the sandbox must not be able to swap them. The sandbox may read the browser, and nothing else of this folder.
+CLAUDE_SHARE="$HOME/.local/share/kingo"
+
+# ── kingo claude: its own nono ───────────────────────────────────────────────
+# The course profile leans on how one version of nono behaves: the place of the Seatbelt rules on a Mac, the policy
+# for WSL2, NONO_NO_SAVE_PROMPT, which no help text names. So kingo does not take whichever nono is installed. It
+# downloads the version below from nono's releases on GitHub, checks it against the checksum, and starts that one.
+# A newer nono comes with a kingo update, after the CI has run with it. Only when the download does not work, kingo
+# takes a nono that is installed on the laptop, if that one is new enough (CLAUDE_NONO_MIN).
+CLAUDE_NONO_VERSION=0.81.0
+CLAUDE_NONO_SUMS="
+aarch64-apple-darwin:728b1deefbf6390c9b74fc982efbded1e1c4b37b99dcdefa2e07266dfef4d9e9
+x86_64-apple-darwin:f795aa88faaf75975ffc600eb870e7c9f2b52ba2035df5087ec972a0252afd40
+aarch64-unknown-linux-gnu:a4d87ddb0917ef96224bcc41a2587318d7d0e92441e7ff454696e5980c9f7924
+x86_64-unknown-linux-gnu:7ecc33ff9c349bdfa84b4496e7a7555f67bcc33f1e125c7df9efb653c6c4e569
+"
 CLAUDE_NONO_MIN=80   # nono 0.80: the profile's Seatbelt rule for PostgreSQL takes effect on a Mac; platform_overrides (0.68), the D-Bus fix (0.55)
+
+claude_nono_target() { # -> the name of this machine in nono's releases, or nothing
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64)                echo aarch64-apple-darwin ;;
+    Darwin-x86_64)               echo x86_64-apple-darwin ;;
+    Linux-aarch64|Linux-arm64)   echo aarch64-unknown-linux-gnu ;;
+    Linux-x86_64)                echo x86_64-unknown-linux-gnu ;;
+  esac
+}
+
+claude_nono_path() { printf '%s/nono/%s/nono' "$CLAUDE_SHARE" "$CLAUDE_NONO_VERSION"; }
+
+# Downloads kingo's nono when it is not there. Returns 0 when it is there afterwards; says why when it is not.
+claude_nono_get() {
+  local bin target url dir tmp want got
+  bin=$(claude_nono_path)
+  [ -x "$bin" ] && return 0
+  target=$(claude_nono_target)
+  [ -n "$target" ] || { warn "nono has no release for this machine ($(uname -s) $(uname -m))."; return 1; }
+  want=$(printf '%s\n' "$CLAUDE_NONO_SUMS" | sed -n "s/^$target://p")
+  url="https://github.com/nolabs-ai/nono/releases/download/v$CLAUDE_NONO_VERSION/nono-v$CLAUDE_NONO_VERSION-$target.tar.gz"
+  dir="$CLAUDE_SHARE/nono"
+  tmp="$dir/.get-$$"
+  rm -rf "$tmp"; mkdir -p "$tmp/out" || { warn "could not make $tmp, so nono was not installed."; return 1; }
+  echo "Getting nono $CLAUDE_NONO_VERSION, the sandbox that Claude Code runs in (once, about 12 MB) ..."
+  curl -fsSL -o "$tmp/nono.tar.gz" "$url" \
+    || { rm -rf "$tmp"; warn "the download of nono did not work ($url)."; return 1; }
+  got=$(file_sha256 "$tmp/nono.tar.gz")
+  if [ -z "$got" ] || [ "$got" != "$want" ]; then
+    rm -rf "$tmp"
+    warn "the downloaded nono is not the file kingo expects (checksum ${got:-unknown}), so it was not installed."
+    return 1
+  fi
+  { tar -xzf "$tmp/nono.tar.gz" -C "$tmp/out" && chmod +x "$tmp/out/nono"; } \
+    || { rm -rf "$tmp"; warn "could not unpack nono."; return 1; }
+  # this version in, every other version out
+  find "$dir" -mindepth 1 -maxdepth 1 ! -name ".get-$$" -exec rm -rf {} + 2>/dev/null || true
+  mv "$tmp/out" "$dir/$CLAUDE_NONO_VERSION" && rm -rf "$tmp"
+  [ -x "$bin" ] || { warn "nono was unpacked, but $bin is not there."; return 1; }
+  echo "nono is in $dir/$CLAUDE_NONO_VERSION."
+}
+
+claude_nono_cmd() { # ./kingo claude nono: get kingo's nono, and say which one kingo claude starts
+  local bin
+  claude_nono_get || return 1
+  bin=$(claude_nono_path)
+  if "$bin" --version >/dev/null 2>&1; then
+    echo "kingo claude starts $("$bin" --version 2>/dev/null | head -n 1): $bin"
+  else
+    warn "nono is installed but does not start: $bin --version"
+    return 1
+  fi
+}
 
 claude_http() { # url header -> HTTP code (000: nothing answered)
   curl -s -o /dev/null -m 10 -w '%{http_code}' -H "$2" "$1" 2>/dev/null || echo 000
@@ -1105,7 +1176,263 @@ claude_backup_flows() {
   done <<<"$all"
 }
 
+# ── kingo claude: a browser, so that Claude can look at the pages it writes ───
+# `look page.html` (setup/claude/bin/look) makes pictures of an HTML file, and Claude reads them. The browser is
+# Chrome's own build without a window, chrome-headless-shell from "Chrome for Testing", one fixed version. kingo
+# downloads it on the first `kingo claude`, checks it against the checksum below and puts it into
+# ~/.local/share/kingo/browsers, a folder that the nono profile lets the sandbox read and not write (see
+# CLAUDE_SHARE). It runs inside the sandbox, like every command of Claude Code. Getting it is never fatal: without
+# it Claude starts as before, and look says what to do.
+CLAUDE_BROWSER_VERSION=159.0.8154.6
+CLAUDE_BROWSER_SUMS="
+mac-arm64:b08e7beaf02a19e2ee5ed6955f9c3853ab9176cd5bb57ba87afbb82e9f81cc29
+mac-x64:89c56fb080ab4e9ba76656d5669af2b2dfc313c11434871e8f4e351c08a5ffca
+linux64:77a6442fd3c8acd3bef9e1067fc26f5ef464277d22f0e8cb58dc3e4077a3e458
+linux-arm64:e1262e9f4f244c441dcb54aa0e9abe4cf7b266ab02dc666fd975bd55aba9b3dc
+"
+# What Claude Code is told at every start, in addition to AGENTS.md: that file is the student's after the first
+# start, so a line added to its template would not reach the course folders that exist.
+CLAUDE_LOOK_HINT='When you have written or changed an HTML page, look at it before you say it is done. Run: look <file.html> (add --width 600 for a phone, --pdf for the page as it prints). It makes pictures of the whole page in the folder look/. Read them with the Read tool and check the layout.'
+
+claude_browser_platform() { # -> the name of this machine in Chrome for Testing, or nothing
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64)                echo mac-arm64 ;;
+    Darwin-x86_64)               echo mac-x64 ;;
+    Linux-x86_64)                echo linux64 ;;
+    Linux-aarch64|Linux-arm64)   echo linux-arm64 ;;
+  esac
+}
+
+claude_browser_path() { # -> where this version's browser is, or would be
+  local plat; plat=$(claude_browser_platform)
+  [ -n "$plat" ] || return 1
+  printf '%s/browsers/%s/chrome-headless-shell-%s/chrome-headless-shell' "$CLAUDE_SHARE" "$CLAUDE_BROWSER_VERSION" "$plat"
+}
+
+# Linux: the browser needs libraries of the system and at least one font. Prints the apt packages that are missing,
+# on one line. Ubuntu 24.04 renamed some of them (…t64): the first name that this Ubuntu knows is taken.
+claude_browser_packages() { # browser
+  local so names name n out=" "
+  for so in $(ldd "$1" 2>/dev/null | awk '/not found/ {print $1}' | sort -u); do
+    case "$so" in
+      libglib-2.0.so.0|libgobject-2.0.so.0|libgio-2.0.so.0) names="libglib2.0-0t64 libglib2.0-0" ;;
+      libnspr4.so)             names="libnspr4" ;;
+      libnss3.so|libnssutil3.so) names="libnss3" ;;
+      libatk-1.0.so.0)         names="libatk1.0-0t64 libatk1.0-0" ;;
+      libatk-bridge-2.0.so.0)  names="libatk-bridge2.0-0t64 libatk-bridge2.0-0" ;;
+      libatspi.so.0)           names="libatspi2.0-0t64 libatspi2.0-0" ;;
+      libasound.so.2)          names="libasound2t64 libasound2" ;;
+      libdbus-1.so.3)          names="libdbus-1-3" ;;
+      libX11.so.6)             names="libx11-6" ;;
+      libXcomposite.so.1)      names="libxcomposite1" ;;
+      libXdamage.so.1)         names="libxdamage1" ;;
+      libXext.so.6)            names="libxext6" ;;
+      libXfixes.so.3)          names="libxfixes3" ;;
+      libXrandr.so.2)          names="libxrandr2" ;;
+      libgbm.so.1)             names="libgbm1" ;;
+      libexpat.so.1)           names="libexpat1" ;;
+      libxcb.so.1)             names="libxcb1" ;;
+      libxkbcommon.so.0)       names="libxkbcommon0" ;;
+      libudev.so.1)            names="libudev1" ;;
+      *)                       names="" ;;
+    esac
+    [ -n "$names" ] || continue
+    name=${names%% *}
+    for n in $names; do
+      if apt-cache show "$n" >/dev/null 2>&1; then name=$n; break; fi
+    done
+    case "$out" in *" $name "*) ;; *) out="$out$name " ;; esac
+  done
+  # a font for Latin text, and one for Korean, Japanese and Chinese: without them a page shows boxes or nothing
+  ls /usr/share/fonts/truetype/liberation*/*.ttf >/dev/null 2>&1 || out="${out}fonts-liberation "
+  ls /usr/share/fonts/opentype/noto/NotoSansCJK* >/dev/null 2>&1 || out="${out}fonts-noto-cjk "
+  out=${out# }; printf '%s' "${out% }"
+}
+
+# Downloads the browser when it is not there. Prints what it does; returns 0 when the browser is there afterwards.
+claude_browser_get() {
+  local bin plat url dir zip want got tmp
+  plat=$(claude_browser_platform)
+  [ -n "$plat" ] || { warn "there is no browser for this machine ($(uname -s) $(uname -m)), so Claude cannot look at pages."; return 1; }
+  bin=$(claude_browser_path)
+  [ -x "$bin" ] && return 0
+  want=$(printf '%s\n' "$CLAUDE_BROWSER_SUMS" | sed -n "s/^$plat://p")
+  url="https://storage.googleapis.com/chrome-for-testing-public/$CLAUDE_BROWSER_VERSION/$plat/chrome-headless-shell-$plat.zip"
+  dir="$CLAUDE_SHARE/browsers"
+  tmp="$dir/.get-$$"
+  zip="$tmp/browser.zip"
+  rm -rf "$tmp"; mkdir -p "$tmp" || { warn "could not make $tmp, so the browser was not installed."; return 1; }
+  echo "Getting a browser, so that Claude can look at the pages it writes (once, about 130 MB) ..."
+  if [ -t 2 ]; then curl -fL --progress-bar -o "$zip" "$url"; else curl -fsSL -o "$zip" "$url"; fi \
+    || { rm -rf "$tmp"; warn "the download of the browser did not work, so Claude cannot look at pages. ./kingo claude browser tries again."; return 1; }
+  got=$(file_sha256 "$zip")
+  if [ -z "$got" ] || [ "$got" != "$want" ]; then
+    rm -rf "$tmp"
+    warn "the downloaded browser is not the file kingo expects (checksum ${got:-unknown}), so it was not installed. ./kingo claude browser tries again."
+    return 1
+  fi
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q -o "$zip" -d "$tmp/out"
+  elif command -v python3 >/dev/null 2>&1; then          # a fresh Ubuntu has no unzip; Python's does not keep the modes
+    python3 -m zipfile -e "$zip" "$tmp/out" && chmod +x "$tmp/out/chrome-headless-shell-$plat/chrome-headless-shell"
+  else
+    false
+  fi || { rm -rf "$tmp"; warn "could not unpack the browser (no unzip and no python3), so Claude cannot look at pages."; return 1; }
+  # this version in, every other version out
+  find "$dir" -mindepth 1 -maxdepth 1 ! -name ".get-$$" -exec rm -rf {} + 2>/dev/null || true
+  mv "$tmp/out" "$dir/$CLAUDE_BROWSER_VERSION" && rm -rf "$tmp"
+  [ -x "$bin" ] || { warn "the browser was unpacked, but $bin is not there."; return 1; }
+  echo "The browser is in $dir/$CLAUDE_BROWSER_VERSION."
+}
+
+# Linux: says which packages are missing. In a terminal it asks whether it shall install them (a fresh Ubuntu under
+# WSL has none of them, and a warning before the start of Claude Code scrolls away: Frank's Windows laptop, 14 Nov
+# 2026). Without a terminal, or after a "no", it names the one line that installs them. Returns 1 when some are missing.
+claude_browser_check_packages() { # browser
+  local need answer sudo=sudo
+  [ "$(uname -s)" = Linux ] || return 0
+  need=$(claude_browser_packages "$1")
+  [ -n "$need" ] || return 0
+  [ "$(id -u)" != 0 ] || sudo=""
+  if [ -t 0 ] && [ -t 2 ] && command -v apt-get >/dev/null 2>&1 && { [ -z "$sudo" ] || command -v sudo >/dev/null 2>&1; }; then
+    echo "The browser, with which Claude looks at the pages it writes, needs a few packages of the system:" >&2
+    echo "    $need" >&2
+    printf 'Install them now? %s[Y/n] ' "${sudo:+It asks for your Linux password. }" >&2
+    read -r answer || answer=n
+    case "$answer" in
+      ""|y|Y|yes|Yes|YES)
+        # a fresh Ubuntu may not have the lists of packages yet: then once more after apt-get update
+        $sudo apt-get install -y $need >&2 || { $sudo apt-get update >&2 && $sudo apt-get install -y $need >&2; } || true
+        need=$(claude_browser_packages "$1")
+        if [ -z "$need" ]; then echo "Installed. Claude can look at pages now." >&2; return 0; fi
+        warn "that did not install everything. Still missing for the browser:" ;;
+      *) warn "not installed, so Claude cannot look at pages. To install them later, in this terminal:" ;;
+    esac
+  else
+    warn "the browser needs a few packages of the system before Claude can look at pages. Install them once, in this terminal:"
+  fi
+  echo "    sudo apt-get install -y $need" >&2
+  return 1
+}
+
+claude_browser_cmd() { # ./kingo claude browser: get the browser, or say why it does not run
+  local bin
+  claude_browser_get || return 1
+  bin=$(claude_browser_path)
+  claude_browser_check_packages "$bin" || return 1
+  if "$bin" --version >/dev/null 2>&1; then
+    echo "The browser is ready: $("$bin" --version 2>/dev/null | head -n 1)"
+    echo "In ./kingo claude, Claude looks at a page with:  look page.html"
+  else
+    warn "the browser is installed but does not start: $bin --version"
+    return 1
+  fi
+}
+
+# ── kingo claude --login: your Anthropic login in place of OpenRouter ─────────
+# For a student with a Claude subscription. The login is made inside the sandbox, and nono keeps it outside:
+# nono's proxy reads the answer of Anthropic's login server, keeps the real tokens for itself and hands Claude
+# Code stand-ins (setup/claude/nono-profile-login.json says how). Claude Code then asks for Anthropic's models:
+# setup/claude/settings-login.json blanks the lines of the course folder that name the course's model.
+# This way has a config folder of its own (~/.kingo-claude-login): in ~/.kingo-claude, kingo deletes every login.
+CLAUDE_LOGIN_CFG="$HOME/.kingo-claude-login"
+
+# Is a login there, and is it nono's? Looks only at the form of the two tokens and prints nothing.
+claude_login_state() { # config folder -> 0: both tokens are stand-ins of nono; 1: one is not; 2: no login
+  local f="$1/.credentials.json" a r re='^(sk-ant-oat01-)?(nono_)?[0-9a-f]{64}$'
+  [ -s "$f" ] || return 2
+  a=$(tr -d '\n' < "$f" | sed -n 's/.*"accessToken"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+  r=$(tr -d '\n' < "$f" | sed -n 's/.*"refreshToken"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+  [ -n "$a" ] || [ -n "$r" ] || return 2
+  [[ $a =~ $re ]] && [[ $r =~ $re ]] && return 0
+  return 1
+}
+
+# One command of Claude Code about the login (auth login, auth logout), inside the sandbox.
+claude_login_run() { # nono, templates folder, profile, then: options of nono, "--", the command
+  local nono=$1 tpl=$2 profile=$3 cfg=$CLAUDE_LOGIN_CFG opts=(); shift 3
+  while [ "$1" != -- ]; do opts+=("$1"); shift; done; shift
+  # Under Linux the command starts through the lock, as a session does. A session may read kingo-pod (--read);
+  # this sandbox may not, so it gets the one file. (Without it: "can't open file ... Permission denied", and no
+  # login under Linux and WSL2. Found on Frank's Windows laptop, 14 Nov 2026.)
+  if [ "$(uname -s)" = Linux ]; then
+    opts+=(--read-file "$tpl/no_unix_sockets.py")
+    set -- /usr/bin/python3 -I "$tpl/no_unix_sockets.py" "$@"
+  fi
+  ( cd "$cfg/tmp" && CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
+      DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 GIT_CONFIG_NOSYSTEM=1 NONO_NO_SAVE_PROMPT=1 \
+      "$nono" run --profile "$profile" --allow-cwd ${opts[@]+"${opts[@]}"} -- "$@" )
+}
+
+# The login. On a Mac the sandbox may open Claude's login pages in the browser, for this one command only
+# (profile kingo-claude-login-open); under Linux and Windows (WSL2) Claude Code shows the address.
+claude_login_step() { # nono, templates folder
+  local cfg=$CLAUDE_LOGIN_CFG state=0
+  [ -t 0 ] || die "kingo claude --login needs your Anthropic login first. Run it in a terminal, so that you can log in."
+  echo "kingo claude --login uses your Claude subscription. You log in once; nono keeps the login outside the sandbox."
+  if [ "$(uname -s)" = Darwin ]; then
+    echo "Your browser opens: log in there and agree. If it does not open, copy the address that Claude Code shows."
+    claude_login_run "$1" "$2" kingo-claude-login-open --allow-launch-services -- claude auth login --claudeai || true
+  else
+    echo "Claude Code shows an address: open it in your browser, log in, and paste the code here."
+    claude_login_run "$1" "$2" kingo-claude-login -- claude auth login --claudeai || true
+  fi
+  # What counts is what lies in the config folder now, not what the command said.
+  claude_login_state "$cfg" || state=$?
+  case "$state" in
+    0) echo "Logged in. Claude Code holds stand-ins; the login itself is with nono, outside the sandbox." ;;
+    1)
+      claude_login_run "$1" "$2" kingo-claude-login -- claude auth logout >/dev/null 2>&1 || true
+      rm -f "$cfg/.credentials.json"
+      die "nono did not keep this login outside the sandbox: Claude Code got the login itself. kingo logged out again and deleted it from $cfg. Claude Code was not started. Use ./kingo claude without --login." ;;
+    *) die "the login did not work. Start ./kingo claude --login again." ;;
+  esac
+}
+
+# ── kingo claude --in <folder>: the same Claude Code for a folder of your own ──
+# Without the course: no n8n, no Langflow, no PostgreSQL, and the pod need not run. Claude Code writes in that
+# folder and nowhere else, with the profile "kingo-claude-base" (setup/claude/nono-profile-base.json). kingo puts
+# no file into the folder: the settings come from setup/claude/settings-in.json and the text below, on the command
+# line. What Claude Code is told there, in place of the course's AGENTS.md:
+CLAUDE_IN_HINT='You were started with "./kingo claude --in" and run in a sandbox (nono). You can write only in the folder you were started in. The sandbox is there so that a mistake cannot harm this laptop: a wrong command, a wrong path, a file deleted by accident. It is not a puzzle and not a test of you: do not look for a way around it. When it blocks something, say what was blocked and stop. Never ask the user to run a command in their own terminal that you could not run here, and never suggest starting you without ./kingo claude.'
+
+# The folder must be one that Claude Code may get as a whole. Prints its full path, or says why not and fails.
+claude_in_folder() { # folder
+  local want=$1 dir home rel pod
+  case "$want" in
+    /mnt/*) die "$want is a Windows folder. kingo claude --in takes a folder in Linux, for example ~/projects/thesis: there the sandbox is tested. To move files between Windows and that folder, open it in Windows with: explorer.exe ." ;;
+  esac
+  [ -d "$want" ] || die "there is no folder $want. Make it first:  mkdir -p $want"
+  dir=$(cd "$want" && pwd -P) || die "cannot open the folder $want"
+  home=$(cd "$HOME" && pwd -P)
+  pod=$(cd "$KINGO_DIR" && pwd -P)
+  case "$dir" in
+    /mnt/*) die "$want is a Windows folder ($dir). kingo claude --in takes a folder in Linux, for example ~/projects/thesis." ;;
+  esac
+  case "$dir/" in
+    "$home"/?*) ;;
+    *) die "kingo claude --in takes a folder inside your home folder ($home), not $dir and not the home folder itself: Claude Code may write everywhere in the folder you give it." ;;
+  esac
+  rel=${dir#"$home"/}
+  case "$rel" in
+    .*) die "$dir is a hidden folder of your home folder, where programs keep their settings and keys. Choose a folder for your work, for example ~/projects/thesis." ;;
+    Desktop|Documents|Downloads|Pictures|Music|Movies|Library|Library/*)
+      die "$dir is too wide: Claude Code may write everywhere in the folder you give it. Choose a folder inside it, or make one:  mkdir -p ~/projects/thesis" ;;
+  esac
+  case "$dir/" in
+    "$pod"/*) die "$dir is kingo-pod or a folder in it. For the course, start Claude Code with:  ./kingo claude" ;;
+  esac
+  case "$pod/" in
+    "$dir"/*) die "$dir holds kingo-pod ($pod). Claude Code could then change kingo itself. Choose a folder that kingo-pod is not in." ;;
+  esac
+  printf '%s' "$dir"
+}
+
 cmd_claude() {
+  case "${1:-}" in
+    browser) claude_browser_cmd; return ;;
+    nono)    claude_nono_cmd; return ;;
+  esac
   case "${1:-}" in
     help|-h|--help)
       echo "kingo claude [claude options]  start Claude Code for your project, in the nono sandbox."
@@ -1113,12 +1440,49 @@ cmd_claude() {
       echo "  The first start asks for your OpenRouter key and an n8n API key; keys are kept in $CLAUDE_KEYS/."
       echo "  A key that a service refuses is deleted, and the next start asks again."
       echo "  Every start saves a copy of each n8n workflow and Langflow flow in $KINGO_DIR/backups/flows/ (the newest $CLAUDE_BACKUP_KEEP stay)."
+      echo "  The first start gets nono $CLAUDE_NONO_VERSION, the sandbox: kingo starts its own, not one that is installed."
+      echo "  ./kingo claude nono gets it again, and says which nono kingo claude starts."
+      echo "  The first start gets a browser, so that Claude can look at the pages it writes (look page.html)."
+      echo "  ./kingo claude browser gets it again, and says what is missing when it does not run."
       echo "  Claude asks before every command; ./kingo yolo lets it work"
       echo "  without asking (the sandbox protects your laptop either way; ./kingo backup saves your workflows and flows)."
+      echo "kingo claude --in <folder> [claude options]  the same Claude Code for a folder of your own, without the course:"
+      echo "  Claude writes only in that folder. No n8n, no Langflow, no database; the pod need not run."
+      echo "  The folder is inside your home folder, and not a Windows folder (/mnt/c/...)."
+      echo "Your own additions to the sandbox of the course: copy setup/claude/my-nono-profile.example.json to"
+      echo "  $KINGO_DIR/my-nono-profile.json and change it. Claude can read that file and not change it."
+      echo "kingo claude --login [--in <folder>] [claude options]  with your Claude subscription in place of OpenRouter:"
+      echo "  Claude Code uses Anthropic's models and your subscription pays. No OpenRouter key is needed."
+      echo "  The first start asks you to log in. nono keeps the login outside the sandbox; Claude Code holds stand-ins."
+      echo "  Use one session with --login at a time: two at once can break the login (then: logout, and log in again)."
+      echo "kingo claude logout  end that login."
       return ;;
   esac
+  # logout: end the login of --login. It goes the same way as a start (nono, the profiles) and then logs out.
+  local logout=0
+  if [ "${1:-}" = logout ]; then
+    [ $# = 1 ] || die "kingo claude logout takes nothing after it."
+    logout=1; set -- --login
+  fi
+  # --in <folder> and --login, anywhere before Claude Code's own options (./kingo yolo --in ... puts an option first)
+  local in_dir="" login=0 a keep=() take=0
+  for a in "$@"; do
+    if [ "$take" = 1 ]; then in_dir=$a; take=2; continue; fi
+    if [ "$a" = "--in" ] && [ "$take" = 0 ]; then take=1; continue; fi
+    if [ "$a" = "--login" ]; then login=1; continue; fi
+    keep+=("$a")
+  done
+  [ "$take" != 1 ] || die "kingo claude --in needs a folder, for example:  ./kingo claude --in ~/projects/thesis"
+  if [ "$take" = 2 ]; then
+    in_dir=$(claude_in_folder "$in_dir") || exit 1
+  fi
+  if [ "$take" = 2 ] || [ "$login" = 1 ]; then
+    set -- ${keep[@]+"${keep[@]}"}
+  fi
   local dir="$KINGO_DIR/claude" tpl="$KINGO_DIR/setup/claude" cfg="$HOME/.kingo-claude"
-  local prof="${XDG_CONFIG_HOME:-$HOME/.config}/nono/profiles" v vmaj vmin esc kesc
+  [ -z "$in_dir" ] || dir=$in_dir
+  [ "$login" = 0 ] || cfg=$CLAUDE_LOGIN_CFG
+  local prof="${XDG_CONFIG_HOME:-$HOME/.config}/nono/profiles" v vmaj vmin esc kesc nono=nono
 
   # ~/.local/bin goes first: Claude Code's native installer puts it there, and on WSL nono's
   # install script too. An older Claude Code from npm or a Homebrew cask (on WSL even
@@ -1130,17 +1494,28 @@ cmd_claude() {
     case ":$PATH:" in *":$d:"*) ;; *) [ -d "$d" ] && PATH="$PATH:$d" ;; esac
   done
   export PATH
-  command -v nono >/dev/null 2>&1 \
-    || die "nono is not installed. Mac: brew install nono — Windows (WSL): curl -fsSL https://nono.sh/install.sh | sh"
-  v=$(nono --version 2>/dev/null | sed -n 's/^nono \([0-9]*\)\.\([0-9]*\).*/\1 \2/p') || true
-  read -r vmaj vmin <<<"$v"
-  if [ -z "${vmaj:-}" ] || { [ "$vmaj" -eq 0 ] && [ "${vmin:-0}" -lt "$CLAUDE_NONO_MIN" ]; }; then
-    die "nono is too old ($(nono --version 2>/dev/null || echo '?')); kingo claude needs 0.$CLAUDE_NONO_MIN or newer. Mac: brew upgrade nono — Windows (WSL): curl -fsSL https://nono.sh/install.sh | sh"
+  # nono: kingo's own (see CLAUDE_NONO_VERSION). A dry run starts nothing and downloads nothing.
+  if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ]; then
+    if claude_nono_get; then
+      nono=$(claude_nono_path)
+    else
+      command -v nono >/dev/null 2>&1 \
+        || die "kingo could not get nono, the sandbox that Claude Code runs in, and none is installed. Check your internet connection and start ./kingo claude again."
+      v=$(nono --version 2>/dev/null | sed -n 's/^nono \([0-9]*\)\.\([0-9]*\).*/\1 \2/p') || true
+      read -r vmaj vmin <<<"$v"
+      if [ -z "${vmaj:-}" ] || { [ "$vmaj" -eq 0 ] && [ "${vmin:-0}" -lt "$CLAUDE_NONO_MIN" ]; }; then
+        die "kingo could not get nono, and the nono on this laptop is too old ($(nono --version 2>/dev/null || echo '?')). Check your internet connection and start ./kingo claude again."
+      fi
+      warn "kingo could not get its own nono ($CLAUDE_NONO_VERSION) and takes the one on this laptop: $(nono --version 2>/dev/null | head -n 1)"
+    fi
   fi
   command -v claude >/dev/null 2>&1 \
     || die "Claude Code is not installed. Install it with:  curl -fsSL https://claude.ai/install.sh | bash"
-  command -v psql >/dev/null 2>&1 \
+  [ -n "$in_dir" ] || [ "$logout" = 1 ] || command -v psql >/dev/null 2>&1 \
     || warn "psql is missing, so Claude cannot reach PostgreSQL. Mac: brew install libpq — Windows (WSL): sudo apt install postgresql-client"
+  if [ "$(uname -s)" = Linux ] && [ ! -x /usr/bin/python3 ]; then
+    die "python3 is missing, and under Linux and Windows (WSL) the sandbox needs it. Install it with:  sudo apt install -y python3"
+  fi
 
   # The PostgreSQL port goes into a sandbox rule in the profile, so it must be a port and nothing else.
   case "$P_POSTGRES" in
@@ -1148,11 +1523,24 @@ cmd_claude() {
   esac
   [ "$P_POSTGRES" -le 65535 ] || die "KINGO_PORT_POSTGRES must be a port number, not '$P_POSTGRES'. Check .env.local."
 
-  if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ]; then
+  # With --login the model is paid by the student's Claude subscription: no OpenRouter key is asked for or checked.
+  if [ "$logout" = 1 ]; then
+    :   # no keys, no pod, no browser: only nono and the profiles
+  elif [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ] && [ -n "$in_dir" ]; then
+    # A folder of your own: only the key for the model, and the browser for look.
+    if [ "$login" = 0 ]; then
+      [ -s "$CLAUDE_KEYS/openrouter.key" ] || claude_ask_key openrouter "Paste your OpenRouter key"
+      claude_check_key openrouter "$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $(cat "$CLAUDE_KEYS/openrouter.key")")" \
+        "Check it on openrouter.ai (Settings, Keys)."
+    fi
+    if [ "${KINGO_CLAUDE_NO_BROWSER:-}" != 1 ] && claude_browser_get; then
+      claude_browser_check_packages "$(claude_browser_path)" || true
+    fi
+  elif [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ]; then
     { check "$P_N8N" /healthz && check "$P_LANGFLOW" /health; } \
       || die "n8n and Langflow must be running first: ./kingo up (in mode abp or full)"
 
-    [ -s "$CLAUDE_KEYS/openrouter.key" ] || claude_ask_key openrouter "Paste your OpenRouter key"
+    if [ "$login" = 0 ] && [ ! -s "$CLAUDE_KEYS/openrouter.key" ]; then claude_ask_key openrouter "Paste your OpenRouter key"; fi
     if [ ! -s "$CLAUDE_KEYS/n8n.key" ]; then
       echo "Claude needs an API key for n8n. In n8n, open Settings, then n8n API, then Create an API key."
       claude_ask_key n8n "Paste the n8n API key"
@@ -1161,38 +1549,108 @@ cmd_claude() {
       echo "Claude needs an API key for Langflow. In Langflow, open Settings, then Langflow API Keys, then Add New."
       claude_ask_key langflow "Paste the Langflow API key"
     fi
-    claude_check_key openrouter "$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $(cat "$CLAUDE_KEYS/openrouter.key")")" \
-      "Check it on openrouter.ai (Settings, Keys)."
+    if [ "$login" = 0 ]; then
+      claude_check_key openrouter "$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $(cat "$CLAUDE_KEYS/openrouter.key")")" \
+        "Check it on openrouter.ai (Settings, Keys)."
+    fi
     claude_check_key n8n "$(claude_http "http://127.0.0.1:${P_N8N}/api/v1/workflows?limit=1" "X-N8N-API-KEY: $(cat "$CLAUDE_KEYS/n8n.key")")" \
       "Make a new one in n8n (Settings, n8n API)."
     claude_check_key langflow "$(claude_http "http://127.0.0.1:${P_LANGFLOW}/api/v1/flows/" "x-api-key: $(cat "$CLAUDE_KEYS/langflow.key")")" \
       "Make a new one in Langflow (Settings, Langflow API Keys)."
     claude_backup_flows
+    # Never fatal: without the browser Claude starts as before.
+    if [ "${KINGO_CLAUDE_NO_BROWSER:-}" != 1 ] && claude_browser_get; then
+      claude_browser_check_packages "$(claude_browser_path)" || true
+    fi
   fi
 
   # The course folder gets the templates once; after that it is the student's.
+  # A folder given with --in gets no file from kingo.
   esc=$(printf '%s' "$KINGO_DIR" | sed 's/[&|\\]/\\&/g')
-  mkdir -p "$dir/.claude"
-  [ -f "$dir/CLAUDE.md" ] || cp "$tpl/CLAUDE.md" "$dir/CLAUDE.md"
-  [ -f "$dir/AGENTS.md" ] || cp "$tpl/AGENTS.md" "$dir/AGENTS.md"
-  [ -f "$dir/.claude/settings.json" ] || sed "s|__KINGO_DIR__|$esc|g" "$tpl/settings.json" > "$dir/.claude/settings.json"
-  # The profile follows this folder: ports from .env.local, changes from kingo update.
+  if [ -z "$in_dir" ] && [ "$logout" = 0 ]; then
+    mkdir -p "$dir/.claude"
+    [ -f "$dir/CLAUDE.md" ] || cp "$tpl/CLAUDE.md" "$dir/CLAUDE.md"
+    [ -f "$dir/AGENTS.md" ] || cp "$tpl/AGENTS.md" "$dir/AGENTS.md"
+    [ -f "$dir/.claude/settings.json" ] || sed "s|__KINGO_DIR__|$esc|g" "$tpl/settings.json" > "$dir/.claude/settings.json"
+  fi
+  # The profiles follow this folder: ports from .env.local, changes from kingo update. Seven files; the top of
+  # each says what it is. core: the sandbox without a way to a model. base and login: core and one way to a model
+  # (OpenRouter, the Anthropic login). course: what the course adds. The course profiles name a way and course.
   kesc=$(printf '%s' "$CLAUDE_KEYS" | sed 's/[&|\\]/\\&/g')
   mkdir -p "$prof"
-  sed -e "s|__N8N_PORT__|$P_N8N|g" -e "s|__LANGFLOW_PORT__|$P_LANGFLOW|g" -e "s|__POSTGRES_PORT__|$P_POSTGRES|g" \
-      -e "s|__KEYS_DIR__|$kesc|g" \
-    "$tpl/nono-profile.json" > "$prof/kingo-claude.json"
+  local f
+  for f in nono-profile-core.json:kingo-claude-core.json nono-profile-base.json:kingo-claude-base.json \
+           nono-profile-course.json:kingo-claude-course.json nono-profile.json:kingo-claude.json \
+           nono-profile-login.json:kingo-claude-login.json nono-profile-login-course.json:kingo-claude-login-course.json \
+           nono-profile-login-open.json:kingo-claude-login-open.json; do
+    sed -e "s|__N8N_PORT__|$P_N8N|g" -e "s|__LANGFLOW_PORT__|$P_LANGFLOW|g" -e "s|__POSTGRES_PORT__|$P_POSTGRES|g" \
+        -e "s|__KEYS_DIR__|$kesc|g" \
+      "$tpl/${f%%:*}" > "$prof/${f##*:}"
+  done
+  # Which profile nono starts with. For the course, the student may add to the sandbox: my-nono-profile.json in
+  # this folder, which Claude can read and not change. It must extend the course profile, so that it adds to the
+  # course's sandbox and takes the place of nothing; nono joins the two. kingo fills in __KINGO_DIR__ and
+  # __KEYS_DIR__ (the folder of the key files, for a route to another provider).
+  # With --login, the student's file adds to the course profile of the login: kingo writes that name into the
+  # copy that nono reads. A file that names another provider for the model does not go together with --login.
+  local profile=kingo-claude mine="$KINGO_DIR/my-nono-profile.json" course=kingo-claude
+  [ "$login" = 0 ] || { profile=kingo-claude-login-course; course=kingo-claude-login-course; }
+  if [ "$logout" = 1 ]; then
+    profile=kingo-claude-login
+  elif [ -n "$in_dir" ]; then
+    profile=kingo-claude-base
+    [ "$login" = 0 ] || profile=kingo-claude-login
+  elif [ -f "$mine" ]; then
+    grep -Eq '^[[:space:]]*"extends"[[:space:]]*:[[:space:]]*"kingo-claude"[[:space:]]*,?[[:space:]]*$' "$mine" \
+      || die "my-nono-profile.json needs the line  \"extends\": \"kingo-claude\",  so that it adds to the sandbox of the course and takes nothing of it away. See setup/claude/my-nono-profile.example.json."
+    if [ "$login" = 1 ] && grep -Eq '^[[:space:]]*"anthropic"[[:space:]]*:' "$mine"; then
+      die "my-nono-profile.json names another provider for the model (\"anthropic\"), and --login uses your Claude subscription. Take one of the two: start without --login, or rename the file."
+    fi
+    sed -e "s|__KINGO_DIR__|$esc|g" -e "s|__KEYS_DIR__|$kesc|g" \
+        -e "s|^\([[:space:]]*\)\"extends\"[[:space:]]*:[[:space:]]*\"kingo-claude\"|\1\"extends\": \"$course\"|" \
+      "$mine" > "$prof/kingo-claude-mine.json"
+    if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ] && ! "$nono" profile validate "$prof/kingo-claude-mine.json" >/dev/null 2>&1; then
+      "$nono" profile validate "$prof/kingo-claude-mine.json" 2>&1 | tail -n 8 >&2 || true
+      die "nono does not take my-nono-profile.json (the lines above say why). Claude Code was not started. To start without your own profile, rename the file."
+    fi
+    profile=kingo-claude-mine
+    echo "The sandbox follows your own profile too: $mine"
+  else
+    rm -f "$prof/kingo-claude-mine.json"
+  fi
   # nono grants only folders that exist.
-  mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude"
+  mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude" \
+           "$CLAUDE_SHARE/browsers"
   case "$(uname -s)" in
     Darwin) mkdir -p "$HOME/Library/Caches/claude-cli-nodejs" ;;
     *)      mkdir -p "$HOME/.cache/claude-cli-nodejs" ;;
   esac
   # An Anthropic login made inside the sandbox lands here (nono blocks the keychain), where Claude itself can
   # read it. The course does not use it: nono's ANTHROPIC_AUTH_TOKEN ranks above it.
-  if [ -f "$cfg/.credentials.json" ]; then
+  # With --login the config folder is another one, and what lies there are nono's stand-ins (below).
+  if [ "$login" = 0 ] && [ -f "$cfg/.credentials.json" ]; then
     rm -f "$cfg/.credentials.json"
     warn "removed an Anthropic login from $cfg: the course uses OpenRouter, and Claude could read the login there. Your own Claude Code login is not affected."
+  fi
+  if [ "$logout" = 1 ]; then
+    local store="$HOME/.local/state/nono/oauth-capture"
+    if [ "${KINGO_CLAUDE_DRY_RUN:-}" = 1 ]; then
+      echo "dry run — would log out:"
+      echo "  nono run --profile $profile --allow-cwd -- claude auth logout"
+      return
+    fi
+    if [ -s "$cfg/.credentials.json" ]; then
+      claude_login_run "$nono" "$tpl" "$profile" -- claude auth logout || true
+      rm -f "$cfg/.credentials.json"
+      echo "Logged out: ./kingo claude --login will ask for the login again."
+    else
+      echo "There is no login of ./kingo claude --login on this laptop."
+    fi
+    if [ -e "$store" ]; then
+      echo "nono keeps what it took of a login for up to 90 days, outside the sandbox: $store"
+      echo "If ./kingo claude --login is the only login you made through nono, delete it:  rm -rf $store"
+    fi
+    return
   fi
 
   # Claude Code 2.1.283 and newer start in auto mode: a model, here the course's, decides which commands run, and
@@ -1203,28 +1661,102 @@ cmd_claude() {
     case "$a" in --permission-mode|--permission-mode=*|--dangerously-skip-permissions) ask=0 ;; esac
   done
   if [ "$ask" = 1 ]; then set -- --permission-mode default "$@"; fi
+  # How to look at a page goes to Claude Code at every start, unless the command line brings its own text.
+  local hint=1
+  for a in "$@"; do
+    case "$a" in --append-system-prompt|--append-system-prompt=*|--append-system-prompt-file|--append-system-prompt-file=*|--system-prompt|--system-prompt=*|--system-prompt-file|--system-prompt-file=*) hint=0 ;; esac
+  done
+  if [ -n "$in_dir" ]; then
+    # no AGENTS.md from kingo there: what the sandbox is comes on the command line, with the hint for look
+    if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT $CLAUDE_LOOK_HINT"
+    elif [ "$hint" = 1 ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT"; fi
+    if [ "$login" = 1 ]; then set -- claude --settings "$tpl/settings-in-login.json" "$@"
+    else set -- claude --settings "$tpl/settings-in.json" "$@"; fi
+  else
+    if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_LOOK_HINT"; fi
+    # With --login: the course folder's settings name the course's model at OpenRouter; these settings, which rank
+    # above them, blank those lines, and Claude Code asks for Anthropic's models.
+    if [ "$login" = 1 ]; then set -- --settings "$tpl/settings-login.json" "$@"; fi
+    set -- claude --add-dir "$KINGO_DIR" "$@"
+  fi
+
+  # Linux and Windows (WSL2): there nono does not keep a program in the sandbox from connecting to a Unix socket
+  # (found on 13 Nov 2026 under WSL2: one "docker run -v" from inside the sandbox read a file outside it). Docker,
+  # Podman's API socket, which the setup turns on, and the systemd user manager listen on such sockets and work
+  # outside the sandbox. So Claude Code starts through setup/claude/no_unix_sockets.py, which takes Unix sockets away
+  # from Claude Code and from everything it starts; the top of that file says how and why. A Mac needs none of this:
+  # there nono's rules for the network cover Unix sockets. With -I, Python takes nothing from the environment and
+  # nothing from the folder it starts in, which is the one folder Claude Code can write to.
+  if [ "$(uname -s)" = Linux ]; then
+    set -- /usr/bin/python3 -I "$tpl/no_unix_sockets.py" "$@"
+  fi
+
+  # What the sandbox may read besides the folder it starts in: for the course all of kingo-pod; for a folder of
+  # your own only setup/claude, where look, the lock and the settings are.
+  local reads="$KINGO_DIR"
+  [ -z "$in_dir" ] || reads="$tpl"
+
+  # The variables that kingo sets for nono and Claude Code; the profile lets them through. One list, so that the
+  # dry run can name them and no line can fall out unseen (on 14 Nov 2026 a comment line between two lines of
+  # variables cut five of them off: bash took the first lines for a command of their own).
+  # look (setup/claude/bin) and its browser: PATH and KINGO_BROWSER. On a Mac, Chrome registers a Mach service
+  # for its helper programs, which nono's sandbox refuses by itself; the core profile has one rule that allows
+  # exactly this name. Should a Mac still refuse it, look starts Chrome as one program (--single-process) and says
+  # that it could not wait for scripts. KINGO_BROWSER_MODE=single before ./kingo claude asks for that from the start.
+  # Nothing goes to Anthropic besides the model's requests: set here, outside the course folder, so editing
+  # settings.json cannot undo it.
+  # GIT_CONFIG_NOSYSTEM: git inside the sandbox does not read the system's /etc/gitconfig. Under Linux the sandbox
+  # refuses that file, and where it exists git then stops every commit with "unknown error occurred while reading
+  # the configuration files" (found in the CI on 14 Nov 2026). The student's own ~/.gitconfig is read as before.
+  # NONO_NO_SAVE_PROMPT is for nono itself, not for Claude Code. When a session ends in which the sandbox refused
+  # something, nono asks whether to put that into the profile ("[g] grant / [s] suppress / [Enter] skip"). Here the
+  # question leads nowhere: the profile is written again at every start (above), so an answer is gone the next time.
+  # With the variable, nono does not ask. It still prints what it refused.
+  local envs=(
+    CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1
+    "CLAUDE_CONFIG_DIR=$cfg" "CLAUDE_CODE_TMPDIR=$cfg/tmp" "TMPDIR=$cfg/tmp"
+    "PATH=$tpl/bin:$PATH" "KINGO_BROWSER=$(claude_browser_path)"
+    GIT_CONFIG_NOSYSTEM=1 NONO_NO_SAVE_PROMPT=1
+  )
+  # CLAUDE_CODE_MAX_CONTEXT_TOKENS: Claude Code does not know the course's model, assumes a context size (200k tokens,
+  # or 1m in the version the TA had on 13 Nov 2026) and warns about it at every start. Saying 200k here drops the
+  # warning and makes Claude Code compact a long session at 200k. The model itself takes 1m tokens (OpenRouter).
+  # Not with --login: Claude Code knows Anthropic's models.
+  [ "$login" = 1 ] || envs+=(CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000)
+  # PostgreSQL for psql, for the course only (the base profile would not let these variables through either).
+  [ -n "$in_dir" ] || envs+=(PGHOST=127.0.0.1 "PGPORT=$P_POSTGRES" "PGUSER=$KINGO_USER" "PGPASSWORD=$KINGO_PASSWORD" PGDATABASE=classroom)
 
   if [ "${KINGO_CLAUDE_DRY_RUN:-}" = 1 ]; then
     echo "dry run — would start in $dir:"
-    echo "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- claude --add-dir $KINGO_DIR $*"
+    echo "  nono run --profile $profile --allow-cwd --read $reads -- $*"
+    echo "  variables: $(printf '%s ' "${envs[@]%%=*}")"
     return
   fi
+  # --login: the login first, when there is none. A login that is not nono's does not stay.
+  if [ "$login" = 1 ]; then
+    local state=0
+    claude_login_state "$cfg" || state=$?
+    if [ "$state" = 1 ]; then
+      rm -f "$cfg/.credentials.json"
+      warn "removed a login from $cfg that nono did not keep outside the sandbox. Log in again."
+    fi
+    [ "$state" = 0 ] || claude_login_step "$nono" "$tpl"
+  fi
   cd "$dir"
+  if [ -n "$in_dir" ]; then
+    echo "Claude Code works in $dir: it can write there and nowhere else on this laptop."
+    if grep -qi microsoft /proc/version 2>/dev/null && command -v wslpath >/dev/null 2>&1; then
+      echo "In Windows, this folder is: $(wslpath -w "$dir" 2>/dev/null || true)"
+    fi
+  fi
   # WSL sets XDG_RUNTIME_DIR=/run/user/<uid>/ even when systemd made no login session; then the folder does not exist,
   # nono's terminal proxy cannot write its config there, and the start dies with "Failed to create PTY proxy" (the TA,
   # 13 Nov 2026). Without the variable nono starts, so drop it when its folder is missing or not writable.
   if [ -n "${XDG_RUNTIME_DIR:-}" ] && { [ ! -d "$XDG_RUNTIME_DIR" ] || [ ! -w "$XDG_RUNTIME_DIR" ]; }; then
     unset XDG_RUNTIME_DIR
   fi
-  # Nothing goes to Anthropic: set here, outside the course folder, so editing settings.json cannot undo it.
-  # CLAUDE_CODE_MAX_CONTEXT_TOKENS: Claude Code does not know the course's model, assumes a context size (200k tokens,
-  # or 1m in the version the TA had on 13 Nov 2026) and warns about it at every start. Saying 200k here drops the
-  # warning and makes Claude Code compact a long session at 200k. The model itself takes 1m tokens (OpenRouter).
-  CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
-  CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
-  CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
-  PGHOST=127.0.0.1 PGPORT="$P_POSTGRES" PGUSER="$KINGO_USER" PGPASSWORD="$KINGO_PASSWORD" PGDATABASE=classroom \
-    exec nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- claude --add-dir "$KINGO_DIR" "$@"
+  export "${envs[@]}"
+  exec "$nono" run --profile "$profile" --allow-cwd --read "$reads" -- "$@"
 }
 
 # ── smoke: rigorous verification (exact codes + stability + bindings + hub) ───
