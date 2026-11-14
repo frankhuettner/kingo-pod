@@ -188,7 +188,7 @@ if has "$out" WROTE-KINGO; then fail "setup/claude can be written from a folder 
 has "$out" "commits=1" || { show "$out" 20; fail "git does not work in the folder inside the sandbox"; }
 ok "in a folder of one's own: it writes there, reads setup/claude and not the rest of kingo-pod, nothing of the course, git works"
 
-out=$(in_sandbox sh -c ': >> "$1" && echo WROTE || echo refused' sh "$KINGO_DIR/shared/own-probe.txt")
+out=$(in_sandbox sh -c 'if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
 has "$out" refused || { show "$out" 12; fail "with the course profile alone, the sandbox can already write in shared"; }
 cp "$KINGO_DIR/setup/claude/my-nono-profile.example.json" "$MINE"
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo claude did not start with the example of my-nono-profile.json"
