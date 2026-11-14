@@ -8,6 +8,7 @@
 #   claude-sandbox.sh lock      the lock by itself
 #   claude-sandbox.sh sandbox   inside nono with the course profile: Docker, Podman, the systemd user manager
 #   claude-sandbox.sh claude    one turn of Claude Code inside nono, with a stand-in for the model (fake_model.py)
+#                               also: the result of a command holds no lines of bash about its startup files
 #   claude-sandbox.sh session   a session of Claude Code in a terminal, as a student has it (pty_session.py)
 #
 # Each way out is tried twice. Without the lock it must work, or the check would prove nothing. With the lock it
@@ -132,8 +133,10 @@ kingo_env() {
 }
 SANDBOX=(nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" --)   # the line of kingo claude
 
-# in_sandbox command ...: run it as kingo claude runs Claude Code; prints its output and nono's
-in_sandbox() { kingo_env timeout 180 "${SANDBOX[@]}" "$@" 2>&1 || true; }
+# in_sandbox command ...: run it as kingo claude runs Claude Code; prints its output and nono's.
+# WITHOUT_SHLVL=1 takes the variable SHLVL away before nono starts, as a comparison (see part_claude).
+WITHOUT_SHLVL=""
+in_sandbox() { kingo_env timeout 180 env ${WITHOUT_SHLVL:+-u SHLVL} "${SANDBOX[@]}" "$@" 2>&1 || true; }
 
 # way_out <name> <text that only comes out when the way works> command ...
 way_out() {
@@ -275,6 +278,24 @@ part_claude() {
   if has "$(results "$log")" "$SECRET"; then fail "with the lock the file still came out through Claude Code's Bash tool"; fi
   ok "the turn finished, the Bash tool ran the command, and the file outside did not come back"
   show "$(results "$log")" 4
+  # bash reads its startup files when it takes itself for the first shell of a remote login: no SHLVL, and its
+  # input is a socket, which is how Claude Code starts it. The sandbox refuses the files, and bash says so.
+  if has "$(results "$log")" bashrc; then
+    fail "the result of the command starts with lines of bash about its startup files: SHLVL did not reach Claude Code"
+  fi
+  ok "the result holds no line of bash about its startup files"
+
+  say "the same turn without the variable SHLVL, which the nono profile lets through for this"
+  WITHOUT_SHLVL=1
+  turn "$CFG/tmp/model-no-shlvl.jsonl" "${LOCK[@]}" claude
+  WITHOUT_SHLVL=""
+  has "$out" KINGO-PROBE-DONE || { show "$out" 40; fail "Claude Code did not finish a turn without SHLVL"; }
+  if has "$(results "$log")" "bashrc: Permission denied"; then
+    ok "without SHLVL the lines are back, before what the command printed: this is what SHLVL in the profile is for"
+  else
+    ok "without SHLVL the lines do not show either: SHLVL in the profile may no longer be needed"
+  fi
+  show "$(results "$log" | head -n 3)" 3
 }
 
 # ── a session in a terminal ──────────────────────────────────────────────────

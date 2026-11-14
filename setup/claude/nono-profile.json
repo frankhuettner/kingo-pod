@@ -10,7 +10,7 @@
   "extends": "default",
   "meta": {
     "name": "kingo-claude",
-    "version": "0.4.1",
+    "version": "0.4.2",
     "description": "Kingo: Claude Code via OpenRouter; writes only to the course folder; keys for OpenRouter, n8n and Langflow injected by the proxy"
   },
   "security": {
@@ -45,8 +45,11 @@
   },
   "environment": {
     // Only these variables reach Claude; everything else (other API keys, .env) is dropped.
+    // SHLVL counts how many shells deep a program runs. Without it, the bash that runs Claude Code's commands
+    // takes itself for the first shell of a remote login and reads /etc/bash.bashrc and ~/.bashrc first. The
+    // sandbox refuses both, and every result of a command then starts with two lines "Permission denied".
     "allow_vars": [
-      "PATH", "HOME", "USER", "LOGNAME", "SHELL",
+      "PATH", "HOME", "USER", "LOGNAME", "SHELL", "SHLVL",
       "TERM", "TERM_PROGRAM", "COLORTERM", "LANG", "LC_*", "TZ",
       "XDG_RUNTIME_DIR",
       "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_TMPDIR", "TMPDIR",
