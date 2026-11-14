@@ -1,0 +1,156 @@
+#!/bin/bash
+# look: make pictures of an HTML file, so that Claude Code can see how the page looks.
+#
+#     look page.html              pictures of the whole page, from top to bottom: look/page-1.png, look/page-2.png, ...
+#     look page.html --width 600  the same in a window 600 pixels wide (default 1000), for example a phone
+#     look page.html --pdf        the page as it prints: look/page.pdf
+#
+# `kingo claude` puts this folder on the PATH and gets the browser, a Chrome without a window, on its first start
+# (`./kingo claude browser` gets it again). The browser runs inside the sandbox, like every command of Claude Code.
+#
+# How. The browser's own command line makes one picture of one window. A long page needs several: a picture
+# 1000 x 9000 would be shrunk before a model sees it, and the text would be unreadable. So look writes a small page
+# around yours, a frame that shows your page from a given height on, and takes one picture per part. A first run
+# with such a frame asks how high your page is.
+set -u
+
+WIDTH=1000
+PART=1200          # the height of one picture
+MOST=8             # no more pictures than this of one page
+WAIT=4000          # milliseconds of the page's own time that scripts get before the picture (not in the mode "single")
+
+say()  { printf '%s\n' "$*"; }
+stop() { printf 'look: %s\n' "$*" >&2; exit 1; }
+usage() { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+file="" pdf=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage ;;
+    --pdf) pdf=1 ;;
+    --width) shift; WIDTH=${1:-} ;;
+    --width=*) WIDTH=${1#--width=} ;;
+    -*) stop "unknown option $1 (look --help)" ;;
+    *) [ -z "$file" ] || stop "one file at a time"; file=$1 ;;
+  esac
+  shift
+done
+[ -n "$file" ] || usage 2
+case "$WIDTH" in ''|*[!0-9]*) stop "--width takes a number of pixels" ;; esac
+{ [ "$WIDTH" -ge 200 ] && [ "$WIDTH" -le 3000 ]; } || stop "--width must be between 200 and 3000"
+case "$file" in
+  http://*|https://*) stop "look takes a file, not an address. Save the page as a file first." ;;
+esac
+[ -f "$file" ] || stop "there is no file $file"
+
+# the browser: kingo claude says where it is; otherwise the newest one in the folder where kingo puts it
+browser=${KINGO_BROWSER:-}
+if [ -z "$browser" ] || [ ! -x "$browser" ]; then
+  browser=$(ls -d "$HOME"/.kingo-claude/browsers/*/chrome-headless-shell-*/chrome-headless-shell 2>/dev/null | sort | tail -n 1)
+fi
+if [ -z "$browser" ] || [ ! -x "$browser" ]; then
+  stop "the browser is not installed. Ask the student to run this in their own terminal, in the kingo-pod folder:  ./kingo claude browser"
+fi
+
+dir=$(cd "$(dirname "$file")" && pwd -P) || stop "cannot open the folder of $file"
+page="$dir/$(basename "$file")"
+name=$(basename "$file"); name=${name%.*}
+out="$PWD/look"
+mkdir -p "$out" || stop "cannot make the folder $out"
+work=$(mktemp -d "${TMPDIR:-/tmp}/look.XXXXXX") || stop "cannot make a folder for temporary files"
+trap 'rm -rf "$work"' EXIT
+
+# a file path as an address: the characters that mean something else in an address are written as %xx
+address() {
+  local s=$1 o="" c i
+  for (( i = 0; i < ${#s}; i++ )); do
+    c=${s:i:1}
+    case "$c" in
+      [a-zA-Z0-9/._~-]) o="$o$c" ;;
+      *) o="$o$(printf '%s' "$c" | od -An -tx1 | tr -d ' \n' | sed 's/../%&/g')" ;;
+    esac
+  done
+  printf 'file://%s' "$o"
+}
+url=$(address "$page")
+
+# The mode "single" is for a sandbox in which the browser cannot start its helper programs: everything runs in one
+# program then. In that mode the browser cannot wait for scripts, so the picture shows the page as it has loaded.
+flags=(--headless --no-sandbox --disable-gpu --hide-scrollbars --no-first-run --user-data-dir="$work/profile")
+if [ "${KINGO_BROWSER_MODE:-}" = single ]; then
+  flags+=(--single-process)
+else
+  flags+=(--virtual-time-budget="$WAIT")
+fi
+
+# run <seconds> <log> argument ...: the browser with these arguments; it is stopped when it takes too long
+run() {
+  local seconds=$1 log=$2 pid watch rc; shift 2
+  "$browser" "${flags[@]}" "$@" > "$log" 2>&1 &
+  pid=$!
+  ( sleep "$seconds"; kill -9 "$pid" 2>/dev/null ) > /dev/null 2>&1 &
+  watch=$!
+  wait "$pid" 2>/dev/null; rc=$?
+  kill "$watch" 2>/dev/null; wait "$watch" 2>/dev/null
+  return "$rc"
+}
+why() { grep -v '^ *\[0x' "$1" 2>/dev/null | grep -i -E 'fatal|error|denied|signal|not found|cannot' | head -n 4 | cut -c1-200 | sed 's/^/    /' >&2; }
+
+if [ "$pdf" = 1 ]; then
+  rm -f "$out/$name.pdf"
+  run 60 "$work/pdf.log" --no-pdf-header-footer --print-to-pdf="$out/$name.pdf" "$url"
+  if [ "$(head -c 4 "$out/$name.pdf" 2>/dev/null)" != "%PDF" ]; then why "$work/pdf.log"; stop "the browser made no PDF of $file"; fi
+  say "look: $file as it prints: look/$name.pdf"
+  exit 0
+fi
+
+# how high is the page? A frame of one part's height holds it, and a script writes the height into the title.
+cat > "$work/height.html" <<EOF
+<!doctype html><html><head><meta charset="utf-8"><title>LOOK-HEIGHT=?</title></head>
+<body style="margin:0"><iframe id="f" src="$url" style="border:0;width:${WIDTH}px;height:${PART}px"></iframe>
+<script>
+function measure() {
+  try {
+    var d = document.getElementById('f').contentDocument;
+    document.title = 'LOOK-HEIGHT=' + Math.max(d.documentElement.scrollHeight, d.body ? d.body.scrollHeight : 0);
+  } catch (e) { document.title = 'LOOK-HEIGHT=!'; }
+}
+document.getElementById('f').addEventListener('load', function () { measure(); setTimeout(measure, 3000); });
+</script></body></html>
+EOF
+run 45 "$work/height.log" --allow-file-access-from-files --window-size="$WIDTH,$PART" --dump-dom "file://$work/height.html"
+height=$(sed -n 's/.*<title>LOOK-HEIGHT=\([0-9]*\)<\/title>.*/\1/p' "$work/height.log" | head -n 1)
+if [ -z "$height" ]; then
+  if grep -q '<title>LOOK-HEIGHT=' "$work/height.log"; then height=$PART       # the browser ran but the page did not say
+  else why "$work/height.log"; stop "the browser did not start, or it did not open $file"; fi
+fi
+[ "$height" -ge 1 ] || height=$PART
+
+parts=$(( (height + PART - 1) / PART ))
+cut=""
+if [ "$parts" -gt "$MOST" ]; then cut=" (the page goes on: only the first $MOST parts are shown)"; parts=$MOST; fi
+
+rm -f "$out/$name"-[0-9].png "$out/$name"-[0-9][0-9].png
+made=0
+for (( k = 0; k < parts; k++ )); do
+  top=$(( k * PART ))
+  this=$PART
+  if [ $(( height - top )) -lt "$PART" ] && [ "$parts" -gt 1 ]; then this=$(( height - top )); fi
+  [ "$this" -ge 50 ] || this=50
+  cat > "$work/part.html" <<EOF
+<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;overflow:hidden;background:#fff"><iframe src="$url"
+  style="position:absolute;left:0;top:-${top}px;border:0;width:${WIDTH}px;height:${height}px"></iframe></body></html>
+EOF
+  png="$out/$name-$(( k + 1 )).png"
+  run 45 "$work/part.log" --window-size="$WIDTH,$this" --screenshot="$png" "file://$work/part.html"
+  if [ ! -s "$png" ]; then why "$work/part.log"; stop "the browser made no picture of part $(( k + 1 )) of $file"; fi
+  made=$(( made + 1 ))
+done
+
+say "look: $file is $WIDTH x $height pixels, in $made picture(s) from top to bottom$cut:"
+for (( k = 1; k <= made; k++ )); do say "  look/$name-$k.png"; done
+say "Read them with the Read tool to see the page."
+if [ "${KINGO_BROWSER_MODE:-}" = single ]; then
+  say "Note: the pictures show the page as it has loaded. What a script adds later is not on them."
+fi

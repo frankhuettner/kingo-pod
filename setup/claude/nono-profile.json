@@ -10,7 +10,7 @@
   "extends": "default",
   "meta": {
     "name": "kingo-claude",
-    "version": "0.4.2",
+    "version": "0.4.3",
     "description": "Kingo: Claude Code via OpenRouter; writes only to the course folder; keys for OpenRouter, n8n and Langflow injected by the proxy"
   },
   "security": {
@@ -55,6 +55,7 @@
       "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_TMPDIR", "TMPDIR",
       "CLAUDE_CODE_DISABLE_ARTIFACT", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING",
       "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+      "KINGO_BROWSER", "KINGO_BROWSER_MODE",
       "PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE"
     ]
   },

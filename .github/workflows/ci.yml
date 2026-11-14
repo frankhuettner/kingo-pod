@@ -346,18 +346,54 @@ jobs:
       - name: The end of a session in a terminal, where nono must not ask to change the profile
         run: bash .github/scripts/claude-sandbox.sh leave
 
-      # A trial, not a check: it reports and fails nothing. The lines that start with RESULT say what worked.
-      - name: "A trial: a browser in the sandbox makes a picture of a page"
-        continue-on-error: true
-        run: bash .github/scripts/claude-sandbox.sh browser
+      - name: look, with which Claude sees the pages it writes, inside nono under the lock
+        run: bash .github/scripts/claude-sandbox.sh look
 
-      - name: Keep the pictures of the trial
+      - name: A fresh Ubuntu, where the packages that kingo names must be enough for the browser
+        run: bash .github/scripts/claude-sandbox.sh fresh
+
+      - name: Keep the pictures that look made
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: browser-trial-${{ matrix.os }}
+          name: look-${{ matrix.os }}
           path: |
-            claude/probe-*.png
-            claude/probe-page.pdf
+            claude/look/*.png
+            claude/look/*.pdf
+          if-no-files-found: ignore
+
+  # look on a Mac: the sandbox is another one there (Seatbelt), and it keeps other things from the browser than
+  # Landlock does under Linux. No Claude Code turn here: the part "look" of the job above has that.
+  claude-look-mac:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nono and Claude Code
+        run: |
+          brew install nono
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Versions
+        run: |
+          sw_vers
+          uname -srm
+          nono --version
+          claude --version
+
+      - name: look inside nono with the course profile
+        run: bash .github/scripts/claude-look-mac.sh
+
+      - name: Keep the pictures that look made
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: look-macos
+          path: |
+            claude/look/*.png
+            claude/look/*.pdf
           if-no-files-found: ignore

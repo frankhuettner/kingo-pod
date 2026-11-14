@@ -1105,7 +1105,143 @@ claude_backup_flows() {
   done <<<"$all"
 }
 
+# ── kingo claude: a browser, so that Claude can look at the pages it writes ───
+# `look page.html` (setup/claude/bin/look) makes pictures of an HTML file, and Claude reads them. The browser is
+# Chrome's own build without a window, chrome-headless-shell from "Chrome for Testing", one fixed version. kingo
+# downloads it on the first `kingo claude`, checks it against the checksum below and puts it into
+# ~/.kingo-claude/browsers, a folder that the nono profile grants. It runs inside the sandbox, like every command of
+# Claude Code. Getting it is never fatal: without it Claude starts as before, and look says what to do.
+CLAUDE_BROWSER_VERSION=159.0.8154.6
+CLAUDE_BROWSER_SUMS="
+mac-arm64:b08e7beaf02a19e2ee5ed6955f9c3853ab9176cd5bb57ba87afbb82e9f81cc29
+mac-x64:89c56fb080ab4e9ba76656d5669af2b2dfc313c11434871e8f4e351c08a5ffca
+linux64:77a6442fd3c8acd3bef9e1067fc26f5ef464277d22f0e8cb58dc3e4077a3e458
+linux-arm64:e1262e9f4f244c441dcb54aa0e9abe4cf7b266ab02dc666fd975bd55aba9b3dc
+"
+# What Claude Code is told at every start, in addition to AGENTS.md: that file is the student's after the first
+# start, so a line added to its template would not reach the course folders that exist.
+CLAUDE_LOOK_HINT='When you have written or changed an HTML page, look at it before you say it is done. Run: look <file.html> (add --width 600 for a phone, --pdf for the page as it prints). It makes pictures of the whole page in the folder look/. Read them with the Read tool and check the layout.'
+
+claude_browser_platform() { # -> the name of this machine in Chrome for Testing, or nothing
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64)                echo mac-arm64 ;;
+    Darwin-x86_64)               echo mac-x64 ;;
+    Linux-x86_64)                echo linux64 ;;
+    Linux-aarch64|Linux-arm64)   echo linux-arm64 ;;
+  esac
+}
+
+claude_browser_path() { # -> where this version's browser is, or would be
+  local plat; plat=$(claude_browser_platform)
+  [ -n "$plat" ] || return 1
+  printf '%s/.kingo-claude/browsers/%s/chrome-headless-shell-%s/chrome-headless-shell' "$HOME" "$CLAUDE_BROWSER_VERSION" "$plat"
+}
+
+# Linux: the browser needs libraries of the system and at least one font. Prints the apt packages that are missing,
+# on one line. Ubuntu 24.04 renamed some of them (…t64): the first name that this Ubuntu knows is taken.
+claude_browser_packages() { # browser
+  local so names name n out=" "
+  for so in $(ldd "$1" 2>/dev/null | awk '/not found/ {print $1}' | sort -u); do
+    case "$so" in
+      libglib-2.0.so.0|libgobject-2.0.so.0|libgio-2.0.so.0) names="libglib2.0-0t64 libglib2.0-0" ;;
+      libnspr4.so)             names="libnspr4" ;;
+      libnss3.so|libnssutil3.so) names="libnss3" ;;
+      libatk-1.0.so.0)         names="libatk1.0-0t64 libatk1.0-0" ;;
+      libatk-bridge-2.0.so.0)  names="libatk-bridge2.0-0t64 libatk-bridge2.0-0" ;;
+      libatspi.so.0)           names="libatspi2.0-0t64 libatspi2.0-0" ;;
+      libasound.so.2)          names="libasound2t64 libasound2" ;;
+      libdbus-1.so.3)          names="libdbus-1-3" ;;
+      libX11.so.6)             names="libx11-6" ;;
+      libXcomposite.so.1)      names="libxcomposite1" ;;
+      libXdamage.so.1)         names="libxdamage1" ;;
+      libXext.so.6)            names="libxext6" ;;
+      libXfixes.so.3)          names="libxfixes3" ;;
+      libXrandr.so.2)          names="libxrandr2" ;;
+      libgbm.so.1)             names="libgbm1" ;;
+      libexpat.so.1)           names="libexpat1" ;;
+      libxcb.so.1)             names="libxcb1" ;;
+      libxkbcommon.so.0)       names="libxkbcommon0" ;;
+      libudev.so.1)            names="libudev1" ;;
+      *)                       names="" ;;
+    esac
+    [ -n "$names" ] || continue
+    name=${names%% *}
+    for n in $names; do
+      if apt-cache show "$n" >/dev/null 2>&1; then name=$n; break; fi
+    done
+    case "$out" in *" $name "*) ;; *) out="$out$name " ;; esac
+  done
+  # a font for Latin text, and one for Korean, Japanese and Chinese: without them a page shows boxes or nothing
+  ls /usr/share/fonts/truetype/liberation*/*.ttf >/dev/null 2>&1 || out="${out}fonts-liberation "
+  ls /usr/share/fonts/opentype/noto/NotoSansCJK* >/dev/null 2>&1 || out="${out}fonts-noto-cjk "
+  out=${out# }; printf '%s' "${out% }"
+}
+
+# Downloads the browser when it is not there. Prints what it does; returns 0 when the browser is there afterwards.
+claude_browser_get() {
+  local bin plat url dir zip want got tmp
+  plat=$(claude_browser_platform)
+  [ -n "$plat" ] || { warn "there is no browser for this machine ($(uname -s) $(uname -m)), so Claude cannot look at pages."; return 1; }
+  bin=$(claude_browser_path)
+  [ -x "$bin" ] && return 0
+  want=$(printf '%s\n' "$CLAUDE_BROWSER_SUMS" | sed -n "s/^$plat://p")
+  url="https://storage.googleapis.com/chrome-for-testing-public/$CLAUDE_BROWSER_VERSION/$plat/chrome-headless-shell-$plat.zip"
+  dir="$HOME/.kingo-claude/browsers"
+  tmp="$dir/.get-$$"
+  zip="$tmp/browser.zip"
+  rm -rf "$tmp"; mkdir -p "$tmp" || { warn "could not make $tmp, so the browser was not installed."; return 1; }
+  echo "Getting a browser, so that Claude can look at the pages it writes (once, about 130 MB) ..."
+  if [ -t 2 ]; then curl -fL --progress-bar -o "$zip" "$url"; else curl -fsSL -o "$zip" "$url"; fi \
+    || { rm -rf "$tmp"; warn "the download of the browser did not work, so Claude cannot look at pages. ./kingo claude browser tries again."; return 1; }
+  got=$(file_sha256 "$zip")
+  if [ -z "$got" ] || [ "$got" != "$want" ]; then
+    rm -rf "$tmp"
+    warn "the downloaded browser is not the file kingo expects (checksum ${got:-unknown}), so it was not installed. ./kingo claude browser tries again."
+    return 1
+  fi
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q -o "$zip" -d "$tmp/out"
+  elif command -v python3 >/dev/null 2>&1; then          # a fresh Ubuntu has no unzip; Python's does not keep the modes
+    python3 -m zipfile -e "$zip" "$tmp/out" && chmod +x "$tmp/out/chrome-headless-shell-$plat/chrome-headless-shell"
+  else
+    false
+  fi || { rm -rf "$tmp"; warn "could not unpack the browser (no unzip and no python3), so Claude cannot look at pages."; return 1; }
+  # this version in, every other version out
+  find "$dir" -mindepth 1 -maxdepth 1 ! -name ".get-$$" -exec rm -rf {} + 2>/dev/null || true
+  mv "$tmp/out" "$dir/$CLAUDE_BROWSER_VERSION" && rm -rf "$tmp"
+  [ -x "$bin" ] || { warn "the browser was unpacked, but $bin is not there."; return 1; }
+  echo "The browser is in $dir/$CLAUDE_BROWSER_VERSION."
+}
+
+# Linux: says which packages are missing and the one line that installs them. Returns 1 when some are.
+claude_browser_check_packages() { # browser
+  local need
+  [ "$(uname -s)" = Linux ] || return 0
+  need=$(claude_browser_packages "$1")
+  [ -n "$need" ] || return 0
+  warn "the browser needs a few packages of the system before Claude can look at pages. Install them once, in this terminal:"
+  echo "    sudo apt-get install -y $need" >&2
+  return 1
+}
+
+claude_browser_cmd() { # ./kingo claude browser: get the browser, or say why it does not run
+  local bin
+  claude_browser_get || return 1
+  bin=$(claude_browser_path)
+  claude_browser_check_packages "$bin" || return 1
+  if "$bin" --version >/dev/null 2>&1; then
+    echo "The browser is ready: $("$bin" --version 2>/dev/null | head -n 1)"
+    echo "In ./kingo claude, Claude looks at a page with:  look page.html"
+  else
+    warn "the browser is installed but does not start: $bin --version"
+    return 1
+  fi
+}
+
 cmd_claude() {
+  case "${1:-}" in
+    browser) claude_browser_cmd; return ;;
+  esac
   case "${1:-}" in
     help|-h|--help)
       echo "kingo claude [claude options]  start Claude Code for your project, in the nono sandbox."
@@ -1113,6 +1249,8 @@ cmd_claude() {
       echo "  The first start asks for your OpenRouter key and an n8n API key; keys are kept in $CLAUDE_KEYS/."
       echo "  A key that a service refuses is deleted, and the next start asks again."
       echo "  Every start saves a copy of each n8n workflow and Langflow flow in $KINGO_DIR/backups/flows/ (the newest $CLAUDE_BACKUP_KEEP stay)."
+      echo "  The first start gets a browser, so that Claude can look at the pages it writes (look page.html)."
+      echo "  ./kingo claude browser gets it again, and says what is missing when it does not run."
       echo "  Claude asks before every command; ./kingo yolo lets it work"
       echo "  without asking (the sandbox protects your laptop either way; ./kingo backup saves your workflows and flows)."
       return ;;
@@ -1171,6 +1309,10 @@ cmd_claude() {
     claude_check_key langflow "$(claude_http "http://127.0.0.1:${P_LANGFLOW}/api/v1/flows/" "x-api-key: $(cat "$CLAUDE_KEYS/langflow.key")")" \
       "Make a new one in Langflow (Settings, Langflow API Keys)."
     claude_backup_flows
+    # Never fatal: without the browser Claude starts as before.
+    if [ "${KINGO_CLAUDE_NO_BROWSER:-}" != 1 ] && claude_browser_get; then
+      claude_browser_check_packages "$(claude_browser_path)" || true
+    fi
   fi
 
   # The course folder gets the templates once; after that it is the student's.
@@ -1206,6 +1348,12 @@ cmd_claude() {
     case "$a" in --permission-mode|--permission-mode=*|--dangerously-skip-permissions) ask=0 ;; esac
   done
   if [ "$ask" = 1 ]; then set -- --permission-mode default "$@"; fi
+  # How to look at a page goes to Claude Code at every start, unless the command line brings its own text.
+  local hint=1
+  for a in "$@"; do
+    case "$a" in --append-system-prompt|--append-system-prompt=*|--append-system-prompt-file|--append-system-prompt-file=*|--system-prompt|--system-prompt=*|--system-prompt-file|--system-prompt-file=*) hint=0 ;; esac
+  done
+  if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_LOOK_HINT"; fi
   set -- claude --add-dir "$KINGO_DIR" "$@"
 
   # Linux and Windows (WSL2): there nono does not keep a program in the sandbox from connecting to a Unix socket
@@ -1231,6 +1379,11 @@ cmd_claude() {
   if [ -n "${XDG_RUNTIME_DIR:-}" ] && { [ ! -d "$XDG_RUNTIME_DIR" ] || [ ! -w "$XDG_RUNTIME_DIR" ]; }; then
     unset XDG_RUNTIME_DIR
   fi
+  # look (setup/claude/bin) and its browser. On a Mac the sandbox does not let a program register a Mach service,
+  # which Chrome does for its helper programs, so Chrome runs as one program there ("single"). In that mode it
+  # cannot wait for scripts: a picture shows the page as it has loaded. Found and tried on 14 Nov 2026.
+  local browser_mode=""
+  [ "$(uname -s)" = Darwin ] && browser_mode=single
   # Nothing goes to Anthropic: set here, outside the course folder, so editing settings.json cannot undo it.
   # CLAUDE_CODE_MAX_CONTEXT_TOKENS: Claude Code does not know the course's model, assumes a context size (200k tokens,
   # or 1m in the version the TA had on 13 Nov 2026) and warns about it at every start. Saying 200k here drops the
@@ -1243,6 +1396,7 @@ cmd_claude() {
   CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
   CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
   PGHOST=127.0.0.1 PGPORT="$P_POSTGRES" PGUSER="$KINGO_USER" PGPASSWORD="$KINGO_PASSWORD" PGDATABASE=classroom \
+  PATH="$tpl/bin:$PATH" KINGO_BROWSER="$(claude_browser_path)" KINGO_BROWSER_MODE="$browser_mode" \
   NONO_NO_SAVE_PROMPT=1 \
     exec nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- "$@"
 }

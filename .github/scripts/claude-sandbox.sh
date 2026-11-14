@@ -11,7 +11,8 @@
 #                               also: the result of a command holds no lines of bash about its startup files
 #   claude-sandbox.sh session   a session of Claude Code in a terminal, as a student has it (pty_session.py)
 #   claude-sandbox.sh leave     the end of a session in a terminal: nono does not ask to change the profile
-#   claude-sandbox.sh browser   a trial, not a check: does a browser in the sandbox make a picture of a page?
+#   claude-sandbox.sh look      look page.html inside nono under the lock: kingo gets the browser, pictures come out
+#   claude-sandbox.sh fresh     a fresh Ubuntu in a container: the packages that kingo names are enough for the browser
 #
 # Each way out is tried twice. Without the lock it must work, or the check would prove nothing. With the lock it
 # must not work.
@@ -125,6 +126,11 @@ prepare() {
   grep -q '^  NONO_NO_SAVE_PROMPT=1 \\$' "$KINGO_DIR/kingo" \
     || fail "kingo claude does not start nono with NONO_NO_SAVE_PROMPT=1: nono would ask to change the profile when a session ends"
   ok "kingo claude starts nono with NONO_NO_SAVE_PROMPT=1"
+  grep -q '^  PATH="\$tpl/bin:\$PATH" KINGO_BROWSER="\$(claude_browser_path)" KINGO_BROWSER_MODE="\$browser_mode" \\$' "$KINGO_DIR/kingo" \
+    || fail "kingo claude does not put look on the PATH or does not say where the browser is"
+  has "$dry" "--append-system-prompt When you have written or changed an HTML page, look at it" \
+    || fail "kingo claude does not tell Claude Code how to look at a page"
+  ok "kingo claude puts look on the PATH, says where the browser is, and tells Claude Code how to look at a page"
 }
 
 # kingo_env command ...: run it in the course folder with the variables that kingo claude sets for Claude Code
@@ -135,9 +141,11 @@ kingo_env() {
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" \
     PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
     NONO_NO_SAVE_PROMPT=1 \
+    PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" KINGO_BROWSER_MODE="" \
       "$@" )
 }
 SANDBOX=(nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" --)   # the line of kingo claude
+BROWSER_BIN=""                      # where kingo put the browser; part_look fills it in
 
 # in_sandbox command ...: run it as kingo claude runs Claude Code; prints its output and nono's.
 # WITHOUT_SHLVL=1 takes the variable SHLVL away before nono starts, as a comparison (see part_claude).
@@ -384,113 +392,128 @@ part_leave() {
   ok "the program ends, and nono does not ask"
 }
 
-# ── a trial: a browser in the sandbox ────────────────────────────────────────
-# Can a program in the sandbox look at a page it has built? It needs a browser without a window that makes a
-# picture of the page. This part tries that and reports; it fails nothing. Each browser is tried three times:
-# outside the sandbox, inside nono with the course profile, and inside nono under the lock, as kingo claude starts
-# Claude Code. --no-sandbox turns off Chromium's own sandbox, which needs rights that nono takes away; nono's stays.
-part_browser() {
-  local page="$KINGO_DIR/claude/probe-page.html" store="$CFG/browsers" out bin name where png n=0 best="" list=()
+# ── look: Claude sees the pages it writes ────────────────────────────────────
+# kingo claude gets a browser without a window on its first start and puts setup/claude/bin/look on the PATH.
+# look page.html makes pictures of the whole page, part by part. Here: kingo gets the browser, and look runs inside
+# nono with the course profile and under the lock, by itself and from the Bash tool of the real Claude Code.
+part_look() {
+  local out line dir="$KINGO_DIR/claude" log="$CFG/tmp/model-look.jsonl" n
 
-  say "what kingo claude would start"
-  prepare
+  stand_in
 
-  say "the browsers of Playwright, put into $store, a folder that the course profile grants"
-  if command -v npx >/dev/null 2>&1; then
-    out=$(PLAYWRIGHT_BROWSERS_PATH="$store" npx -y playwright@latest install --with-deps chromium chromium-headless-shell 2>&1) \
-      || out=$out$'\n'$(PLAYWRIGHT_BROWSERS_PATH="$store" npx -y playwright@latest install chromium chromium-headless-shell 2>&1) \
-      || true
+  say "kingo gets the browser"
+  out=$(cd "$KINGO_DIR" && ./kingo claude browser 2>&1) || {
     show "$out" 6
-    du -sh "$store" 2>/dev/null | sed 's/^/         | size: /' || true
-  else
-    echo "         | no npx on this machine"
-  fi
-  while IFS= read -r bin; do list+=("$bin"); done < <(
-    find "$store" -type f \( -name chrome -o -name chrome-headless-shell -o -name headless_shell \) 2>/dev/null | sort)
-  for name in google-chrome chromium chromium-browser; do
-    if bin=$(command -v "$name" 2>/dev/null); then list+=("$bin"); fi
-  done
-  [ "${#list[@]}" -gt 0 ] || { echo "   RESULT  no browser on this machine: nothing tried"; return 0; }
+    line=$(printf '%s\n' "$out" | sed -n 's/^ *\(sudo apt-get install -y .*\)$/\1/p')
+    [ -n "$line" ] || fail "kingo claude browser failed and named no packages"
+    sudo apt-get update -q >/dev/null
+    $line >/dev/null || fail "the line that kingo named did not install: $line"
+    out=$(cd "$KINGO_DIR" && ./kingo claude browser 2>&1) || { show "$out" 6; fail "the browser does not run after the packages that kingo named"; }
+  }
+  show "$out" 3
+  BROWSER_BIN=$(find "$CFG/browsers" -type f -name chrome-headless-shell 2>/dev/null | head -n 1)
+  [ -x "$BROWSER_BIN" ] || fail "the browser is not where kingo says it is: $BROWSER_BIN"
+  ok "the browser is there: $BROWSER_BIN"
+  out=$(cd "$KINGO_DIR" && ./kingo claude browser 2>&1) || fail "a second kingo claude browser failed"
+  if has "$out" "Getting a browser"; then fail "a second kingo claude browser downloaded it again"; fi
+  ok "a second kingo claude browser downloads nothing"
 
-  cat > "$page" <<'HTML'
+  cat > "$dir/look-cv.html" <<'HTML'
 <!doctype html><html><head><meta charset="utf-8"><title>Probe</title>
 <style>body{font-family:sans-serif;margin:40px}h1{color:#1a4d8f}.bar{height:60px;background:linear-gradient(90deg,#e4572e,#f3a712,#76b041)}
 .cols{display:flex;gap:20px;margin-top:20px}.cols div{flex:1;border:1px solid #888;padding:10px}</style></head>
 <body><h1>Curriculum Vitae</h1><div class="bar"></div>
 <div class="cols"><div><b>Education</b><br>MBA, 2026</div><div><b>Experience</b><br>Analyst, 2021 to 2025</div></div>
-<p id="p">the script did not run</p><script>document.getElementById("p").textContent = "the script ran: " + (6 * 7)</script>
 </body></html>
 HTML
+  # 400 pixels at first; half a second later a script makes the page 3000 pixels high
+  cat > "$dir/look-late.html" <<'HTML'
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;font-family:sans-serif}
+.first{height:400px;background:linear-gradient(#e4572e,#76b041)}</style></head>
+<body><div class="first">first</div><div id="more"></div>
+<script>setTimeout(function () { var d = document.getElementById('more'); d.style.height = '2600px';
+  d.style.background = 'linear-gradient(#1a4d8f,#f3a712)'; d.textContent = 'late'; }, 500)</script></body></html>
+HTML
+  rm -rf "$dir/look"
 
-  # picture <file>: says its size and how much it shows; fails when it is no picture or shows one colour only
-  picture() {
-    /usr/bin/python3 - "$1" <<'PY'
-import struct, sys, zlib
-data = open(sys.argv[1], "rb").read()
-assert data[:8] == b"\x89PNG\r\n\x1a\n", "not a PNG"
-width, height = struct.unpack(">II", data[16:24])
-at, pixels = 8, b""
-while at < len(data):
-    length, kind = struct.unpack(">I4s", data[at:at + 8])
-    if kind == b"IDAT":
-        pixels += data[at + 8:at + 8 + length]
-    at += 12 + length
-values = len(set(zlib.decompress(pixels)))
-print("%d x %d, %d kB, %d different values" % (width, height, len(data) // 1024, values))
-sys.exit(0 if values > 8 else 1)
-PY
+  # pictures <how many> <name>: so many pictures of that page are there, and each shows something
+  pictures() {
+    local i
+    for i in $(seq 1 "$1"); do
+      /usr/bin/python3 "$HERE/png_check.py" "$dir/look/$2-$i.png" | sed 's/^/         | /' \
+        || fail "look/$2-$i.png is missing or shows nothing"
+    done
+    [ ! -e "$dir/look/$2-$(( $1 + 1 )).png" ] || fail "there are more than $1 pictures of $2"
   }
 
-  # look <where> command ...: run the browser, then say whether the picture is there
-  look() {
-    local got; where=$1; shift
-    png="$KINGO_DIR/claude/probe-$n-$where.png"
-    rm -f "$png"
-    out=$("$@" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --hide-scrollbars --window-size=900,600 \
-      --user-data-dir="$CFG/tmp/browser-$n-$where" --screenshot="$png" "file://$page" 2>&1) || true
-    if [ -s "$png" ] && got=$(picture "$png" 2>&1); then
-      printf '   RESULT  %-24s %-18s a picture (%s)\n' "$name" "$where" "$got"
-      return 0
-    fi
-    printf '   RESULT  %-24s %-18s NO picture\n' "$name" "$where"
-    show "$out" 8
-    return 1
-  }
+  say "look inside nono, under the lock: a short page"
+  out=$(in_sandbox "${LOCK[@]}" look look-cv.html)
+  has "$out" "in 1 picture(s)" || { show "$out" 12; fail "look made no picture of a short page"; }
+  pictures 1 look-cv
+  ok "one picture, and it shows something"
 
-  for bin in "${list[@]}"; do
-    n=$((n + 1))
-    name=$(basename "$bin")
-    case "$bin" in "$store"/*) name="playwright $name" ;; esac
-    say "browser $n: $bin"
-    show "$(try 20 "$bin" --version)" 1
-    look outside kingo_env timeout 90 "$bin" || true
-    look in-nono kingo_env timeout 180 "${SANDBOX[@]}" timeout 90 "$bin" || true
-    if look in-nono-locked kingo_env timeout 180 "${SANDBOX[@]}" "${LOCK[@]}" timeout 90 "$bin"; then
-      [ -n "$best" ] || best=$bin
-    fi
-  done
+  say "a page that a script makes longer after it has loaded"
+  out=$(in_sandbox "${LOCK[@]}" look look-late.html)
+  has "$out" "is 1000 x 3000 pixels, in 3 picture(s)" || { show "$out" 12; fail "look did not wait for the script, or did not cut the page into 3 pictures"; }
+  pictures 3 look-late
+  ok "look waited for the script: 3000 pixels, three pictures"
 
-  say "what else the first browser that works under the lock can do there"
-  if [ -z "$best" ]; then echo "   RESULT  no browser made a picture under the lock"; return 0; fi
-  out=$(in_sandbox "${LOCK[@]}" timeout 90 "$best" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
-    --user-data-dir="$CFG/tmp/browser-dom" --dump-dom "file://$page")
-  if has "$out" "the script ran: 42"; then echo "   RESULT  the script of the page ran"
-  else echo "   RESULT  the script of the page did NOT run"; show "$out" 6; fi
-  rm -f "$KINGO_DIR/claude/probe-page.pdf"
-  out=$(in_sandbox "${LOCK[@]}" timeout 90 "$best" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
-    --user-data-dir="$CFG/tmp/browser-pdf" --no-pdf-header-footer --print-to-pdf="$KINGO_DIR/claude/probe-page.pdf" "file://$page")
-  if [ "$(head -c 4 "$KINGO_DIR/claude/probe-page.pdf" 2>/dev/null)" = "%PDF" ]; then
-    echo "   RESULT  the page as a PDF: $(wc -c < "$KINGO_DIR/claude/probe-page.pdf") bytes"
-  else echo "   RESULT  NO PDF of the page"; show "$out" 6; fi
+  say "a narrow window, and the page as it prints"
+  out=$(in_sandbox "${LOCK[@]}" look look-cv.html --width 600)
+  has "$out" "is 600 x" || { show "$out" 12; fail "look --width 600 did not make a picture 600 wide"; }
+  /usr/bin/python3 "$HERE/png_check.py" "$dir/look/look-cv-1.png" | grep -q ": 600 x " || fail "the picture is not 600 pixels wide"
+  out=$(in_sandbox "${LOCK[@]}" look look-cv.html --pdf)
+  [ "$(head -c 4 "$dir/look/look-cv.pdf" 2>/dev/null)" = "%PDF" ] || { show "$out" 12; fail "look --pdf made no PDF"; }
+  ok "600 pixels wide; a PDF of $(wc -c < "$dir/look/look-cv.pdf") bytes"
+
+  say "the real Claude Code runs look with its Bash tool"
+  PROBE="look look-cv.html; echo the-command-ended"
+  rm -rf "$dir/look"
+  model_start "$log"
+  out=$(in_sandbox "${LOCK[@]}" claude --add-dir "$KINGO_DIR" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
+  model_stop "$log"
+  has "$out" KINGO-PROBE-DONE || { show "$out" 40; fail "Claude Code did not finish the turn"; }
+  has "$(results "$log")" "in 1 picture(s)" || { show "$(results "$log")" 12; fail "look did not run from Claude Code's Bash tool"; }
+  pictures 1 look-cv
+  ok "look is on the PATH of the Bash tool, and the picture is there"
+  show "$(results "$log")" 4
+}
+
+# ── a fresh Ubuntu ───────────────────────────────────────────────────────────
+# The runner has many packages that a new Ubuntu under Windows (WSL) does not have. In a container of the same
+# Ubuntu version with nothing but curl and python3: kingo names the packages the browser needs, they install, and
+# then the browser makes a picture. No nono here: this is about the packages.
+part_fresh() {
+  local image
+  image="ubuntu:$(. /etc/os-release && echo "$VERSION_ID")"
+  say "a fresh $image"
+  docker run --rm -v "$KINGO_DIR:/k:ro" "$image" bash -c '
+    set -eu
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -q >/dev/null && apt-get install -y -q curl ca-certificates python3 >/dev/null
+    cd /k
+    if out=$(./kingo claude browser 2>&1); then echo "$out"; echo "FRESH: nothing was missing, which a fresh Ubuntu cannot be"; exit 1; fi
+    echo "$out" | tail -n 4
+    line=$(printf "%s\n" "$out" | sed -n "s/^ *sudo \(apt-get install -y .*\)$/\1/p")
+    [ -n "$line" ] || { echo "FRESH: kingo named no packages"; exit 1; }
+    $line >/dev/null
+    ./kingo claude browser
+    mkdir /w && cd /w
+    printf "<!doctype html><meta charset=utf-8><h1 style=\"color:#1a4d8f\">Curriculum Vitae 이력서</h1><p>Hello</p>" > page.html
+    bash /k/setup/claude/bin/look page.html
+    python3 /k/.github/scripts/png_check.py look/page-1.png
+  ' || fail "on a fresh $image the browser does not run with the packages that kingo names"
+  ok "kingo named the missing packages, they installed, and the browser made a picture"
 }
 
 case "${1:-}" in
-  browser) part_browser ;;
+  look)    part_look ;;
+  fresh)   part_fresh ;;
   leave)   part_leave ;;
   lock)    part_lock ;;
   sandbox) part_sandbox ;;
   claude)  part_claude ;;
   session) part_session ;;
-  *) echo "usage: claude-sandbox.sh lock|sandbox|claude|session|leave|browser"; exit 2 ;;
+  *) echo "usage: claude-sandbox.sh lock|sandbox|claude|session|leave|look|fresh"; exit 2 ;;
 esac
 printf '\nAll checks of "%s" passed.\n' "$1"
