@@ -878,22 +878,24 @@ EOF
 
   # The real nono, with the profiles of the login. Its store of the real tokens is outside everything the sandbox gets.
   say "the sandbox of the login: no way to OpenRouter, the course only with the course, nono's store stays outside"
+  # ci-probe.txt: can its text be read? A second file, which no command below names: can the folder be listed?
   printf 'store-%s\n' "$SECRET" > "$store/ci-probe.txt"
+  : > "$store/listed-$SECRET"
   printf 'login-folder-%s\n' "$SECRET" > "$lcfg/marker.txt"
   local probe='echo "base=${ANTHROPIC_BASE_URL:-none} token=${ANTHROPIC_AUTH_TOKEN:-none} proxy=${HTTPS_PROXY:+set} ca=${NODE_EXTRA_CA_CERTS:+set} n8n=${N8N_BASE_URL:+set} langflow=${LANGFLOW_BASE_URL:+set} pg=${PGHOST:-none}"; cat "$1" 2>&1; ls "$(dirname "$1")" 2>&1; for f in "$2/probe" "$3/probe" ./probe-here; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done'
   out=$(in_login kingo-claude-login "$dir" "$tpl" sh -c "$probe" sh "$store/ci-probe.txt" "$CFG" "$lcfg")
   show "$(printf '%s\n' "$out" | grep -E '^(base=|WROTE|refused)')" 5
   has "$out" "base=none token=none proxy=set ca=set n8n= langflow= pg=none" || { show "$out" 20; fail "the profile of the login: a way to OpenRouter or something of the course is there, or nono's proxy and certificate are not"; }
-  if has "$out" "store-$SECRET" || has "$out" "ci-probe.txt"; then fail "the sandbox of the login can read nono's store of the real tokens"; fi
+  if has "$out" "store-$SECRET" || has "$out" "listed-$SECRET"; then fail "the sandbox of the login can read nono's store of the real tokens"; fi
   has "$out" "refused $CFG/probe" || fail "the sandbox of the login can write in the config folder of the OpenRouter way"
   has "$out" "WROTE $lcfg/probe" || fail "the sandbox of the login cannot write in its own config folder"
   has "$out" "WROTE ./probe-here" || fail "the sandbox of the login cannot write in the folder it starts in"
   out=$(in_login kingo-claude-login-course "$KINGO_DIR/claude" "$KINGO_DIR" sh -c "$probe" sh "$store/ci-probe.txt" "$CFG" "$lcfg")
   show "$(printf '%s\n' "$out" | grep -E '^(base=|WROTE|refused)')" 5
   has "$out" "base=none token=none proxy=set ca=set n8n=set langflow=set pg=127.0.0.1" || { show "$out" 20; fail "the course profile of the login: a way to OpenRouter is there, or n8n, Langflow or PostgreSQL are not"; }
-  if has "$out" "store-$SECRET" || has "$out" "ci-probe.txt"; then fail "the sandbox of the login, with the course, can read nono's store of the real tokens"; fi
+  if has "$out" "store-$SECRET" || has "$out" "listed-$SECRET"; then fail "the sandbox of the login, with the course, can read nono's store of the real tokens"; fi
   rm -f "$KINGO_DIR/claude/probe-here"
-  out=$(in_sandbox "${LOCK[@]}" sh -c 'cat "$1" 2>&1; cat "$2" 2>&1' sh "$lcfg/marker.txt" "$store/ci-probe.txt")
+  out=$(in_sandbox "${LOCK[@]}" sh -c 'cat "$1" 2>&1; cat "$2" 2>&1; ls "$(dirname "$2")" 2>&1' sh "$lcfg/marker.txt" "$store/ci-probe.txt")
   if has "$out" "$SECRET"; then fail "the sandbox of the OpenRouter way can read the config folder of the login, or nono's store"; fi
   ok "login: no OpenRouter, nono's proxy and certificate, its own config folder; the course's routes only with the course; the store is closed"
 
