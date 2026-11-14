@@ -1005,7 +1005,78 @@ cmd_mcp() {
 # on a Mac. The templates are in setup/claude/; claude/ gets them once, and the
 # nono profile is rewritten on every start (ports, a kingo update).
 CLAUDE_KEYS="$HOME/.config/kingo"
+# What kingo downloads for Claude Code, nono and the browser, goes here: outside everything the sandbox may write.
+# kingo starts both files outside the sandbox (nono itself; the browser for --version and ldd), so a program inside
+# the sandbox must not be able to swap them. The sandbox may read the browser, and nothing else of this folder.
+CLAUDE_SHARE="$HOME/.local/share/kingo"
+
+# ── kingo claude: its own nono ───────────────────────────────────────────────
+# The course profile leans on how one version of nono behaves: the place of the Seatbelt rules on a Mac, the policy
+# for WSL2, NONO_NO_SAVE_PROMPT, which no help text names. So kingo does not take whichever nono is installed. It
+# downloads the version below from nono's releases on GitHub, checks it against the checksum, and starts that one.
+# A newer nono comes with a kingo update, after the CI has run with it. Only when the download does not work, kingo
+# takes a nono that is installed on the laptop, if that one is new enough (CLAUDE_NONO_MIN).
+CLAUDE_NONO_VERSION=0.81.0
+CLAUDE_NONO_SUMS="
+aarch64-apple-darwin:728b1deefbf6390c9b74fc982efbded1e1c4b37b99dcdefa2e07266dfef4d9e9
+x86_64-apple-darwin:f795aa88faaf75975ffc600eb870e7c9f2b52ba2035df5087ec972a0252afd40
+aarch64-unknown-linux-gnu:a4d87ddb0917ef96224bcc41a2587318d7d0e92441e7ff454696e5980c9f7924
+x86_64-unknown-linux-gnu:7ecc33ff9c349bdfa84b4496e7a7555f67bcc33f1e125c7df9efb653c6c4e569
+"
 CLAUDE_NONO_MIN=80   # nono 0.80: the profile's Seatbelt rule for PostgreSQL takes effect on a Mac; platform_overrides (0.68), the D-Bus fix (0.55)
+
+claude_nono_target() { # -> the name of this machine in nono's releases, or nothing
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64)                echo aarch64-apple-darwin ;;
+    Darwin-x86_64)               echo x86_64-apple-darwin ;;
+    Linux-aarch64|Linux-arm64)   echo aarch64-unknown-linux-gnu ;;
+    Linux-x86_64)                echo x86_64-unknown-linux-gnu ;;
+  esac
+}
+
+claude_nono_path() { printf '%s/nono/%s/nono' "$CLAUDE_SHARE" "$CLAUDE_NONO_VERSION"; }
+
+# Downloads kingo's nono when it is not there. Returns 0 when it is there afterwards; says why when it is not.
+claude_nono_get() {
+  local bin target url dir tmp want got
+  bin=$(claude_nono_path)
+  [ -x "$bin" ] && return 0
+  target=$(claude_nono_target)
+  [ -n "$target" ] || { warn "nono has no release for this machine ($(uname -s) $(uname -m))."; return 1; }
+  want=$(printf '%s\n' "$CLAUDE_NONO_SUMS" | sed -n "s/^$target://p")
+  url="https://github.com/nolabs-ai/nono/releases/download/v$CLAUDE_NONO_VERSION/nono-v$CLAUDE_NONO_VERSION-$target.tar.gz"
+  dir="$CLAUDE_SHARE/nono"
+  tmp="$dir/.get-$$"
+  rm -rf "$tmp"; mkdir -p "$tmp/out" || { warn "could not make $tmp, so nono was not installed."; return 1; }
+  echo "Getting nono $CLAUDE_NONO_VERSION, the sandbox that Claude Code runs in (once, about 12 MB) ..."
+  curl -fsSL -o "$tmp/nono.tar.gz" "$url" \
+    || { rm -rf "$tmp"; warn "the download of nono did not work ($url)."; return 1; }
+  got=$(file_sha256 "$tmp/nono.tar.gz")
+  if [ -z "$got" ] || [ "$got" != "$want" ]; then
+    rm -rf "$tmp"
+    warn "the downloaded nono is not the file kingo expects (checksum ${got:-unknown}), so it was not installed."
+    return 1
+  fi
+  { tar -xzf "$tmp/nono.tar.gz" -C "$tmp/out" && chmod +x "$tmp/out/nono"; } \
+    || { rm -rf "$tmp"; warn "could not unpack nono."; return 1; }
+  # this version in, every other version out
+  find "$dir" -mindepth 1 -maxdepth 1 ! -name ".get-$$" -exec rm -rf {} + 2>/dev/null || true
+  mv "$tmp/out" "$dir/$CLAUDE_NONO_VERSION" && rm -rf "$tmp"
+  [ -x "$bin" ] || { warn "nono was unpacked, but $bin is not there."; return 1; }
+  echo "nono is in $dir/$CLAUDE_NONO_VERSION."
+}
+
+claude_nono_cmd() { # ./kingo claude nono: get kingo's nono, and say which one kingo claude starts
+  local bin
+  claude_nono_get || return 1
+  bin=$(claude_nono_path)
+  if "$bin" --version >/dev/null 2>&1; then
+    echo "kingo claude starts $("$bin" --version 2>/dev/null | head -n 1): $bin"
+  else
+    warn "nono is installed but does not start: $bin --version"
+    return 1
+  fi
+}
 
 claude_http() { # url header -> HTTP code (000: nothing answered)
   curl -s -o /dev/null -m 10 -w '%{http_code}' -H "$2" "$1" 2>/dev/null || echo 000
@@ -1109,8 +1180,9 @@ claude_backup_flows() {
 # `look page.html` (setup/claude/bin/look) makes pictures of an HTML file, and Claude reads them. The browser is
 # Chrome's own build without a window, chrome-headless-shell from "Chrome for Testing", one fixed version. kingo
 # downloads it on the first `kingo claude`, checks it against the checksum below and puts it into
-# ~/.kingo-claude/browsers, a folder that the nono profile grants. It runs inside the sandbox, like every command of
-# Claude Code. Getting it is never fatal: without it Claude starts as before, and look says what to do.
+# ~/.local/share/kingo/browsers, a folder that the nono profile lets the sandbox read and not write (see
+# CLAUDE_SHARE). It runs inside the sandbox, like every command of Claude Code. Getting it is never fatal: without
+# it Claude starts as before, and look says what to do.
 CLAUDE_BROWSER_VERSION=159.0.8154.6
 CLAUDE_BROWSER_SUMS="
 mac-arm64:b08e7beaf02a19e2ee5ed6955f9c3853ab9176cd5bb57ba87afbb82e9f81cc29
@@ -1134,7 +1206,7 @@ claude_browser_platform() { # -> the name of this machine in Chrome for Testing,
 claude_browser_path() { # -> where this version's browser is, or would be
   local plat; plat=$(claude_browser_platform)
   [ -n "$plat" ] || return 1
-  printf '%s/.kingo-claude/browsers/%s/chrome-headless-shell-%s/chrome-headless-shell' "$HOME" "$CLAUDE_BROWSER_VERSION" "$plat"
+  printf '%s/browsers/%s/chrome-headless-shell-%s/chrome-headless-shell' "$CLAUDE_SHARE" "$CLAUDE_BROWSER_VERSION" "$plat"
 }
 
 # Linux: the browser needs libraries of the system and at least one font. Prints the apt packages that are missing,
@@ -1186,7 +1258,7 @@ claude_browser_get() {
   [ -x "$bin" ] && return 0
   want=$(printf '%s\n' "$CLAUDE_BROWSER_SUMS" | sed -n "s/^$plat://p")
   url="https://storage.googleapis.com/chrome-for-testing-public/$CLAUDE_BROWSER_VERSION/$plat/chrome-headless-shell-$plat.zip"
-  dir="$HOME/.kingo-claude/browsers"
+  dir="$CLAUDE_SHARE/browsers"
   tmp="$dir/.get-$$"
   zip="$tmp/browser.zip"
   rm -rf "$tmp"; mkdir -p "$tmp" || { warn "could not make $tmp, so the browser was not installed."; return 1; }
@@ -1241,6 +1313,7 @@ claude_browser_cmd() { # ./kingo claude browser: get the browser, or say why it 
 cmd_claude() {
   case "${1:-}" in
     browser) claude_browser_cmd; return ;;
+    nono)    claude_nono_cmd; return ;;
   esac
   case "${1:-}" in
     help|-h|--help)
@@ -1249,6 +1322,8 @@ cmd_claude() {
       echo "  The first start asks for your OpenRouter key and an n8n API key; keys are kept in $CLAUDE_KEYS/."
       echo "  A key that a service refuses is deleted, and the next start asks again."
       echo "  Every start saves a copy of each n8n workflow and Langflow flow in $KINGO_DIR/backups/flows/ (the newest $CLAUDE_BACKUP_KEEP stay)."
+      echo "  The first start gets nono $CLAUDE_NONO_VERSION, the sandbox: kingo starts its own, not one that is installed."
+      echo "  ./kingo claude nono gets it again, and says which nono kingo claude starts."
       echo "  The first start gets a browser, so that Claude can look at the pages it writes (look page.html)."
       echo "  ./kingo claude browser gets it again, and says what is missing when it does not run."
       echo "  Claude asks before every command; ./kingo yolo lets it work"
@@ -1256,7 +1331,7 @@ cmd_claude() {
       return ;;
   esac
   local dir="$KINGO_DIR/claude" tpl="$KINGO_DIR/setup/claude" cfg="$HOME/.kingo-claude"
-  local prof="${XDG_CONFIG_HOME:-$HOME/.config}/nono/profiles" v vmaj vmin esc kesc
+  local prof="${XDG_CONFIG_HOME:-$HOME/.config}/nono/profiles" v vmaj vmin esc kesc nono=nono
 
   # ~/.local/bin goes first: Claude Code's native installer puts it there, and on WSL nono's
   # install script too. An older Claude Code from npm or a Homebrew cask (on WSL even
@@ -1268,12 +1343,20 @@ cmd_claude() {
     case ":$PATH:" in *":$d:"*) ;; *) [ -d "$d" ] && PATH="$PATH:$d" ;; esac
   done
   export PATH
-  command -v nono >/dev/null 2>&1 \
-    || die "nono is not installed. Mac: brew install nono — Windows (WSL): curl -fsSL https://nono.sh/install.sh | sh"
-  v=$(nono --version 2>/dev/null | sed -n 's/^nono \([0-9]*\)\.\([0-9]*\).*/\1 \2/p') || true
-  read -r vmaj vmin <<<"$v"
-  if [ -z "${vmaj:-}" ] || { [ "$vmaj" -eq 0 ] && [ "${vmin:-0}" -lt "$CLAUDE_NONO_MIN" ]; }; then
-    die "nono is too old ($(nono --version 2>/dev/null || echo '?')); kingo claude needs 0.$CLAUDE_NONO_MIN or newer. Mac: brew upgrade nono — Windows (WSL): curl -fsSL https://nono.sh/install.sh | sh"
+  # nono: kingo's own (see CLAUDE_NONO_VERSION). A dry run starts nothing and downloads nothing.
+  if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ]; then
+    if claude_nono_get; then
+      nono=$(claude_nono_path)
+    else
+      command -v nono >/dev/null 2>&1 \
+        || die "kingo could not get nono, the sandbox that Claude Code runs in, and none is installed. Check your internet connection and start ./kingo claude again."
+      v=$(nono --version 2>/dev/null | sed -n 's/^nono \([0-9]*\)\.\([0-9]*\).*/\1 \2/p') || true
+      read -r vmaj vmin <<<"$v"
+      if [ -z "${vmaj:-}" ] || { [ "$vmaj" -eq 0 ] && [ "${vmin:-0}" -lt "$CLAUDE_NONO_MIN" ]; }; then
+        die "kingo could not get nono, and the nono on this laptop is too old ($(nono --version 2>/dev/null || echo '?')). Check your internet connection and start ./kingo claude again."
+      fi
+      warn "kingo could not get its own nono ($CLAUDE_NONO_VERSION) and takes the one on this laptop: $(nono --version 2>/dev/null | head -n 1)"
+    fi
   fi
   command -v claude >/dev/null 2>&1 \
     || die "Claude Code is not installed. Install it with:  curl -fsSL https://claude.ai/install.sh | bash"
@@ -1328,7 +1411,8 @@ cmd_claude() {
       -e "s|__KEYS_DIR__|$kesc|g" \
     "$tpl/nono-profile.json" > "$prof/kingo-claude.json"
   # nono grants only folders that exist.
-  mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude"
+  mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude" \
+           "$CLAUDE_SHARE/browsers"
   case "$(uname -s)" in
     Darwin) mkdir -p "$HOME/Library/Caches/claude-cli-nodejs" ;;
     *)      mkdir -p "$HOME/.cache/claude-cli-nodejs" ;;
@@ -1379,11 +1463,10 @@ cmd_claude() {
   if [ -n "${XDG_RUNTIME_DIR:-}" ] && { [ ! -d "$XDG_RUNTIME_DIR" ] || [ ! -w "$XDG_RUNTIME_DIR" ]; }; then
     unset XDG_RUNTIME_DIR
   fi
-  # look (setup/claude/bin) and its browser. On a Mac the sandbox does not let a program register a Mach service,
-  # which Chrome does for its helper programs, so Chrome runs as one program there ("single"). In that mode it
-  # cannot wait for scripts: a picture shows the page as it has loaded. Found and tried on 14 Nov 2026.
-  local browser_mode=""
-  [ "$(uname -s)" = Darwin ] && browser_mode=single
+  # look (setup/claude/bin) and its browser: PATH and KINGO_BROWSER below. On a Mac, Chrome registers a Mach service
+  # for its helper programs, which nono's sandbox refuses by itself; the course profile has one rule that allows
+  # exactly this name. Should a Mac still refuse it, look starts Chrome as one program (--single-process) and says
+  # that it could not wait for scripts. KINGO_BROWSER_MODE=single before ./kingo claude asks for that from the start.
   # Nothing goes to Anthropic: set here, outside the course folder, so editing settings.json cannot undo it.
   # CLAUDE_CODE_MAX_CONTEXT_TOKENS: Claude Code does not know the course's model, assumes a context size (200k tokens,
   # or 1m in the version the TA had on 13 Nov 2026) and warns about it at every start. Saying 200k here drops the
@@ -1396,9 +1479,9 @@ cmd_claude() {
   CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
   CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
   PGHOST=127.0.0.1 PGPORT="$P_POSTGRES" PGUSER="$KINGO_USER" PGPASSWORD="$KINGO_PASSWORD" PGDATABASE=classroom \
-  PATH="$tpl/bin:$PATH" KINGO_BROWSER="$(claude_browser_path)" KINGO_BROWSER_MODE="$browser_mode" \
+  PATH="$tpl/bin:$PATH" KINGO_BROWSER="$(claude_browser_path)" \
   NONO_NO_SAVE_PROMPT=1 \
-    exec nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- "$@"
+    exec "$nono" run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- "$@"
 }
 
 # ── smoke: rigorous verification (exact codes + stability + bindings + hub) ───

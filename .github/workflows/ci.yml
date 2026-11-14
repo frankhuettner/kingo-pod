@@ -283,11 +283,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install nono and Claude Code, with the lines of the homework
+      - name: Install Claude Code with the line of the guide; kingo gets its own nono
+        # No nono is installed here: every nono in this job is the one that kingo downloads and checks.
         run: |
-          curl -fsSL https://nono.sh/install.sh | sh
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          ./kingo claude nono
+          dirname "$(ls "$HOME"/.local/share/kingo/nono/*/nono)" >> "$GITHUB_PATH"
 
       - name: A user session with systemd, as on a student's Ubuntu
         # The runner user has no login session. Lingering starts its systemd user manager, which the Podman setup
@@ -351,11 +353,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install nono and Claude Code
+      - name: Install Claude Code; kingo gets its own nono
+        # No brew install nono: the script below runs the nono that kingo downloads and checks.
         run: |
-          brew install nono
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          ./kingo claude nono
+          dirname "$(ls "$HOME"/.local/share/kingo/nono/*/nono)" >> "$GITHUB_PATH"
 
       - name: Versions
         run: |

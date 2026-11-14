@@ -6,11 +6,11 @@
   // nono's proxy lets every host through. It injects the keys for OpenRouter, n8n and Langflow,
   // which nono reads from the files in __KEYS_DIR__: the keys are never in an environment variable.
   // psql goes to PostgreSQL directly: one rule for that port, at the end of this file.
-  // Needs nono 0.80. Checked on a Mac with nono 0.81 (nono profile validate, nono run --dry-run).
+  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
   "extends": "default",
   "meta": {
     "name": "kingo-claude",
-    "version": "0.4.3",
+    "version": "0.4.4",
     "description": "Kingo: Claude Code via OpenRouter; writes only to the course folder; keys for OpenRouter, n8n and Langflow injected by the proxy"
   },
   "security": {
@@ -40,8 +40,9 @@
       "$HOME/.cache/claude",
       { "path": "$HOME/Library/Caches/claude-cli-nodejs", "when": "macos" }
     ],
-    // The Claude Code binary from the native installer.
-    "read": ["$HOME/.local/share/claude"]
+    // The Claude Code binary from the native installer, and the browser that kingo downloads for look. Read only:
+    // kingo starts the browser outside the sandbox too (--version, ldd), so the sandbox must not be able to change it.
+    "read": ["$HOME/.local/share/claude", "$HOME/.local/share/kingo/browsers"]
   },
   "environment": {
     // Only these variables reach Claude; everything else (other API keys, .env) is dropped.
@@ -95,8 +96,14 @@
   // Mac: a rule of its own for exactly this connection. nono's open_port would also let every
   // program in the sandbox listen on any port (Seatbelt cannot limit listening to one port).
   // nono puts such a rule after its own "(deny network*)" only since 0.80; before, it has no effect.
+  // The second rule is for look. Chrome registers a Mach service for its helper programs, named
+  // org.chromium.Chromium.MachPortRendezvousServer.<its process number>; nono's sandbox allows no mach-register,
+  // and Chrome then stops at its start. The rule allows names with exactly this beginning and no other. It gives
+  // no file and no network. What it leaves open: a program in the sandbox could take such a name before a Chromium
+  // outside the sandbox with that process number asks for it, and that Chromium would then not start.
   "unsafe_macos_seatbelt_rules": [
-    "(allow network-outbound (remote tcp \"localhost:__POSTGRES_PORT__\"))"
+    "(allow network-outbound (remote tcp \"localhost:__POSTGRES_PORT__\"))",
+    "(allow mach-register (global-name-prefix \"org.chromium.Chromium.MachPortRendezvousServer.\"))"
   ],
   // Linux and Windows (WSL2): open_port, which is limited to this port there.
   "platform_overrides": {

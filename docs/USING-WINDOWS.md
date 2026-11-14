@@ -191,12 +191,15 @@ It runs in a **sandbox** called nono: on your laptop it can write in one
 folder only, `~/kingo-pod/claude`. It can read the rest of `kingo-pod` to
 understand the stack, and nothing else on your laptop.
 
-**Install it once.** One line installs nono, the database tool `psql` and
-Claude Code (it asks for your Linux password):
+**Install it once.** One line installs the database tool `psql` and Claude
+Code (it asks for your Linux password):
 
 ```bash
-curl -fsSL https://nono.sh/install.sh | sh && sudo apt install -y postgresql-client && curl -fsSL https://claude.ai/install.sh | bash
+sudo apt install -y postgresql-client && curl -fsSL https://claude.ai/install.sh | bash
 ```
+
+nono you do not install: `./kingo claude` gets the version it needs by
+itself, the first time you start it.
 
 > **Already use Claude Code?** Run the line anyway: it installs Claude Code
 > the way Anthropic recommends, or brings it up to date. Your own settings and
@@ -226,6 +229,11 @@ you do not see a key as you paste it. The key for Langflow it makes by itself.
 Then Claude Code asks a few questions of its own: pick a look, and say **Yes**
 when it asks whether you trust the folder. To stop, type `/exit`. Every next
 time, `./kingo claude` starts it right away.
+
+> **Hard to read?** Type `/theme` in Claude Code and pick another look.
+> `/theme` changes only the colors of the text. The background is not Claude
+> Code's: it belongs to your terminal, and you change it in the settings of the
+> terminal (in the Ubuntu window: the arrow next to the tabs, **Settings**, **Ubuntu**, **Appearance**, **Color scheme**).
 
 **Tell it your team's rules.** Claude reads the file
 `~/kingo-pod/claude/AGENTS.md` at every start. Paste your team's copy of
