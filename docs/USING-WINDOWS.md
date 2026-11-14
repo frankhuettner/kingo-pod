@@ -230,6 +230,10 @@ Then Claude Code asks a few questions of its own: pick a look, and say **Yes**
 when it asks whether you trust the folder. To stop, type `/exit`. Every next
 time, `./kingo claude` starts it right away.
 
+The first start may also ask **Install them now?** These are a few packages of
+Ubuntu that the browser needs, with which Claude looks at the pages it writes.
+Press Enter for yes, and type your Linux password.
+
 > **Hard to read?** Type `/theme` in Claude Code and pick another look.
 > `/theme` changes only the colors of the text. The background is not Claude
 > Code's: it belongs to your terminal, and you change it in the settings of the
