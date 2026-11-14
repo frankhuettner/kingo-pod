@@ -570,7 +570,7 @@ part_own() {
   ok "the base profile, the lock, settings from kingo-pod, and no file in the folder"
 
   say "my-nono-profile.json: the student's own additions to the sandbox of the course"
-  out=$(in_sandbox "${LOCK[@]}" sh -c ': >> "$1" && echo WROTE || echo refused' sh "$KINGO_DIR/shared/own-probe.txt")
+  out=$(in_sandbox "${LOCK[@]}" sh -c 'if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
   has "$out" refused || { show "$out" 12; fail "with the course profile alone, the sandbox can already write in shared: the check below would prove nothing"; }
   sed 's/"extends": "kingo-claude",/"extends": "default",/' "$KINGO_DIR/setup/claude/my-nono-profile.example.json" > "$mine"
   if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude 2>&1); then show "$out" 3; fail "kingo took a profile that does not extend the course profile"; fi
