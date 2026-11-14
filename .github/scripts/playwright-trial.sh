@@ -21,6 +21,10 @@ DIR="$KINGO_DIR/claude"
 PW="$HOME/pw-trial"                # where Playwright is installed: outside the folders the sandbox can write
 CLI_VERSION=0.1.24
 MCP_VERSION=0.0.85
+# Round 2: the MCP server of today opens a Unix socket for its browser (round 1: "listen EPERM ... browser-....sock").
+# 0.0.69 (30 March 2026) is the last version whose code has no such socket; 0.0.70 is the first that has it.
+MCP_OLD="0.0.69 0.0.70"
+PROFILE=kingo-claude
 OS=$(uname -s)
 LOCK=()
 [ "$OS" != Linux ] || LOCK=(/usr/bin/python3 -I "$KINGO_DIR/setup/claude/no_unix_sockets.py")   # as in kingo
@@ -37,7 +41,7 @@ limit() {  # limit <seconds> command ...
 }
 sweep() {  # what an attempt may have left running
   pkill -9 -f chrome-headless-shell >/dev/null 2>&1
-  pkill -9 -f "$PW/node_modules" >/dev/null 2>&1
+  pkill -9 -f "$PW/" >/dev/null 2>&1
   pkill -9 -f 'http.server 8765' >/dev/null 2>&1
   return 0
 }
@@ -74,6 +78,13 @@ mkdir -p "$PW"
 ( cd "$PW" && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts --no-audit --no-fund \
     "@playwright/cli@$CLI_VERSION" "@playwright/mcp@$MCP_VERSION" 2>&1 | tail -n 3 ) || die "npm did not install Playwright"
 [ -x "$PW/node_modules/.bin/playwright-cli" ] && [ -f "$PW/node_modules/@playwright/mcp/cli.js" ] || die "Playwright is not in $PW"
+for v in $MCP_OLD; do
+  mkdir -p "$PW/old/$v"
+  ( cd "$PW/old/$v" && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts --no-audit --no-fund "@playwright/mcp@$v" 2>&1 | tail -n 1 ) \
+    || die "npm did not install the MCP server $v"
+  [ -f "$PW/old/$v/node_modules/@playwright/mcp/cli.js" ] || die "the MCP server $v is not in $PW/old/$v"
+done
+note "size: the MCP server 0.0.69 alone with what it needs: $(du -sh "$PW/old/0.0.69/node_modules" | cut -f1) on disk"
 note "size: Playwright's CLI $CLI_VERSION and MCP server $MCP_VERSION with what they need: $(du -sh "$PW/node_modules" | cut -f1) on disk, Node.js $(node --version) besides"
 skill=$(find "$PW/node_modules" -path '*skills/playwright-cli/SKILL.md' | head -n 1)
 [ -z "$skill" ] || note "size: the skill that tells an agent how to use the CLI is $(wc -c < "$skill" | tr -d ' ') characters (read when needed)"
@@ -109,7 +120,7 @@ boxed() {
   ( cd "$DIR" &&
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 \
     PATH="$PW/node_modules/.bin:$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
-      limit 200 "$NONO_BIN" run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" ${EXTRA_READ[@]+"${EXTRA_READ[@]}"} -- \
+      limit 200 "$NONO_BIN" run --profile "$PROFILE" --allow-cwd --read "$KINGO_DIR" ${EXTRA_READ[@]+"${EXTRA_READ[@]}"} -- \
       ${lock[@]+"${lock[@]}"} env "${PW_ENV[@]}" "$@" ) 2>&1
 }
 
@@ -130,6 +141,10 @@ attempt() {
 # ── outside the sandbox: the comparison ──────────────────────────────────────
 attempt "outside the sandbox, CLI" CLI plain bash "$HERE/playwright_trial_cli.sh" "$URL"
 attempt "outside the sandbox, MCP" MCP plain node "$HERE/playwright_trial_mcp.js" "$URL" -- "${MCP[@]}" --config "$DIR/.playwright/cli.config.json"
+for v in $MCP_OLD; do
+  attempt "outside the sandbox, MCP $v" MCP plain env MCP_TARGET_KEY=ref node "$HERE/playwright_trial_mcp.js" "$URL" -- \
+    node "$PW/old/$v/node_modules/@playwright/mcp/cli.js" --headless --isolated --allow-unrestricted-file-access --config "$DIR/.playwright/cli.config.json"
+done
 mkdir -p "$DIR/look"
 attempt "outside the sandbox, a script with playwright-core" LIB plain node "$HERE/playwright_trial_lib.js" "$PW" "$BROWSER_BIN" "$URL" "$DIR/look/pw-lib-outside.png"
 
@@ -137,6 +152,8 @@ attempt "outside the sandbox, a script with playwright-core" LIB plain node "$HE
 if [ "$OS" = Linux ]; then
   attempt "under the lock, without nono, CLI" CLI plain "${LOCK[@]}" bash "$HERE/playwright_trial_cli.sh" "$URL"
   attempt "under the lock, without nono, MCP" MCP plain "${LOCK[@]}" node "$HERE/playwright_trial_mcp.js" "$URL" -- "${MCP[@]}" --config "$DIR/.playwright/cli.config.json"
+  attempt "under the lock, without nono, MCP 0.0.69" MCP plain "${LOCK[@]}" env MCP_TARGET_KEY=ref node "$HERE/playwright_trial_mcp.js" "$URL" -- \
+    node "$PW/old/0.0.69/node_modules/@playwright/mcp/cli.js" --headless --isolated --allow-unrestricted-file-access --config "$DIR/.playwright/cli.config.json"
 fi
 
 # ── inside nono ──────────────────────────────────────────────────────────────
@@ -155,17 +172,24 @@ if [ "$OS" = Linux ]; then
   USE_LOCK=1
 fi
 attempt "$in, CLI" CLI boxed bash "$HERE/playwright_trial_cli.sh" "$URL"
-[ "$LAST" = ok ] || attempt "$in, CLI, Chrome as one program" CLI boxed bash "$HERE/playwright_trial_cli.sh" "$URL" "$DIR/pw-single.json"
 say "what the CLI left in the course folder and in the temporary folder"
 ls -la "$DIR/.playwright-cli" 2>/dev/null | tail -n 6 | sed 's/^/         | /'
 find "$CFG/tmp" -maxdepth 3 \( -name 'pw*' -o -name 'playwright*' \) 2>/dev/null | head -n 12 | sed 's/^/         | /'
 
-attempt "$in, MCP" MCP boxed node "$HERE/playwright_trial_mcp.js" "$URL" -- "${MCP[@]}" --config "$DIR/.playwright/cli.config.json"
+attempt "$in, MCP $MCP_VERSION" MCP boxed node "$HERE/playwright_trial_mcp.js" "$URL" -- "${MCP[@]}" --config "$DIR/.playwright/cli.config.json"
 mcp_cfg="$DIR/.playwright/cli.config.json"
-if [ "$LAST" != ok ]; then
-  attempt "$in, MCP, Chrome as one program" MCP boxed node "$HERE/playwright_trial_mcp.js" "$URL" -- "${MCP[@]}" --config "$DIR/pw-single.json"
-  [ "$LAST" != ok ] || mcp_cfg="$DIR/pw-single.json"
-fi
+for v in $MCP_OLD; do
+  attempt "$in, MCP $v" MCP boxed env MCP_TARGET_KEY=ref node "$HERE/playwright_trial_mcp.js" "$URL" -- \
+    node "$PW/old/$v/node_modules/@playwright/mcp/cli.js" --headless --isolated --allow-unrestricted-file-access --config "$mcp_cfg"
+  if [ "$LAST" != ok ] && [ "$v" = 0.0.69 ]; then
+    attempt "$in, MCP $v, Chrome as one program" MCP boxed env MCP_TARGET_KEY=ref node "$HERE/playwright_trial_mcp.js" "$URL" -- \
+      node "$PW/old/$v/node_modules/@playwright/mcp/cli.js" --headless --isolated --allow-unrestricted-file-access --config "$DIR/pw-single.json"
+    [ "$LAST" != ok ] || mcp_cfg="$DIR/pw-single.json"
+  fi
+done
+# from here on: the MCP server that has no socket
+MCP=(env MCP_TARGET_KEY=ref node "$HERE/playwright_trial_mcp.js")
+OLD=(node "$PW/old/0.0.69/node_modules/@playwright/mcp/cli.js" --headless --isolated --allow-unrestricted-file-access --config "$mcp_cfg")
 attempt "$in, a script with playwright-core" LIB boxed node "$HERE/playwright_trial_lib.js" "$PW" "$BROWSER_BIN" "$URL" "$DIR/look/pw-lib.png"
 [ "$LAST" = ok ] || attempt "$in, a script with playwright-core, Chrome as one program" LIB boxed node "$HERE/playwright_trial_lib.js" "$PW" "$BROWSER_BIN" "$URL" "$DIR/look/pw-lib.png" single
 
@@ -178,12 +202,28 @@ out=$(boxed sh -c 'python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 
 sweep
 show "$(printf '%s\n' "$out" | grep '^curl-')" 2
 note "$in, a web server of one's own on 127.0.0.1: $(printf '%s\n' "$out" | grep '^curl-' | tr '\n' ' ')(200 means the page came)"
-attempt "$in, MCP, the page from a web server on 127.0.0.1" MCP boxed sh -c 'python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 & sleep 2; "$@"; rc=$?; kill %1 2>/dev/null; exit $rc' sh \
-  node "$HERE/playwright_trial_mcp.js" "http://127.0.0.1:8765/pw-shop.html" -- "${MCP[@]}" --config "$mcp_cfg"
+attempt "$in, MCP 0.0.69, the page from a web server on 127.0.0.1" MCP boxed sh -c 'python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 & sleep 2; "$@"; rc=$?; kill %1 2>/dev/null; exit $rc' sh \
+  "${MCP[@]}" "http://127.0.0.1:8765/pw-shop.html" -- "${OLD[@]}"
 
 # A page of the internet: the browser has to go through nono's proxy, like every program in the sandbox.
-attempt "$in, MCP, a page of the internet (example.com)" MCP boxed env MCP_ONLY_NAVIGATE="Example Domain" \
-  node "$HERE/playwright_trial_mcp.js" "https://example.com/" -- "${MCP[@]}" --config "$mcp_cfg"
+attempt "$in, MCP 0.0.69, a page of the internet (example.com)" MCP boxed env MCP_ONLY_NAVIGATE="Example Domain" \
+  "${MCP[@]}" "https://example.com/" -- "${OLD[@]}"
+
+# A Mac only: nono can allow Unix sockets in one folder there (under Linux the lock refuses all of them, whatever
+# the profile says). A copy of the course profile with such a rule for the temporary folder: does today's MCP run?
+if [ "$OS" = Darwin ]; then
+  cat > "$HOME/.config/nono/profiles/kingo-claude-pwtrial.json" <<JSON
+{
+  "extends": "kingo-claude",
+  "meta": { "name": "kingo-claude-pwtrial", "version": "0.0.1", "description": "trial: Unix sockets in the temporary folder" },
+  "filesystem": { "unix_socket_subtree_bind": ["$CFG/tmp"] }
+}
+JSON
+  PROFILE=kingo-claude-pwtrial
+  attempt "inside nono on a Mac, with Unix sockets allowed in the temporary folder, MCP $MCP_VERSION" MCP boxed node "$HERE/playwright_trial_mcp.js" "$URL" -- \
+    node "$PW/node_modules/@playwright/mcp/cli.js" --headless --isolated --allow-unrestricted-file-access --config "$DIR/.playwright/cli.config.json"
+  PROFILE=kingo-claude
+fi
 
 printf '\n══ the results\n'
 for line in "${RESULTS[@]}"; do printf '   %s\n' "$line"; done
