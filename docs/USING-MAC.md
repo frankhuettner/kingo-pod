@@ -177,12 +177,15 @@ It runs in a **sandbox** called nono: on your Mac it can write in one folder
 only, `~/kingo-pod/claude`. It can read the rest of `kingo-pod` to understand
 the stack, and nothing else on your Mac.
 
-**Install it once.** One line installs nono, the database tool `psql` and
-Claude Code:
+**Install it once.** One line installs the database tool `psql` and Claude
+Code:
 
 ```
-brew install nono libpq && curl -fsSL https://claude.ai/install.sh | bash
+brew install libpq && curl -fsSL https://claude.ai/install.sh | bash
 ```
+
+nono you do not install: `./kingo claude` gets the version it needs by
+itself, the first time you start it.
 
 > **Already use Claude Code?** Run the line anyway: it installs Claude Code
 > the way Anthropic recommends, or brings it up to date. Your own settings and
@@ -211,6 +214,11 @@ it. The key for Langflow it makes by itself. Then Claude Code asks a few
 questions of its own: pick a look, and say **Yes** when it asks whether you
 trust the folder. To stop, type `/exit`. Every next time, `./kingo claude`
 starts it right away.
+
+> **Hard to read?** Type `/theme` in Claude Code and pick another look.
+> `/theme` changes only the colors of the text. The background is not Claude
+> Code's: it belongs to your terminal, and you change it in the settings of the
+> terminal (in Terminal: **Terminal**, **Settings**, **Profiles**).
 
 **Tell it your team's rules.** Claude reads the file
 `~/kingo-pod/claude/AGENTS.md` at every start. Paste your team's copy of

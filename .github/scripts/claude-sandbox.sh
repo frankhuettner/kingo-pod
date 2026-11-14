@@ -126,8 +126,17 @@ prepare() {
   grep -q '^  NONO_NO_SAVE_PROMPT=1 \\$' "$KINGO_DIR/kingo" \
     || fail "kingo claude does not start nono with NONO_NO_SAVE_PROMPT=1: nono would ask to change the profile when a session ends"
   ok "kingo claude starts nono with NONO_NO_SAVE_PROMPT=1"
-  grep -q '^  PATH="\$tpl/bin:\$PATH" KINGO_BROWSER="\$(claude_browser_path)" KINGO_BROWSER_MODE="\$browser_mode" \\$' "$KINGO_DIR/kingo" \
+  grep -q '^  PATH="\$tpl/bin:\$PATH" KINGO_BROWSER="\$(claude_browser_path)" \\$' "$KINGO_DIR/kingo" \
     || fail "kingo claude does not put look on the PATH or does not say where the browser is"
+  # nono: the one that kingo downloaded (./kingo claude nono, in the workflow), and no other
+  grep -q '^    exec "\$nono" run --profile kingo-claude --allow-cwd --read "\$KINGO_DIR" -- "\$@"$' "$KINGO_DIR/kingo" \
+    || fail "kingo claude does not start its own nono with the line this script copies"
+  NONO_BIN=$(ls "$HOME"/.local/share/kingo/nono/*/nono 2>/dev/null | head -n 1)
+  [ -x "$NONO_BIN" ] || fail "kingo's nono is not in ~/.local/share/kingo/nono (the workflow runs ./kingo claude nono first)"
+  [ "$(command -v nono)" = "$NONO_BIN" ] || fail "this script would run $(command -v nono), not the nono that kingo downloaded ($NONO_BIN)"
+  grep -q "^CLAUDE_NONO_VERSION=$("$NONO_BIN" --version | sed -n 's/^nono \([0-9.]*\).*/\1/p')\$" "$KINGO_DIR/kingo" \
+    || fail "the nono that kingo downloaded says another version than kingo names: $("$NONO_BIN" --version)"
+  ok "nono is the one kingo downloaded: $("$NONO_BIN" --version | head -n 1)"
   has "$dry" "--append-system-prompt When you have written or changed an HTML page, look at it" \
     || fail "kingo claude does not tell Claude Code how to look at a page"
   ok "kingo claude puts look on the PATH, says where the browser is, and tells Claude Code how to look at a page"
@@ -141,11 +150,12 @@ kingo_env() {
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" \
     PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
     NONO_NO_SAVE_PROMPT=1 \
-    PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" KINGO_BROWSER_MODE="" \
+    PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
       "$@" )
 }
 SANDBOX=(nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" --)   # the line of kingo claude
 BROWSER_BIN=""                      # where kingo put the browser; part_look fills it in
+NONO_BIN=""                         # kingo's nono; prepare fills it in
 
 # in_sandbox command ...: run it as kingo claude runs Claude Code; prints its output and nono's.
 # WITHOUT_SHLVL=1 takes the variable SHLVL away before nono starts, as a comparison (see part_claude).
@@ -411,8 +421,9 @@ part_look() {
     out=$(cd "$KINGO_DIR" && ./kingo claude browser 2>&1) || { show "$out" 6; fail "the browser does not run after the packages that kingo named"; }
   }
   show "$out" 3
-  BROWSER_BIN=$(find "$CFG/browsers" -type f -name chrome-headless-shell 2>/dev/null | head -n 1)
+  BROWSER_BIN=$(find "$HOME/.local/share/kingo/browsers" -type f -name chrome-headless-shell 2>/dev/null | head -n 1)
   [ -x "$BROWSER_BIN" ] || fail "the browser is not where kingo says it is: $BROWSER_BIN"
+  [ ! -e "$CFG/browsers" ] || fail "there is a browser in $CFG, a folder the sandbox can write"
   ok "the browser is there: $BROWSER_BIN"
   out=$(cd "$KINGO_DIR" && ./kingo claude browser 2>&1) || fail "a second kingo claude browser failed"
   if has "$out" "Getting a browser"; then fail "a second kingo claude browser downloaded it again"; fi
@@ -445,6 +456,17 @@ HTML
     done
     [ ! -e "$dir/look/$2-$(( $1 + 1 )).png" ] || fail "there are more than $1 pictures of $2"
   }
+
+  # kingo starts nono and the browser outside the sandbox. A program inside must not be able to swap them.
+  say "the sandbox cannot change what kingo downloaded"
+  out=$(in_sandbox "${LOCK[@]}" sh -c 'for f in "$@"; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done' sh \
+    "$dir/look-write-probe" "$BROWSER_BIN" "$(dirname "$BROWSER_BIN")/new-file" "$NONO_BIN" "$(dirname "$NONO_BIN")/new-file" \
+    "$HOME/.local/share/kingo/new-file")
+  show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused) ')" 6
+  has "$out" "WROTE $dir/look-write-probe" || fail "the probe proves nothing: it could not write in the course folder either"
+  [ "$(printf '%s\n' "$out" | grep -c '^refused ')" = 5 ] || fail "a program in the sandbox can write where kingo keeps nono or the browser"
+  rm -f "$dir/look-write-probe"
+  ok "inside the sandbox, the browser, nono and their folders cannot be written"
 
   say "look inside nono, under the lock: a short page"
   out=$(in_sandbox "${LOCK[@]}" look look-cv.html)

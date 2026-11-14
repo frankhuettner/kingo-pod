@@ -6,11 +6,12 @@
 # On a Mac, nono's sandbox keeps two things from Chrome (found on 14 Nov 2026):
 #   - the sleep and wake notices of the system (IOKit, RootDomainUserClient). Chrome 159 goes on without them;
 #     older builds crash.
-#   - registering a Mach service, which Chrome does for its helper programs. So kingo claude sets
-#     KINGO_BROWSER_MODE=single there, and look starts Chrome as one program (--single-process).
-# The checks: kingo gets the browser, and look makes pictures and a PDF inside nono with the course profile.
-# Two trials after that report and fail nothing (lines that start with RESULT): Chrome with its helper programs
-# under the course profile, and the same under a copy of the profile that has one rule more, for the Mach service.
+#   - registering a Mach service, which Chrome does for its helper programs. The course profile has one rule that
+#     allows exactly that name. Without the rule, look starts Chrome as one program (--single-process), which
+#     cannot wait for a page's scripts.
+# The checks: kingo gets its own nono and the browser; a program in the sandbox cannot change either; look makes
+# pictures and a PDF inside nono with the course profile and waits for scripts; under a copy of the profile without
+# the rule, look falls back to one program and says so.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -18,7 +19,8 @@ KINGO_DIR=$(cd "$HERE/../.." && pwd)
 CFG="$HOME/.kingo-claude"
 DIR="$KINGO_DIR/claude"
 PROFILE=kingo-claude
-MODE=single
+MODE=""                            # KINGO_BROWSER_MODE; kingo claude sets none
+NONO_BIN=""
 
 say()  { printf '\n── %s\n' "$*"; }
 ok()   { printf '   ok    %s\n' "$*"; }
@@ -31,7 +33,7 @@ in_sandbox() {
   ( cd "$DIR" &&
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 \
     PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" KINGO_BROWSER_MODE="$MODE" \
-      nono run --profile "$PROFILE" --allow-cwd --read "$KINGO_DIR" -- "$@" ) 2>&1 || true
+      "$NONO_BIN" run --profile "$PROFILE" --allow-cwd --read "$KINGO_DIR" -- "$@" ) 2>&1 || true
 }
 pictures() { # <how many> <name>
   local i
@@ -51,11 +53,26 @@ has "$dry" "--append-system-prompt When you have written or changed an HTML page
 if has "$dry" no_unix_sockets.py; then fail "on a Mac, kingo claude would start Claude Code through the lock for Linux"; fi
 ok "kingo claude tells Claude Code how to look at a page"
 
+say "kingo gets its own nono"
+if command -v nono >/dev/null 2>&1; then echo "         | on the PATH of this job: $(command -v nono)"; fi
+out=$(cd "$KINGO_DIR" && ./kingo claude nono 2>&1) || { show "$out" 8; fail "kingo claude nono failed"; }
+show "$out" 3
+NONO_BIN=$(ls "$HOME"/.local/share/kingo/nono/*/nono 2>/dev/null | head -n 1)
+[ -x "$NONO_BIN" ] || fail "kingo's nono is not in ~/.local/share/kingo/nono"
+grep -q "^CLAUDE_NONO_VERSION=$("$NONO_BIN" --version | sed -n 's/^nono \([0-9.]*\).*/\1/p')\$" "$KINGO_DIR/kingo" \
+  || fail "the nono that kingo downloaded says another version than kingo names: $("$NONO_BIN" --version)"
+"$NONO_BIN" profile validate "$HOME/.config/nono/profiles/kingo-claude.json" > "$CFG/tmp/validate.log" 2>&1 \
+  || { show "$(cat "$CFG/tmp/validate.log")" 6; fail "nono does not take the course profile"; }
+grep -q 'allow mach-register (global-name-prefix .*org.chromium.Chromium.MachPortRendezvousServer\.' "$HOME/.config/nono/profiles/kingo-claude.json" \
+  || fail "the course profile has no rule for Chrome's Mach service"
+ok "nono is the one kingo downloaded ($("$NONO_BIN" --version | head -n 1)), and it takes the course profile"
+
 say "kingo gets the browser"
 out=$(cd "$KINGO_DIR" && ./kingo claude browser 2>&1) || { show "$out" 8; fail "kingo claude browser failed"; }
 show "$out" 3
-BROWSER_BIN=$(find "$CFG/browsers" -type f -name chrome-headless-shell 2>/dev/null | head -n 1)
-[ -x "$BROWSER_BIN" ] || fail "the browser is not in $CFG/browsers"
+BROWSER_BIN=$(find "$HOME/.local/share/kingo/browsers" -type f -name chrome-headless-shell 2>/dev/null | head -n 1)
+[ -x "$BROWSER_BIN" ] || fail "the browser is not in ~/.local/share/kingo/browsers"
+[ ! -e "$CFG/browsers" ] || fail "there is a browser in $CFG, a folder the sandbox can write"
 ok "the browser is there: $BROWSER_BIN"
 
 cat > "$DIR/look-cv.html" <<'HTML'
@@ -88,9 +105,21 @@ has "$out" "is 1000 x 3000 pixels, in 3 picture(s)" || { show "$out" 12; fail "o
 ok "outside the sandbox look waits for the script: 3000 pixels, three pictures"
 rm -rf "$DIR/look"
 
-say "look inside nono with the course profile, as kingo claude sets it up (one program)"
+# kingo starts nono and the browser outside the sandbox. A program inside must not be able to swap them.
+say "the sandbox cannot change what kingo downloaded"
+out=$(in_sandbox sh -c 'for f in "$@"; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done' sh \
+  "$DIR/look-write-probe" "$BROWSER_BIN" "$(dirname "$BROWSER_BIN")/new-file" "$NONO_BIN" "$(dirname "$NONO_BIN")/new-file" \
+  "$HOME/.local/share/kingo/new-file")
+show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused) ')" 6
+has "$out" "WROTE $DIR/look-write-probe" || { show "$out" 20; fail "the probe proves nothing: it could not write in the course folder either"; }
+[ "$(printf '%s\n' "$out" | grep -c '^refused ')" = 5 ] || fail "a program in the sandbox can write where kingo keeps nono or the browser"
+rm -f "$DIR/look-write-probe"
+ok "inside the sandbox, the browser, nono and their folders cannot be written"
+
+say "look inside nono with the course profile, as kingo claude sets it up"
 out=$(in_sandbox look look-cv.html)
 has "$out" "in 1 picture(s)" || { show "$out" 30; fail "look made no picture of a short page"; }
+if has "$out" "What a script adds later"; then show "$out" 30; fail "look fell back to one program under the course profile: the rule for the Mach service does not work"; fi
 pictures 1 look-cv
 ok "a short page: one picture, and it shows something"
 out=$(in_sandbox look look-long.html)
@@ -102,36 +131,42 @@ out=$(in_sandbox look look-cv.html --pdf)
 [ "$(head -c 4 "$DIR/look/look-cv.pdf" 2>/dev/null)" = "%PDF" ] || { show "$out" 30; fail "look --pdf made no PDF"; }
 ok "the page as it prints: a PDF of $(wc -c < "$DIR/look/look-cv.pdf" | tr -d ' ') bytes"
 out=$(in_sandbox look look-late.html)
-n=$(printf '%s\n' "$out" | sed -n 's/.* in \([0-9]*\) picture(s).*/\1/p')
-has "$out" "What a script adds later is not on them" || { show "$out" 30; fail "look does not say that it could not wait for scripts"; }
-echo "   RESULT  one program, course profile: the page that grows later comes out in ${n:-no} picture(s) (3 would mean it waited)"
+has "$out" "is 1000 x 3000 pixels, in 3 picture(s)" || { show "$out" 30; fail "look did not wait for the script, or did not cut the page into 3 pictures"; }
+pictures 3 look-late
+ok "look waited for the script: 3000 pixels, three pictures"
 
-# ── the two trials ───────────────────────────────────────────────────────────
-say "trial: Chrome with its helper programs under the course profile"
+say "the same asked to run as one program (KINGO_BROWSER_MODE=single)"
+MODE=single
+out=$(in_sandbox look look-cv.html)
+has "$out" "in 1 picture(s)" || { show "$out" 30; fail "as one program, look made no picture"; }
+has "$out" "What a script adds later is not on them" || { show "$out" 30; fail "as one program, look does not say that it could not wait for scripts"; }
+ok "one picture, and look says that it did not wait for scripts"
 MODE=""
+
+say "a profile without the rule for the Mach service: look must fall back to one program"
+COPY="$CFG/tmp/kingo-claude-without-mach-rule.json"
+python3 - "$HOME/.config/nono/profiles/kingo-claude.json" "$COPY" <<'PYTHON'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+new, n = re.subn(r',\s*"\(allow mach-register [^\n]*"\n', "\n", text)
+assert n == 1, n
+open(sys.argv[2], "w", encoding="utf-8").write(new)
+PYTHON
+if grep -q 'allow mach-register' "$COPY"; then fail "the copy of the profile still has the rule"; fi
+"$NONO_BIN" profile validate "$COPY" > "$CFG/tmp/validate.log" 2>&1 || { show "$(cat "$CFG/tmp/validate.log")" 6; fail "nono does not take the copy of the profile"; }
+PROFILE="$COPY"
 rm -rf "$DIR/look"
 out=$(in_sandbox look look-late.html)
 n=$(printf '%s\n' "$out" | sed -n 's/.* in \([0-9]*\) picture(s).*/\1/p')
-echo "   RESULT  helper programs, course profile: ${n:-no} picture(s)"
-show "$(printf '%s\n' "$out" | grep -E 'FATAL|mach-register|look:' | head -n 4)" 4
-
-say "trial: the same under a copy of the profile with one rule more"
-RULE='"(allow mach-register (global-name-prefix \"org.chromium.Chromium.MachPortRendezvousServer.\"))"'
-COPY="$CFG/tmp/kingo-claude-with-mach-rule.json"
-RULE="$RULE" awk '{ print } /"unsafe_macos_seatbelt_rules": \[/ { print "    " ENVIRON["RULE"] "," }' \
-  "$HOME/.config/nono/profiles/kingo-claude.json" > "$COPY"
-if nono profile validate "$COPY" > "$CFG/tmp/validate.log" 2>&1 && grep -q MachPortRendezvousServer "$COPY"; then
-  PROFILE="$COPY"
-  rm -rf "$DIR/look"
-  out=$(in_sandbox look look-late.html)
-  n=$(printf '%s\n' "$out" | sed -n 's/.* in \([0-9]*\) picture(s).*/\1/p')
-  echo "   RESULT  helper programs, profile with the Mach rule: ${n:-no} picture(s) (3 means it waited for the script)"
-  show "$(printf '%s\n' "$out" | grep -E 'FATAL|mach-register|look:|pixels' | head -n 4)" 4
-  if [ "${n:-0}" -ge 1 ]; then python3 "$HERE/png_check.py" "$DIR"/look/look-late-*.png | sed 's/^/         | /' || true; fi
-  out=$(in_sandbox look look-cv.html)
-  echo "   RESULT  helper programs, profile with the Mach rule, short page: $(printf '%s\n' "$out" | sed -n 's/.* in \([0-9]*\) picture(s).*/\1/p' | head -n 1) picture(s)"
-else
-  echo "   RESULT  nono does not take the copy of the profile"; show "$(cat "$CFG/tmp/validate.log")" 4
-fi
+[ "${n:-0}" -ge 1 ] || { show "$out" 30; fail "without the rule, look made no picture: the fallback to one program does not work"; }
+has "$out" "What a script adds later is not on them" || { show "$out" 30; fail "without the rule, look made pictures but did not say that it could not wait: is the rule needed at all?"; }
+pictures "$n" look-late
+ok "without the rule, look runs Chrome as one program: $n picture(s), and it says that it did not wait"
+out=$(in_sandbox look look-cv.html --pdf)
+[ "$(head -c 4 "$DIR/look/look-cv.pdf" 2>/dev/null)" = "%PDF" ] || { show "$out" 30; fail "without the rule, look --pdf made no PDF"; }
+ok "without the rule, the PDF comes too"
+PROFILE=kingo-claude
+out=$(in_sandbox look look-cv.html)
+has "$out" "in 1 picture(s)" || { show "$out" 30; fail "the last picture, for the upload, did not come"; }
 
 printf '\nAll checks of look on a Mac passed.\n'

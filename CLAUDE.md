@@ -400,6 +400,20 @@ difference students choose between.
   terminal session against a stand-in for the model
   (`.github/scripts/fake_model.py`, `pty_session.py`). A new Claude Code start
   screen shows up as a failed session step, with every screen in the log.
+- **`kingo` starts its own nono, one fixed version (`CLAUDE_NONO_VERSION`,
+  with checksums).** The profile leans on how that version behaves. To move to
+  a newer nono: change the version and the four checksums, run the CI, then
+  release. A nono that is installed on the laptop is only the fallback when
+  the download fails.
+- **What `kingo` downloads for Claude Code (nono, the browser of `look`) lives
+  in `~/.local/share/kingo`, never in a folder the sandbox can write.** `kingo`
+  starts these files OUTSIDE the sandbox (nono itself; the browser for
+  `--version` and `ldd`). In `~/.kingo-claude` or the course folder, a program
+  in the sandbox could swap them and would run outside at the next start. The
+  CI part `look` tries to write there from inside and must fail.
+- **`look` on a Mac needs the `mach-register` rule in the profile** (Chrome's
+  helper programs). Without it `look` falls back to `--single-process`, which
+  cannot wait for a page's scripts. The CI job `claude-look-mac` runs both.
 
 ## Layout
 
