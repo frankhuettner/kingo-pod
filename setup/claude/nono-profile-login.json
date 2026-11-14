@@ -47,7 +47,11 @@
           "request_nonce_fields": ["access_token", "refresh_token"]
         }
       ],
-      "api_hosts": ["https://api.anthropic.com"]
+      // The hosts on which nono puts the real token back in. platform.claude.com is here too: nono reads all
+      // traffic to the host of the token address, and lets through only what has a route. Without this entry,
+      // every other address on that host gets "502" from nono, and a new session of Claude Code, which asks
+      // one of them at its start, ends with "Unable to connect to Anthropic services" (found on 14 Nov 2026).
+      "api_hosts": ["https://api.anthropic.com", "https://platform.claude.com"]
     }
   },
   "credential_routes": [

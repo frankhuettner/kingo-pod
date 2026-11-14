@@ -915,6 +915,24 @@ EOF
   if has "$b" "tcp=$word" && ! has "$a" "tcp=$word"; then fail "the sandbox of the login reaches a port of this machine that the OpenRouter way does not reach"; fi
   ok "the login's sandbox reaches no more of this machine than the OpenRouter way"
 
+  # A new session of Claude Code asks an address on platform.claude.com at its start. That is the host of the token
+  # address: nono reads all traffic to it and lets through only what has a route. Without a route, nono answers
+  # 502 and Claude Code ends with "Unable to connect to Anthropic services" (Frank's Mac, 14 Nov 2026).
+  say "through nono's proxy, the login's sandbox reaches the other addresses on Anthropic's login host"
+  local hello='for u in https://platform.claude.com/v1/oauth/hello https://api.anthropic.com/api/hello; do echo "code=$(curl -s -o /dev/null -m 30 --cacert "$NODE_EXTRA_CA_CERTS" -w "%{http_code}" "$u") $u"; done'
+  # the comparison: a copy of the profile of the login without platform.claude.com among the hosts with a route
+  sed 's|"api_hosts": \["https://api.anthropic.com", "https://platform.claude.com"\]|"api_hosts": ["https://api.anthropic.com"]|' "$prof/kingo-claude-login.json" > "$prof/kingo-claude-login-ci.json"
+  if grep -q '"https://platform.claude.com"\]' "$prof/kingo-claude-login-ci.json"; then fail "the copy of the profile still has the route for platform.claude.com"; fi
+  out=$(in_login kingo-claude-login-ci "$dir" "$tpl" sh -c "$hello" | grep '^code=' || true)
+  show "$out" 2
+  has "$out" "code=502 https://platform.claude.com/" || fail "without the route, nono does not answer 502 for platform.claude.com: the check below would prove nothing"
+  rm -f "$prof/kingo-claude-login-ci.json"
+  out=$(in_login kingo-claude-login "$dir" "$tpl" sh -c "$hello" | grep '^code=' || true)
+  show "$out" 2
+  [ "$(printf '%s\n' "$out" | grep -c '^code=')" = 2 ] || fail "the probe for Anthropic's hosts did not run in the login's sandbox"
+  if has "$out" "code=502 " || has "$out" "code=000 "; then fail "the login's sandbox does not reach Anthropic's login host or its API through nono's proxy"; fi
+  ok "with the profile of the login both hosts answer; without the route for platform.claude.com nono answers 502"
+
   # The course folder's settings name the course's model. With --login, kingo puts settings-login.json on the
   # command line. Here Claude Code runs with them against the stand-in for the model, which notes what it is asked for.
   say "with the settings of the login, Claude Code asks for Anthropic's models, not for the course's"
