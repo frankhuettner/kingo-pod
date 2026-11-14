@@ -1285,13 +1285,32 @@ claude_browser_get() {
   echo "The browser is in $dir/$CLAUDE_BROWSER_VERSION."
 }
 
-# Linux: says which packages are missing and the one line that installs them. Returns 1 when some are.
+# Linux: says which packages are missing. In a terminal it asks whether it shall install them (a fresh Ubuntu under
+# WSL has none of them, and a warning before the start of Claude Code scrolls away: Frank's Windows laptop, 14 Nov
+# 2026). Without a terminal, or after a "no", it names the one line that installs them. Returns 1 when some are missing.
 claude_browser_check_packages() { # browser
-  local need
+  local need answer sudo=sudo
   [ "$(uname -s)" = Linux ] || return 0
   need=$(claude_browser_packages "$1")
   [ -n "$need" ] || return 0
-  warn "the browser needs a few packages of the system before Claude can look at pages. Install them once, in this terminal:"
+  [ "$(id -u)" != 0 ] || sudo=""
+  if [ -t 0 ] && [ -t 2 ] && command -v apt-get >/dev/null 2>&1 && { [ -z "$sudo" ] || command -v sudo >/dev/null 2>&1; }; then
+    echo "The browser, with which Claude looks at the pages it writes, needs a few packages of the system:" >&2
+    echo "    $need" >&2
+    printf 'Install them now? %s[Y/n] ' "${sudo:+It asks for your Linux password. }" >&2
+    read -r answer || answer=n
+    case "$answer" in
+      ""|y|Y|yes|Yes|YES)
+        # a fresh Ubuntu may not have the lists of packages yet: then once more after apt-get update
+        $sudo apt-get install -y $need >&2 || { $sudo apt-get update >&2 && $sudo apt-get install -y $need >&2; } || true
+        need=$(claude_browser_packages "$1")
+        if [ -z "$need" ]; then echo "Installed. Claude can look at pages now." >&2; return 0; fi
+        warn "that did not install everything. Still missing for the browser:" ;;
+      *) warn "not installed, so Claude cannot look at pages. To install them later, in this terminal:" ;;
+    esac
+  else
+    warn "the browser needs a few packages of the system before Claude can look at pages. Install them once, in this terminal:"
+  fi
   echo "    sudo apt-get install -y $need" >&2
   return 1
 }

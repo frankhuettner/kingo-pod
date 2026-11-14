@@ -551,14 +551,28 @@ part_fresh() {
     echo "$out" | tail -n 4
     line=$(printf "%s\n" "$out" | sed -n "s/^ *sudo \(apt-get install -y .*\)$/\1/p")
     [ -n "$line" ] || { echo "FRESH: kingo named no packages"; exit 1; }
-    $line >/dev/null
-    ./kingo claude browser
     mkdir /w && cd /w
     printf "<!doctype html><meta charset=utf-8><h1 style=\"color:#1a4d8f\">Curriculum Vitae 이력서</h1><p>Hello</p>" > page.html
+    # look, before the packages are there: it must say what the student shall do, not only that it failed
+    if out=$(bash /k/setup/claude/bin/look page.html 2>&1); then echo "$out"; echo "FRESH: look made a picture without the packages"; exit 1; fi
+    echo "$out" | tail -n 2 | cut -c1-200
+    case "$out" in *"./kingo claude browser"*) ;; *) echo "FRESH: without the packages, look does not name ./kingo claude browser"; exit 1 ;; esac
+    cd /k
+    # in a terminal kingo asks. "n": nothing is installed, and the line is named
+    in_terminal() { printf "%s\n" "$1" | python3 -c "import pty, sys; pty.spawn(sys.argv[1:])" ./kingo claude browser 2>&1 | tr -d "\r" || true; }
+    out=$(in_terminal n)
+    case "$out" in *"Install them now?"*"not installed"*"apt-get install -y "*) ;; *) echo "$out" | tail -n 8; echo "FRESH: after a no, kingo does not name the line"; exit 1 ;; esac
+    if ./kingo claude browser >/dev/null 2>&1; then echo "FRESH: after a no the packages are there"; exit 1; fi
+    # "y": kingo installs them itself (here as root, so without sudo)
+    out=$(in_terminal y)
+    echo "$out" | grep -E "Install them now|Installed\.|WARN|ready" | cut -c1-200
+    case "$out" in *"Install them now?"*"Installed. Claude can look at pages now."*) ;; *) echo "$out" | tail -n 12; echo "FRESH: after a yes, kingo did not install the packages"; exit 1 ;; esac
+    ./kingo claude browser
+    cd /w
     bash /k/setup/claude/bin/look page.html
     python3 /k/.github/scripts/png_check.py look/page-1.png
   ' || fail "on a fresh $image the browser does not run with the packages that kingo names"
-  ok "kingo named the missing packages, they installed, and the browser made a picture"
+  ok "kingo named the missing packages, look said what to do, kingo installed them after a yes, and the browser made a picture"
 }
 
 # ── a folder of one's own, one's own profile, and git ────────────────────────

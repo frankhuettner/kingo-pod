@@ -99,6 +99,12 @@ run() {
   kill "$watch" 2>/dev/null; wait "$watch" 2>/dev/null
   return "$rc"
 }
+# A library of the system is missing (a fresh Ubuntu under WSL): nothing to repair from inside the sandbox.
+library() {
+  grep -q 'error while loading shared libraries' "$1" 2>/dev/null || return 0
+  why "$1"
+  stop "the browser cannot start: a library of the system is missing. You cannot install it from inside the sandbox, so do not try. Ask the student to run this in their own terminal, in the kingo-pod folder, and to say yes to the question:  ./kingo claude browser"
+}
 why() { grep -v '^ *\[0x' "$1" 2>/dev/null | grep -i -E 'fatal|error|denied|signal|not found|cannot' | head -n 4 | cut -c1-200 | sed 's/^/    /' >&2; }
 
 if [ "$pdf" = 1 ]; then
@@ -107,7 +113,7 @@ if [ "$pdf" = 1 ]; then
   if [ "$(head -c 4 "$out/$name.pdf" 2>/dev/null)" != "%PDF" ] && again_as_one; then
     run 60 "$work/pdf.log" --no-pdf-header-footer --print-to-pdf="$out/$name.pdf" "$url"
   fi
-  if [ "$(head -c 4 "$out/$name.pdf" 2>/dev/null)" != "%PDF" ]; then why "$work/pdf.log"; stop "the browser made no PDF of $file"; fi
+  if [ "$(head -c 4 "$out/$name.pdf" 2>/dev/null)" != "%PDF" ]; then library "$work/pdf.log"; why "$work/pdf.log"; stop "the browser made no PDF of $file"; fi
   say "look: $file as it prints: look/$name.pdf"
   exit 0
 fi
@@ -133,7 +139,7 @@ fi
 height=$(sed -n 's/.*<title>LOOK-HEIGHT=\([0-9]*\)<\/title>.*/\1/p' "$work/height.log" | head -n 1)
 if [ -z "$height" ]; then
   if grep -q '<title>LOOK-HEIGHT=' "$work/height.log"; then height=$PART       # the browser ran but the page did not say
-  else why "$work/height.log"; stop "the browser did not start, or it did not open $file"; fi
+  else library "$work/height.log"; why "$work/height.log"; stop "the browser did not start, or it did not open $file"; fi
 fi
 [ "$height" -ge 1 ] || height=$PART
 
