@@ -15,6 +15,8 @@
   // So the sandbox is yours to widen, not Claude's.
   //
   // __KINGO_DIR__ stands for the kingo-pod folder; kingo fills it in. $HOME is your home folder.
+  // __KEYS_DIR__ stands for the folder where kingo keeps your keys (~/.config/kingo), for a route to another
+  // provider of the model: "credential_key": "file://__KEYS_DIR__/my-provider.key".
   // A folder must exist before the start: nono grants only folders that are there.
   "extends": "kingo-claude",
   "meta": {

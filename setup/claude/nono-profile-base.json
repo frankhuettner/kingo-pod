@@ -11,7 +11,7 @@
   "extends": "default",
   "meta": {
     "name": "kingo-claude-base",
-    "version": "0.5.1",
+    "version": "0.5.2",
     "description": "Kingo: Claude Code via OpenRouter; writes only to the folder it starts in; the OpenRouter key injected by the proxy"
   },
   "security": {
@@ -43,7 +43,15 @@
     ],
     // The Claude Code binary from the native installer, and the browser that kingo downloads for look. Read only:
     // kingo starts the browser outside the sandbox too (--version, ldd), so the sandbox must not be able to change it.
-    "read": ["$HOME/.local/share/claude", "$HOME/.local/share/kingo/browsers"]
+    // And the fonts that the user installed. The system knows them by name; when the browser of look cannot read
+    // their files, a page that names such a font (for example Pretendard) shows a box for every letter.
+    // nono leaves out a folder that does not exist.
+    "read": [
+      "$HOME/.local/share/claude", "$HOME/.local/share/kingo/browsers",
+      { "path": "$HOME/Library/Fonts", "when": "macos" },
+      { "path": "$HOME/.local/share/fonts", "when": "linux" },
+      { "path": "$HOME/.fonts", "when": "linux" }
+    ]
   },
   "environment": {
     // Only these variables reach Claude; everything else (other API keys, .env) is dropped.

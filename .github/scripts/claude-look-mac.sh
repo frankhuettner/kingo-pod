@@ -116,6 +116,40 @@ has "$out" "WROTE $DIR/look-write-probe" || { show "$out" 20; fail "the probe pr
 rm -f "$DIR/look-write-probe"
 ok "inside the sandbox, the browser, nono and their folders cannot be written"
 
+# A font that the user installed: the system knows it by name; when the sandbox cannot read its file, the browser
+# draws a box for every letter (found on 14 Nov 2026 with Pretendard). Reports, and fails only on boxes.
+say "a font that the user installed (~/Library/Fonts)"
+mkdir -p "$HOME/Library/Fonts"
+if curl -fsSL -m 60 -o "$HOME/Library/Fonts/Pacifico-Regular.ttf" https://raw.githubusercontent.com/google/fonts/main/ofl/pacifico/Pacifico-Regular.ttf; then
+  glyphs() { sed -n 's/.*<title>GLYPHS=\([^<]*\)<.*/\1/p' | head -n 1; }
+  out=""
+  for try in 1 2 3 4 5 6; do   # the system needs a moment to take a new font in
+    out=$("$BROWSER_BIN" --headless --no-sandbox --disable-gpu --virtual-time-budget=3000 --user-data-dir="$CFG/tmp/font-outside-$try" --dump-dom "file://$HERE/font_check.html#Pacifico" 2>/dev/null | glyphs)
+    [ "$out" = "Pacifico:own" ] && break; sleep 5
+  done
+  echo "         | outside the sandbox: ${out:-nothing}"
+  if [ "$out" = "Pacifico:own" ]; then
+    out=$(in_sandbox "$BROWSER_BIN" --headless --no-sandbox --disable-gpu --virtual-time-budget=3000 --user-data-dir="$CFG/tmp/font-inside" --dump-dom "file://$HERE/font_check.html#Pacifico" | glyphs)
+    echo "         | inside the sandbox, course profile: ${out:-nothing}"
+    [ "$out" != "Pacifico:boxes" ] || fail "inside the sandbox, a font that the user installed is drawn as boxes"
+    [ "$out" = "Pacifico:own" ] && ok "the browser draws the user's font inside the sandbox" \
+      || echo "   RESULT  inside the sandbox the user's font is not drawn with its own letters: ${out:-nothing}"
+    # the comparison: a copy of the base profile without the folder of the user's fonts
+    NOFONT="$CFG/tmp/kingo-claude-base-without-fonts.json"
+    grep -v 'Library/Fonts' "$HOME/.config/nono/profiles/kingo-claude-base.json" > "$NOFONT"
+    if "$NONO_BIN" profile validate "$NOFONT" >/dev/null 2>&1; then
+      PROFILE="$NOFONT"
+      out=$(in_sandbox "$BROWSER_BIN" --headless --no-sandbox --disable-gpu --virtual-time-budget=3000 --user-data-dir="$CFG/tmp/font-inside-2" --dump-dom "file://$HERE/font_check.html#Pacifico" | glyphs)
+      PROFILE=kingo-claude
+      echo "   RESULT  without the folder of the user's fonts in the profile: ${out:-nothing}"
+    fi
+  else
+    echo "   RESULT  the font did not arrive in the browser outside the sandbox either: nothing to compare"
+  fi
+else
+  echo "   RESULT  the font could not be downloaded: not checked"
+fi
+
 say "look inside nono with the course profile, as kingo claude sets it up"
 out=$(in_sandbox look look-cv.html)
 has "$out" "in 1 picture(s)" || { show "$out" 30; fail "look made no picture of a short page"; }

@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><title>GLYPHS=?</title></head><body>
+<script>
+// CI: can the browser draw a font that the user installed? (claude-sandbox.sh and claude-look-mac.sh)
+// A font that is known by name but cannot be read gives the same box for every letter. So: draw three letters one
+// at a time and compare the pixels. "boxes": all three are the same. "fallback": the letters differ, but they are
+// the letters of the font the browser takes when it does not know the name. "own": the font's own letters.
+function ink(font, letter) {
+  var c = document.createElement('canvas'); c.width = 90; c.height = 90;
+  var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 90, 90); x.fillStyle = '#000';
+  x.font = '60px ' + font; x.textBaseline = 'top'; x.fillText(letter, 10, 5);
+  var d = x.getImageData(0, 0, 90, 90).data, s = '';
+  for (var i = 0; i < d.length; i += 4) s += d[i] < 128 ? 1 : 0;
+  return s;
+}
+function state(name) {
+  var a = ink('"' + name + '", monospace', 'l'), b = ink('"' + name + '", monospace', 'W'), o = ink('"' + name + '", monospace', 'o');
+  if (a === b && b === o) return 'boxes';
+  if (b === ink('monospace', 'W') && o === ink('monospace', 'o')) return 'fallback';
+  return 'own';
+}
+function report() {
+  var names = (location.hash || '#Pacifico').slice(1).split(',');
+  document.title = 'GLYPHS=' + names.map(function (n) { return decodeURIComponent(n) + ':' + state(decodeURIComponent(n)); }).join(',');
+}
+report(); setTimeout(report, 500);
+</script></body></html>

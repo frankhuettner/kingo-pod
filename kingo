@@ -1484,14 +1484,15 @@ cmd_claude() {
   done
   # Which profile nono starts with. For the course, the student may add to the sandbox: my-nono-profile.json in
   # this folder, which Claude can read and not change. It must extend the course profile, so that it adds to the
-  # course's sandbox and takes the place of nothing; nono joins the two. kingo fills in __KINGO_DIR__.
+  # course's sandbox and takes the place of nothing; nono joins the two. kingo fills in __KINGO_DIR__ and
+  # __KEYS_DIR__ (the folder of the key files, for a route to another provider).
   local profile=kingo-claude mine="$KINGO_DIR/my-nono-profile.json"
   if [ -n "$in_dir" ]; then
     profile=kingo-claude-base
   elif [ -f "$mine" ]; then
     grep -Eq '^[[:space:]]*"extends"[[:space:]]*:[[:space:]]*"kingo-claude"[[:space:]]*,?[[:space:]]*$' "$mine" \
       || die "my-nono-profile.json needs the line  \"extends\": \"kingo-claude\",  so that it adds to the sandbox of the course and takes nothing of it away. See setup/claude/my-nono-profile.example.json."
-    sed "s|__KINGO_DIR__|$esc|g" "$mine" > "$prof/kingo-claude-mine.json"
+    sed -e "s|__KINGO_DIR__|$esc|g" -e "s|__KEYS_DIR__|$kesc|g" "$mine" > "$prof/kingo-claude-mine.json"
     if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ] && ! "$nono" profile validate "$prof/kingo-claude-mine.json" >/dev/null 2>&1; then
       "$nono" profile validate "$prof/kingo-claude-mine.json" 2>&1 | tail -n 8 >&2 || true
       die "nono does not take my-nono-profile.json (the lines above say why). Claude Code was not started. To start without your own profile, rename the file."
