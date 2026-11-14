@@ -13,6 +13,7 @@
 #   claude-sandbox.sh leave     the end of a session in a terminal: nono does not ask to change the profile
 #   claude-sandbox.sh look      look page.html inside nono under the lock: kingo gets the browser, pictures come out
 #   claude-sandbox.sh own       kingo claude --in <folder>, my-nono-profile.json, and git inside the sandbox
+#   claude-sandbox.sh login     kingo claude --login: the profiles, kingo's steps around the login, the sandbox
 #   claude-sandbox.sh fresh     a fresh Ubuntu in a container: the packages that kingo names are enough for the browser
 #
 # Each way out is tried twice. Without the lock it must work, or the check would prove nothing. With the lock it
@@ -124,15 +125,21 @@ prepare() {
   has "$dry" "-- /usr/bin/python3 -I $KINGO_DIR/setup/claude/no_unix_sockets.py claude --add-dir $KINGO_DIR --permission-mode default" \
     || fail "under Linux, kingo claude would start Claude Code without the lock"
   ok "kingo claude starts Claude Code through the lock, and has written the nono profile"
-  grep -q '^  NONO_NO_SAVE_PROMPT=1 \\$' "$KINGO_DIR/kingo" \
-    || fail "kingo claude does not start nono with NONO_NO_SAVE_PROMPT=1: nono would ask to change the profile when a session ends"
-  ok "kingo claude starts nono with NONO_NO_SAVE_PROMPT=1"
-  grep -q '^  GIT_CONFIG_NOSYSTEM=1 \\$' "$KINGO_DIR/kingo" \
-    || fail "kingo claude does not set GIT_CONFIG_NOSYSTEM=1: git in the sandbox would stop at /etc/gitconfig where that file exists"
-  grep -q '^  PATH="\$tpl/bin:\$PATH" KINGO_BROWSER="\$(claude_browser_path)" \\$' "$KINGO_DIR/kingo" \
-    || fail "kingo claude does not put look on the PATH or does not say where the browser is"
+  # The variables that kingo sets for nono and Claude Code: the dry run names them, from the list that the start
+  # exports. kingo_env below sets the same ones. (On 14 Nov 2026 five of them no longer reached Claude Code, and
+  # no check saw it: the checks here looked at lines of kingo, not at what a start gets.)
+  local v vars
+  vars=" $(printf '%s\n' "$dry" | sed -n 's/^  variables: //p')"
+  for v in CLAUDE_CODE_DISABLE_ARTIFACT CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC DISABLE_TELEMETRY DISABLE_ERROR_REPORTING \
+           CLAUDE_CODE_MAX_CONTEXT_TOKENS CLAUDE_CONFIG_DIR CLAUDE_CODE_TMPDIR TMPDIR PATH KINGO_BROWSER \
+           GIT_CONFIG_NOSYSTEM NONO_NO_SAVE_PROMPT PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE; do
+    has "$vars" " $v " || fail "kingo claude does not set the variable $v for the start"
+  done
+  grep -q '^  export "\${envs\[@\]}"$' "$KINGO_DIR/kingo" \
+    || fail "kingo claude does not hand the variables that the dry run names to nono"
+  ok "kingo claude sets its variables for the start: NONO_NO_SAVE_PROMPT, GIT_CONFIG_NOSYSTEM, those against telemetry, the PATH for look, PostgreSQL"
   # nono: the one that kingo downloaded (./kingo claude nono, in the workflow), and no other
-  grep -q '^    exec "\$nono" run --profile "\$profile" --allow-cwd --read "\$reads" -- "\$@"$' "$KINGO_DIR/kingo" \
+  grep -q '^  exec "\$nono" run --profile "\$profile" --allow-cwd --read "\$reads" -- "\$@"$' "$KINGO_DIR/kingo" \
     || fail "kingo claude does not start its own nono with the line this script copies"
   has "$dry" "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- " \
     || fail "for the course, kingo claude would not start nono with the course profile and read access to kingo-pod"
@@ -722,8 +729,211 @@ PYTHON
   ok "the other provider gets its own key in x-api-key and the model of the settings; inside the sandbox the key is a stand-in"
 }
 
+# kingo claude --login: Claude Code with the student's Anthropic login in place of OpenRouter. No login can be made
+# here: that needs an account. What is checked: what kingo would start; that nono takes the profiles; the steps of
+# kingo around the login, with a stand-in for nono (fake_nono.sh); what the real nono gives with the profiles of
+# the login; and that Claude Code asks for Anthropic's models when the settings of the login are on the command line.
+part_login() {
+  local out dry p vars sess a b dir="$HOME/projects/thesis" lcfg="$HOME/.kingo-claude-login" tpl="$KINGO_DIR/setup/claude"
+  local store="$HOME/.local/state/nono/oauth-capture" mine="$KINGO_DIR/my-nono-profile.json" prof="$HOME/.config/nono/profiles"
+  local port=18790 word="outside-word-$$" pid i log="$CFG/tmp/model-login.jsonl"
+  # in_login <profile> <folder> <what nono may read> command ...: as kingo claude --login runs Claude Code
+  in_login() {
+    local profile=$1 where=$2 reads=$3; shift 3
+    ( cd "$where" &&
+      CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
+      CLAUDE_CONFIG_DIR="$lcfg" CLAUDE_CODE_TMPDIR="$lcfg/tmp" TMPDIR="$lcfg/tmp" \
+      PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
+      NONO_NO_SAVE_PROMPT=1 GIT_CONFIG_NOSYSTEM=1 \
+      PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
+        timeout 180 nono run --profile "$profile" --allow-cwd --read "$reads" -- "${LOCK[@]}" "$@" ) 2>&1 || true
+  }
+
+  say "what kingo claude would start"
+  prepare
+  rm -rf "$dir" "$mine"; mkdir -p "$dir" "$lcfg/tmp" "$lcfg.lock" "$store"
+
+  say "kingo claude --login: what it would start"
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login) || fail "kingo claude --login did not get as far as the start of Claude Code"
+  show "$dry" 3
+  has "$dry" "nono run --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --add-dir $KINGO_DIR --settings $tpl/settings-login.json --permission-mode default" \
+    || fail "kingo claude --login would not start Claude Code with the course profile of the login, under the lock, with the settings of the login"
+  vars=" $(printf '%s\n' "$dry" | sed -n 's/^  variables: //p')"
+  has "$vars" " PGHOST " || fail "kingo claude --login does not set the variables for PostgreSQL"
+  if has "$vars" " CLAUDE_CODE_MAX_CONTEXT_TOKENS "; then fail "kingo claude --login tells Claude Code the context size of the course's model"; fi
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login --in "$dir") || fail "kingo claude --login --in did not get as far as the start of Claude Code"
+  has "$dry" "nono run --profile kingo-claude-login --allow-cwd --read $tpl -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --settings $tpl/settings-in-login.json --permission-mode default --append-system-prompt You were started with" \
+    || { show "$dry" 3; fail "kingo claude --login --in would not start Claude Code with the profile of the login and its own settings"; }
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo yolo --in "$dir" --login) || fail "kingo yolo --in --login did not get as far as the start of Claude Code"
+  has "$dry" "nono run --profile kingo-claude-login --allow-cwd --read $tpl -- " || { show "$dry" 3; fail "kingo does not find --login after --in"; }
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude logout) || fail "kingo claude logout did not get as far as the logout"
+  has "$dry" "nono run --profile kingo-claude-login --allow-cwd -- claude auth logout" || { show "$dry" 3; fail "kingo claude logout would not log out inside the sandbox of the login"; }
+  ok "the course with the login, a folder of one's own with the login, and the logout"
+
+  say "kingo claude --login with the student's own profile"
+  cp "$tpl/my-nono-profile.example.json" "$mine"
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login) || fail "kingo claude --login did not start with the example of my-nono-profile.json"
+  has "$dry" "nono run --profile kingo-claude-mine --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "with --login, kingo does not start nono with the student's profile"; }
+  grep -q '^  "extends": "kingo-claude-login-course",$' "$prof/kingo-claude-mine.json" \
+    || fail "with --login, the student's profile does not extend the course profile of the login"
+  nono profile validate "$prof/kingo-claude-mine.json" > "$CFG/tmp/validate.log" 2>&1 \
+    || { show "$(cat "$CFG/tmp/validate.log")" 8; fail "nono does not take the student's profile on top of the login"; }
+  out=$(in_login kingo-claude-mine "$KINGO_DIR/claude" "$KINGO_DIR" sh -c 'echo "base=${ANTHROPIC_BASE_URL:-none} n8n=${N8N_BASE_URL:+set}"; if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
+  has "$out" "base=none n8n=set" || { show "$out" 12; fail "the student's profile on top of the login: the way to OpenRouter is there, or n8n is gone"; }
+  has "$out" WROTE || { show "$out" 12; fail "the student's profile on top of the login does not give shared"; }
+  rm -f "$KINGO_DIR/shared/own-probe.txt"
+  cat > "$mine" <<EOF
+{
+  "extends": "kingo-claude",
+  "meta": { "name": "kingo-claude-mine", "version": "1", "description": "another provider for the model" },
+  "network": {
+    "custom_credentials": {
+      "anthropic": {
+        "upstream": "https://example.com",
+        "credential_key": "file://__KEYS_DIR__/other.key",
+        "env_var": "ANTHROPIC_API_KEY",
+        "inject_header": "x-api-key",
+        "credential_format": "{}"
+      }
+    }
+  }
+}
+EOF
+  if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login 2>&1); then show "$out" 3; fail "kingo took --login together with a profile that names another provider"; fi
+  rm -f "$mine"
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo claude did not start after the profile was removed"
+  ok "the example adds shared to the sandbox of the login; a profile with another provider and --login: kingo does not start"
+
+  say "nono takes the seven profiles"
+  for p in kingo-claude-core kingo-claude-base kingo-claude-course kingo-claude kingo-claude-login kingo-claude-login-course kingo-claude-login-open; do
+    nono profile validate "$prof/$p.json" > "$CFG/tmp/validate.log" 2>&1 || { show "$(cat "$CFG/tmp/validate.log")" 8; fail "nono does not take the profile $p"; }
+  done
+  ok "core, base, course, kingo-claude, login, login-course, login-open"
+
+  # kingo's own steps: a start of kingo in a terminal, in a home folder of its own, where "nono" is fake_nono.sh.
+  say "the steps of kingo around the login, with a stand-in for nono"
+  local fh="$CFG/tmp/login-home" cred
+  cred="$fh/.kingo-claude-login/.credentials.json"
+  rm -rf "$fh"; mkdir -p "$fh/projects/thesis" "$fh/.local/share/kingo/nono/$(sed -n 's/^CLAUDE_NONO_VERSION=//p' "$KINGO_DIR/kingo")"
+  cp "$HERE/fake_nono.sh" "$fh/.local/share/kingo/nono/$(sed -n 's/^CLAUDE_NONO_VERSION=//p' "$KINGO_DIR/kingo")/nono"
+  chmod +x "$fh"/.local/share/kingo/nono/*/nono
+  # step <what the stand-in leaves at a login> <arguments of kingo>
+  step() {
+    local login=$1; shift
+    ( cd "$KINGO_DIR" && HOME="$fh" XDG_CONFIG_HOME="" KINGO_CLAUDE_NO_BROWSER=1 STUB_LOGIN="$login" \
+        timeout 120 /usr/bin/python3 -I -c 'import pty, sys; pty.spawn(sys.argv[1:])' ./kingo "$@" < /dev/null 2>&1 | tr -d '\r' ) || true
+  }
+  session_of() { printf '%s\n' "$1" | awk '/^STUB nono run .*--read /{f=1} f'; }
+
+  out=$(step phantom claude --login --in "$fh/projects/thesis")
+  show "$(printf '%s\n' "$out" | grep -v '^STUB  ')" 6
+  has "$out" "STUB nono run --profile kingo-claude-login --allow-cwd -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude auth login --claudeai" \
+    || { show "$out" 30; fail "without a login, kingo does not run the login inside the sandbox, under the lock"; }
+  has "$out" "Logged in." || { show "$out" 30; fail "kingo does not take a login that nono kept outside the sandbox"; }
+  sess=$(session_of "$out")
+  has "$sess" "STUB nono run --profile kingo-claude-login --allow-cwd --read $tpl -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --settings $tpl/settings-in-login.json" \
+    || { show "$out" 30; fail "after the login, kingo does not start the session"; }
+  for p in "CLAUDE_CODE_DISABLE_ARTIFACT=1" "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1" "DISABLE_TELEMETRY=1" "DISABLE_ERROR_REPORTING=1" \
+           "CLAUDE_CODE_MAX_CONTEXT_TOKENS=unset" "CLAUDE_CONFIG_DIR=$fh/.kingo-claude-login" "TMPDIR=$fh/.kingo-claude-login/tmp" \
+           "GIT_CONFIG_NOSYSTEM=1" "NONO_NO_SAVE_PROMPT=1" "PATH starts with $tpl/bin"; do
+    has "$sess" "STUB   $p" || { show "$sess" 16; fail "the start of the session does not get: $p"; }
+  done
+  ok "no login: kingo runs the login in the sandbox, takes nono's stand-ins, and starts the session with its variables"
+
+  out=$(step none claude --login --in "$fh/projects/thesis")
+  if has "$out" "auth login"; then show "$out" 30; fail "kingo asks for the login again although one is there"; fi
+  has "$(session_of "$out")" "STUB nono run --profile kingo-claude-login " || { show "$out" 30; fail "with a login, kingo does not start the session"; }
+  ok "a login is there: kingo starts the session and does not ask again"
+
+  out=$(step none claude logout)
+  has "$out" "STUB nono run --profile kingo-claude-login --allow-cwd -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude auth logout" || { show "$out" 30; fail "kingo claude logout does not log out inside the sandbox"; }
+  has "$out" "Logged out" || { show "$out" 30; fail "kingo claude logout does not say that it logged out"; }
+  [ ! -e "$cred" ] || fail "after kingo claude logout the login is still in the config folder"
+  out=$(step none claude logout)
+  has "$out" "There is no login" || { show "$out" 30; fail "a second kingo claude logout does not say that there is no login"; }
+  ok "logout: inside the sandbox, the login is gone from the config folder, and a second logout says so"
+
+  out=$(step real claude --login --in "$fh/projects/thesis")
+  has "$out" "nono did not keep this login outside the sandbox" || { show "$out" 30; fail "kingo took a login that is not nono's stand-in"; }
+  if has "$out" "--read "; then show "$out" 30; fail "kingo started a session with a login that is not nono's stand-in"; fi
+  [ ! -e "$cred" ] || fail "a login that is not nono's stand-in stayed in the config folder"
+  ok "a login that nono did not capture: kingo logs out, deletes it, and starts no session"
+
+  out=$(step none claude --login --in "$fh/projects/thesis")
+  has "$out" "the login did not work" || { show "$out" 30; fail "kingo does not say that no login was made"; }
+  if has "$out" "--read "; then show "$out" 30; fail "kingo started a session without a login"; fi
+  ok "no login made: kingo says so and starts no session"
+
+  printf '{"claudeAiOauth":{"accessToken":"sk-ant-oat01-MADE-UP_for-the-CI","refreshToken":"nono_abababababababababababababababababababababababababababababababab"}}' > "$cred"
+  out=$(step phantom claude --login --in "$fh/projects/thesis")
+  has "$out" "removed a login" || { show "$out" 30; fail "kingo kept a login in which one token is not nono's stand-in"; }
+  has "$out" "Logged in." || { show "$out" 30; fail "after removing the login, kingo did not ask for a new one"; }
+  ok "a login in the config folder with a token that is not nono's: kingo removes it and asks for the login"
+
+  rm -f "$cred"
+  out=$( ( cd "$KINGO_DIR" && HOME="$fh" XDG_CONFIG_HOME="" KINGO_CLAUDE_NO_BROWSER=1 ./kingo claude --login --in "$fh/projects/thesis" < /dev/null 2>&1 ) || true)
+  has "$out" "Run it in a terminal" || { show "$out" 12; fail "without a terminal and without a login, kingo does not say what to do"; }
+  ok "without a terminal: kingo says that the login needs one"
+  rm -rf "$fh"
+
+  # The real nono, with the profiles of the login. Its store of the real tokens is outside everything the sandbox gets.
+  say "the sandbox of the login: no way to OpenRouter, the course only with the course, nono's store stays outside"
+  printf 'store-%s\n' "$SECRET" > "$store/ci-probe.txt"
+  printf 'login-folder-%s\n' "$SECRET" > "$lcfg/marker.txt"
+  local probe='echo "base=${ANTHROPIC_BASE_URL:-none} token=${ANTHROPIC_AUTH_TOKEN:-none} proxy=${HTTPS_PROXY:+set} ca=${NODE_EXTRA_CA_CERTS:+set} n8n=${N8N_BASE_URL:+set} langflow=${LANGFLOW_BASE_URL:+set} pg=${PGHOST:-none}"; cat "$1" 2>&1; ls "$(dirname "$1")" 2>&1; for f in "$2/probe" "$3/probe" ./probe-here; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done'
+  out=$(in_login kingo-claude-login "$dir" "$tpl" sh -c "$probe" sh "$store/ci-probe.txt" "$CFG" "$lcfg")
+  show "$(printf '%s\n' "$out" | grep -E '^(base=|WROTE|refused)')" 5
+  has "$out" "base=none token=none proxy=set ca=set n8n= langflow= pg=none" || { show "$out" 20; fail "the profile of the login: a way to OpenRouter or something of the course is there, or nono's proxy and certificate are not"; }
+  if has "$out" "store-$SECRET" || has "$out" "ci-probe.txt"; then fail "the sandbox of the login can read nono's store of the real tokens"; fi
+  has "$out" "refused $CFG/probe" || fail "the sandbox of the login can write in the config folder of the OpenRouter way"
+  has "$out" "WROTE $lcfg/probe" || fail "the sandbox of the login cannot write in its own config folder"
+  has "$out" "WROTE ./probe-here" || fail "the sandbox of the login cannot write in the folder it starts in"
+  out=$(in_login kingo-claude-login-course "$KINGO_DIR/claude" "$KINGO_DIR" sh -c "$probe" sh "$store/ci-probe.txt" "$CFG" "$lcfg")
+  show "$(printf '%s\n' "$out" | grep -E '^(base=|WROTE|refused)')" 5
+  has "$out" "base=none token=none proxy=set ca=set n8n=set langflow=set pg=127.0.0.1" || { show "$out" 20; fail "the course profile of the login: a way to OpenRouter is there, or n8n, Langflow or PostgreSQL are not"; }
+  if has "$out" "store-$SECRET" || has "$out" "ci-probe.txt"; then fail "the sandbox of the login, with the course, can read nono's store of the real tokens"; fi
+  rm -f "$KINGO_DIR/claude/probe-here"
+  out=$(in_sandbox "${LOCK[@]}" sh -c 'cat "$1" 2>&1; cat "$2" 2>&1' sh "$lcfg/marker.txt" "$store/ci-probe.txt")
+  if has "$out" "$SECRET"; then fail "the sandbox of the OpenRouter way can read the config folder of the login, or nono's store"; fi
+  ok "login: no OpenRouter, nono's proxy and certificate, its own config folder; the course's routes only with the course; the store is closed"
+
+  say "the network of the login's sandbox is as closed as that of the OpenRouter way"
+  /usr/bin/python3 "$HERE/probe_server.py" "$port" "$dir/probe.sock" "$word" &
+  pid=$!
+  for i in $(seq 1 20); do curl -s -m 2 "http://127.0.0.1:$port/" 2>/dev/null | grep -q "$word" && break; sleep 0.5; done
+  out="tcp=$(curl -s -m 5 "http://127.0.0.1:$port/" 2>/dev/null | head -c 60) unix=$(curl -s -m 5 --unix-socket "$dir/probe.sock" http://localhost/ 2>/dev/null | head -c 60)"
+  [ "$out" = "tcp=$word unix=$word" ] || { kill "$pid" 2>/dev/null || true; fail "outside the sandbox the server does not answer ($out): the check would prove nothing"; }
+  local net='echo "tcp=$(curl -s -m 5 --noproxy "*" "http://127.0.0.1:$1/" 2>/dev/null | head -c 60)"; echo "unix=$(curl -s -m 5 --noproxy "*" --unix-socket "$2" http://localhost/ 2>/dev/null | head -c 60)"'
+  a=$(in_login kingo-claude-base "$dir" "$tpl" sh -c "$net" sh "$port" "$dir/probe.sock" | grep -E '^(tcp|unix)=' | tr '\n' ' ')
+  b=$(in_login kingo-claude-login "$dir" "$tpl" sh -c "$net" sh "$port" "$dir/probe.sock" | grep -E '^(tcp|unix)=' | tr '\n' ' ')
+  kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true
+  echo "         | a server on this machine, asked without the proxy, from the OpenRouter way: $a"
+  echo "         | a server on this machine, asked without the proxy, from the login:          $b"
+  if has "$b" "unix=$word"; then fail "under the lock, the sandbox of the login reaches a Unix socket"; fi
+  if has "$b" "tcp=$word" && ! has "$a" "tcp=$word"; then fail "the sandbox of the login reaches a port of this machine that the OpenRouter way does not reach"; fi
+  ok "the login's sandbox reaches no more of this machine than the OpenRouter way"
+
+  # The course folder's settings name the course's model. With --login, kingo puts settings-login.json on the
+  # command line. Here Claude Code runs with them against the stand-in for the model, which notes what it is asked for.
+  say "with the settings of the login, Claude Code asks for Anthropic's models, not for the course's"
+  stand_in
+  grep -q '"ANTHROPIC_MODEL": "z-ai/' "$KINGO_DIR/claude/.claude/settings.json" || fail "the course folder's settings do not name the course's model: the check would prove nothing"
+  PROBE="echo the-command-ended"
+  model_start "$log"
+  out=$(in_sandbox "${LOCK[@]}" claude --add-dir "$KINGO_DIR" --settings "$tpl/settings-login.json" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
+  model_stop "$log"
+  /usr/bin/python3 - "$log" <<'PYTHON' || { show "$out" 20; fail "with the settings of the login, Claude Code still asks for the course's model, or asked for nothing"; }
+import json, sys
+models = {json.loads(line).get("model") for line in open(sys.argv[1]) if json.loads(line).get("method") == "POST"}
+print("         | models asked for: %s" % ", ".join(sorted(str(m) for m in models)))
+sys.exit(0 if models and all(str(m).startswith("claude-") for m in models) else 1)
+PYTHON
+  ok "Claude Code asks for Anthropic's models"
+}
+
 case "${1:-}" in
   own)     part_own ;;
+  login)   part_login ;;
   look)    part_look ;;
   fresh)   part_fresh ;;
   leave)   part_leave ;;
@@ -731,6 +941,6 @@ case "${1:-}" in
   sandbox) part_sandbox ;;
   claude)  part_claude ;;
   session) part_session ;;
-  *) echo "usage: claude-sandbox.sh lock|sandbox|claude|session|leave|look|own|fresh"; exit 2 ;;
+  *) echo "usage: claude-sandbox.sh lock|sandbox|claude|session|leave|look|own|login|fresh"; exit 2 ;;
 esac
 printf '\nAll checks of "%s" passed.\n' "$1"

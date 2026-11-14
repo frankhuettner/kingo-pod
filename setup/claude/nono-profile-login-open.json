@@ -1,0 +1,20 @@
+{
+  // nono profile "kingo-claude-login-open": only for the moment of the login, on a Mac.
+  // Written to ~/.config/nono/profiles/kingo-claude-login-open.json on every start, from this file.
+  // kingo runs one command with it, `claude auth login`, and no session of Claude Code: with this profile
+  // (and nono's option --allow-launch-services) the sandbox may open the login pages of Claude in your browser.
+  // A session never gets this: there, a program in the sandbox could open pages in the browser you are logged in with.
+  // Under Linux and Windows (WSL2) kingo does not use this profile: Claude Code shows the address, and you open it.
+  "extends": "kingo-claude-login",
+  "meta": {
+    "name": "kingo-claude-login-open",
+    "version": "0.6.0",
+    "description": "Kingo: the login step of kingo claude --login on a Mac; may open Claude's login pages in the browser"
+  },
+  "allow_launch_services": true,
+  "open_urls": {
+    "allow_origins": ["https://claude.ai", "https://claude.com", "https://platform.claude.com"],
+    // The login page sends the browser back to a port on this laptop, where `claude auth login` waits.
+    "allow_localhost": true
+  }
+}
