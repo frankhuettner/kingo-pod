@@ -342,6 +342,24 @@ out=$(in_sandbox sh -c 'cat "$1" 2>&1; cat "$2" 2>&1; ls "$(dirname "$2")" 2>&1'
 if has "$out" "$MARK"; then fail "the sandbox of the OpenRouter way can read the config folder of the login, or nono's store"; fi
 ok "login: no OpenRouter, nono's proxy and certificate, its own config folder; the course's routes only with the course; the store is closed"
 
+# A new session of Claude Code asks an address on platform.claude.com at its start. That is the host of the token
+# address: nono reads all traffic to it and lets through only what has a route. Without a route, nono answers 502
+# and Claude Code ends with "Unable to connect to Anthropic services" (Frank's Mac, 14 Nov 2026).
+say "through nono's proxy, the login's sandbox reaches the other addresses on Anthropic's login host"
+HELLO='for u in https://platform.claude.com/v1/oauth/hello https://api.anthropic.com/api/hello; do echo "code=$(curl -s -o /dev/null -m 30 --cacert "$NODE_EXTRA_CA_CERTS" -w "%{http_code}" "$u") $u"; done'
+# the comparison: a copy of the profile of the login without platform.claude.com among the hosts with a route
+sed 's|"api_hosts": \["https://api.anthropic.com", "https://platform.claude.com"\]|"api_hosts": ["https://api.anthropic.com"]|' "$PROF/kingo-claude-login.json" > "$PROF/kingo-claude-login-ci.json"
+if grep -q '"https://platform.claude.com"\]' "$PROF/kingo-claude-login-ci.json"; then fail "the copy of the profile still has the route for platform.claude.com"; fi
+out=$(in_login kingo-claude-login-ci "$OWN" "$TPL" sh -c "$HELLO" | grep '^code=' || true)
+show "$out" 2
+has "$out" "code=502 https://platform.claude.com/" || fail "without the route, nono does not answer 502 for platform.claude.com: the check below would prove nothing"
+rm -f "$PROF/kingo-claude-login-ci.json"
+out=$(in_login kingo-claude-login "$OWN" "$TPL" sh -c "$HELLO" | grep '^code=' || true)
+show "$out" 2
+[ "$(printf '%s\n' "$out" | grep -c '^code=')" = 2 ] || fail "the probe for Anthropic's hosts did not run in the login's sandbox"
+if has "$out" "code=502 " || has "$out" "code=000 "; then fail "the login's sandbox does not reach Anthropic's login host or its API through nono's proxy"; fi
+ok "with the profile of the login both hosts answer; without the route for platform.claude.com nono answers 502"
+
 # On a Mac, nono's rules for the network are what keeps a program in the sandbox from Unix sockets (Docker, Podman)
 # and from the ports of this machine. The OpenRouter way has them through its key route. The login must have them too.
 say "the network of the login's sandbox: no port of this machine and no Unix socket without nono's proxy"
