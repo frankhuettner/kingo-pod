@@ -298,7 +298,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm]
+        # The two Ubuntu versions that Windows (WSL) installs: 24.04 comes with Python 3.12, 26.04 with Python 3.14.
+        os: [ubuntu-24.04, ubuntu-24.04-arm, ubuntu-26.04, ubuntu-26.04-arm]
     steps:
       - uses: actions/checkout@v4
 
@@ -321,6 +322,7 @@ jobs:
 
       - name: Versions
         run: |
+          . /etc/os-release && echo "$PRETTY_NAME"
           uname -srm
           nono --version
           claude --version
