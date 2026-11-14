@@ -1,79 +1,27 @@
 {
-  // nono profile for `kingo claude` — written to ~/.config/nono/profiles/kingo-claude.json
-  // on every start (ports filled in), from setup/claude/nono-profile.json.
-  // Claude writes only to the course folder (claude/) and its own config (~/.kingo-claude);
-  // kingo claude adds read access to the kingo-pod folder (--read). The network stays open:
-  // nono's proxy lets every host through. It injects the keys for OpenRouter, n8n and Langflow,
-  // which nono reads from the files in __KEYS_DIR__: the keys are never in an environment variable.
-  // psql goes to PostgreSQL directly: one rule for that port, at the end of this file.
+  // nono profile "kingo-claude", the course profile of `kingo claude` — written to
+  // ~/.config/nono/profiles/kingo-claude.json on every start (ports filled in), from this file.
+  // It extends "kingo-claude-base" (nono-profile-base.json): the folders, the variables, the way
+  // to OpenRouter and the rule for look are there. nono puts the two together: lists are joined,
+  // and nothing of the base is taken away. This file adds what the course needs: the keys for
+  // n8n and Langflow, which nono's proxy injects, and PostgreSQL, which psql reaches directly.
+  // kingo claude adds read access to the kingo-pod folder (--read).
   // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
-  "extends": "default",
+  "extends": "kingo-claude-base",
   "meta": {
     "name": "kingo-claude",
-    "version": "0.4.4",
+    "version": "0.5.0",
     "description": "Kingo: Claude Code via OpenRouter; writes only to the course folder; keys for OpenRouter, n8n and Langflow injected by the proxy"
   },
-  "security": {
-    // Windows: WSL2 with Microsoft's kernel (6.6, Landlock V3) cannot force Claude's traffic through
-    // nono's proxy, and nono then refuses to start ("proxy-only network mode cannot be
-    // kernel-enforced"). With this line it starts and prints a warning: on that kernel, the network
-    // is not locked. No effect on a Mac.
-    "wsl2_proxy_policy": "insecure_proxy"
-  },
-  "groups": {
-    "include": [
-      "git_config",
-      "node_runtime",
-      "python_runtime",
-      "unlink_protection",
-      { "name": "claude_cache_linux", "when": "linux" },
-      { "name": "linux_sysfs_read", "when": "linux" }
-    ]
-  },
-  "workdir": { "access": "readwrite" },
-  "filesystem": {
-    // A separate Claude config: the student's own ~/.claude stays untouched and invisible.
-    "allow": [
-      "$HOME/.kingo-claude",
-      "$HOME/.kingo-claude.lock",
-      "$HOME/.local/state/claude/locks",
-      "$HOME/.cache/claude",
-      { "path": "$HOME/Library/Caches/claude-cli-nodejs", "when": "macos" }
-    ],
-    // The Claude Code binary from the native installer, and the browser that kingo downloads for look. Read only:
-    // kingo starts the browser outside the sandbox too (--version, ldd), so the sandbox must not be able to change it.
-    "read": ["$HOME/.local/share/claude", "$HOME/.local/share/kingo/browsers"]
-  },
   "environment": {
-    // Only these variables reach Claude; everything else (other API keys, .env) is dropped.
-    // SHLVL counts how many shells deep a program runs. Without it, the bash that runs Claude Code's commands
-    // takes itself for the first shell of a remote login and reads /etc/bash.bashrc and ~/.bashrc first. The
-    // sandbox refuses both, and every result of a command then starts with two lines "Permission denied".
-    "allow_vars": [
-      "PATH", "HOME", "USER", "LOGNAME", "SHELL", "SHLVL",
-      "TERM", "TERM_PROGRAM", "COLORTERM", "LANG", "LC_*", "TZ",
-      "XDG_RUNTIME_DIR",
-      "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_TMPDIR", "TMPDIR",
-      "CLAUDE_CODE_DISABLE_ARTIFACT", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING",
-      "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
-      "KINGO_BROWSER", "KINGO_BROWSER_MODE",
-      "PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE"
-    ]
+    // In addition to the variables of the base profile: where psql finds PostgreSQL.
+    "allow_vars": ["PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE"]
   },
   "network": {
-    // No allow_domain: the proxy lets every host through. The routes only inject keys.
-    "credentials": ["anthropic", "n8n", "langflow"],
-    // With key routes, nono lets Claude connect only to nono's own proxy port.
+    // In addition to the route to OpenRouter of the base profile. The routes only inject keys.
     // psql does not use the proxy: see the PostgreSQL rule at the end of this file.
+    "credentials": ["n8n", "langflow"],
     "custom_credentials": {
-      // Named "anthropic" so nono sets ANTHROPIC_BASE_URL=http://127.0.0.1:<port>/anthropic.
-      "anthropic": {
-        "upstream": "https://openrouter.ai/api",
-        "credential_key": "file://__KEYS_DIR__/openrouter.key",
-        "env_var": "ANTHROPIC_AUTH_TOKEN",
-        "inject_header": "Authorization",
-        "credential_format": "Bearer {}"
-      },
       // nono sets N8N_BASE_URL; Claude sends X-N8N-API-KEY: $N8N_API_KEY (a placeholder).
       "n8n": {
         "upstream": "http://127.0.0.1:__N8N_PORT__",
@@ -96,14 +44,8 @@
   // Mac: a rule of its own for exactly this connection. nono's open_port would also let every
   // program in the sandbox listen on any port (Seatbelt cannot limit listening to one port).
   // nono puts such a rule after its own "(deny network*)" only since 0.80; before, it has no effect.
-  // The second rule is for look. Chrome registers a Mach service for its helper programs, named
-  // org.chromium.Chromium.MachPortRendezvousServer.<its process number>; nono's sandbox allows no mach-register,
-  // and Chrome then stops at its start. The rule allows names with exactly this beginning and no other. It gives
-  // no file and no network. What it leaves open: a program in the sandbox could take such a name before a Chromium
-  // outside the sandbox with that process number asks for it, and that Chromium would then not start.
   "unsafe_macos_seatbelt_rules": [
-    "(allow network-outbound (remote tcp \"localhost:__POSTGRES_PORT__\"))",
-    "(allow mach-register (global-name-prefix \"org.chromium.Chromium.MachPortRendezvousServer.\"))"
+    "(allow network-outbound (remote tcp \"localhost:__POSTGRES_PORT__\"))"
   ],
   // Linux and Windows (WSL2): open_port, which is limited to this port there.
   "platform_overrides": {

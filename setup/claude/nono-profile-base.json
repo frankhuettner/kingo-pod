@@ -1,0 +1,87 @@
+{
+  // nono profile "kingo-claude-base": Claude Code via OpenRouter in a sandbox, without the course.
+  // Written to ~/.config/nono/profiles/kingo-claude-base.json on every start, from this file.
+  // `./kingo claude --in <folder>` starts Claude Code with this profile. The course profile
+  // (nono-profile.json, "kingo-claude") extends it and adds n8n, Langflow and PostgreSQL.
+  // Claude writes only to the folder it is started in and to its own config (~/.kingo-claude).
+  // The network stays open: nono's proxy lets every host through. It injects the key for
+  // OpenRouter, which nono reads from a file in __KEYS_DIR__: the key is never in an
+  // environment variable.
+  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
+  "extends": "default",
+  "meta": {
+    "name": "kingo-claude-base",
+    "version": "0.5.0",
+    "description": "Kingo: Claude Code via OpenRouter; writes only to the folder it starts in; the OpenRouter key injected by the proxy"
+  },
+  "security": {
+    // Windows: WSL2 with Microsoft's kernel (6.6, Landlock V3) cannot force Claude's traffic through
+    // nono's proxy, and nono then refuses to start ("proxy-only network mode cannot be
+    // kernel-enforced"). With this line it starts and prints a warning: on that kernel, the network
+    // is not locked. No effect on a Mac.
+    "wsl2_proxy_policy": "insecure_proxy"
+  },
+  "groups": {
+    "include": [
+      "git_config",
+      "node_runtime",
+      "python_runtime",
+      "unlink_protection",
+      { "name": "claude_cache_linux", "when": "linux" },
+      { "name": "linux_sysfs_read", "when": "linux" }
+    ]
+  },
+  "workdir": { "access": "readwrite" },
+  "filesystem": {
+    // A separate Claude config: the student's own ~/.claude stays untouched and invisible.
+    "allow": [
+      "$HOME/.kingo-claude",
+      "$HOME/.kingo-claude.lock",
+      "$HOME/.local/state/claude/locks",
+      "$HOME/.cache/claude",
+      { "path": "$HOME/Library/Caches/claude-cli-nodejs", "when": "macos" }
+    ],
+    // The Claude Code binary from the native installer, and the browser that kingo downloads for look. Read only:
+    // kingo starts the browser outside the sandbox too (--version, ldd), so the sandbox must not be able to change it.
+    "read": ["$HOME/.local/share/claude", "$HOME/.local/share/kingo/browsers"]
+  },
+  "environment": {
+    // Only these variables reach Claude; everything else (other API keys, .env) is dropped.
+    // SHLVL counts how many shells deep a program runs. Without it, the bash that runs Claude Code's commands
+    // takes itself for the first shell of a remote login and reads /etc/bash.bashrc and ~/.bashrc first. The
+    // sandbox refuses both, and every result of a command then starts with two lines "Permission denied".
+    "allow_vars": [
+      "PATH", "HOME", "USER", "LOGNAME", "SHELL", "SHLVL",
+      "TERM", "TERM_PROGRAM", "COLORTERM", "LANG", "LC_*", "TZ",
+      "XDG_RUNTIME_DIR",
+      "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_TMPDIR", "TMPDIR",
+      "CLAUDE_CODE_DISABLE_ARTIFACT", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING",
+      "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+      "KINGO_BROWSER", "KINGO_BROWSER_MODE"
+    ]
+  },
+  "network": {
+    // No allow_domain: the proxy lets every host through. The route only injects the key.
+    // With a key route, nono lets Claude connect only to nono's own proxy port. On a Mac this is
+    // also what keeps Claude from Unix sockets (Docker, Podman): do not drop the route.
+    "credentials": ["anthropic"],
+    "custom_credentials": {
+      // Named "anthropic" so nono sets ANTHROPIC_BASE_URL=http://127.0.0.1:<port>/anthropic.
+      "anthropic": {
+        "upstream": "https://openrouter.ai/api",
+        "credential_key": "file://__KEYS_DIR__/openrouter.key",
+        "env_var": "ANTHROPIC_AUTH_TOKEN",
+        "inject_header": "Authorization",
+        "credential_format": "Bearer {}"
+      }
+    }
+  },
+  // For look, on a Mac. Chrome registers a Mach service for its helper programs, named
+  // org.chromium.Chromium.MachPortRendezvousServer.<its process number>; nono's sandbox allows no mach-register,
+  // and Chrome then stops at its start. The rule allows names with exactly this beginning and no other. It gives
+  // no file and no network. What it leaves open: a program in the sandbox could take such a name before a Chromium
+  // outside the sandbox with that process number asks for it, and that Chromium would then not start.
+  "unsafe_macos_seatbelt_rules": [
+    "(allow mach-register (global-name-prefix \"org.chromium.Chromium.MachPortRendezvousServer.\"))"
+  ]
+}

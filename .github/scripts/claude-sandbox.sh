@@ -12,6 +12,7 @@
 #   claude-sandbox.sh session   a session of Claude Code in a terminal, as a student has it (pty_session.py)
 #   claude-sandbox.sh leave     the end of a session in a terminal: nono does not ask to change the profile
 #   claude-sandbox.sh look      look page.html inside nono under the lock: kingo gets the browser, pictures come out
+#   claude-sandbox.sh own       kingo claude --in <folder>, my-nono-profile.json, and git inside the sandbox
 #   claude-sandbox.sh fresh     a fresh Ubuntu in a container: the packages that kingo names are enough for the browser
 #
 # Each way out is tried twice. Without the lock it must work, or the check would prove nothing. With the lock it
@@ -129,8 +130,10 @@ prepare() {
   grep -q '^  PATH="\$tpl/bin:\$PATH" KINGO_BROWSER="\$(claude_browser_path)" \\$' "$KINGO_DIR/kingo" \
     || fail "kingo claude does not put look on the PATH or does not say where the browser is"
   # nono: the one that kingo downloaded (./kingo claude nono, in the workflow), and no other
-  grep -q '^    exec "\$nono" run --profile kingo-claude --allow-cwd --read "\$KINGO_DIR" -- "\$@"$' "$KINGO_DIR/kingo" \
+  grep -q '^    exec "\$nono" run --profile "\$profile" --allow-cwd --read "\$reads" -- "\$@"$' "$KINGO_DIR/kingo" \
     || fail "kingo claude does not start its own nono with the line this script copies"
+  has "$dry" "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- " \
+    || fail "for the course, kingo claude would not start nono with the course profile and read access to kingo-pod"
   NONO_BIN=$(ls "$HOME"/.local/share/kingo/nono/*/nono 2>/dev/null | head -n 1)
   [ -x "$NONO_BIN" ] || fail "kingo's nono is not in ~/.local/share/kingo/nono (the workflow runs ./kingo claude nono first)"
   [ "$(command -v nono)" = "$NONO_BIN" ] || fail "this script would run $(command -v nono), not the nono that kingo downloaded ($NONO_BIN)"
@@ -239,7 +242,7 @@ MODEL_PORT=18765
 MODEL_PID=""
 
 stand_in() {  # prepare, and put the stand-in where OpenRouter is in the nono profile
-  local profile="$HOME/.config/nono/profiles/kingo-claude.json"
+  local profile="$HOME/.config/nono/profiles/kingo-claude-base.json"   # the course profile extends this one
   say "what kingo claude would start"
   prepare
   sed -i "s|https://openrouter.ai/api|http://127.0.0.1:$MODEL_PORT|" "$profile"
@@ -528,7 +531,113 @@ part_fresh() {
   ok "kingo named the missing packages, they installed, and the browser made a picture"
 }
 
+# ── a folder of one's own, one's own profile, and git ────────────────────────
+# kingo claude --in <folder> starts Claude Code with the base profile in a folder that is not the course folder.
+# my-nono-profile.json adds to the course profile. And git must work in both places: it is how a student keeps
+# versions of what Claude Code writes.
+part_own() {
+  local out dry d dir="$HOME/projects/thesis" log="$CFG/tmp/model-own.jsonl" mine="$KINGO_DIR/my-nono-profile.json"
+  local base=(nono run --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" --)
+  # in_folder command ...: run it as kingo claude --in runs Claude Code, in the folder
+  in_folder() {
+    ( cd "$dir" &&
+      CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
+      CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" \
+      NONO_NO_SAVE_PROMPT=1 \
+      PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
+        timeout 180 "${base[@]}" "$@" ) 2>&1 || true
+  }
+  # versions <text of the run>: the run made two commits and tidied the repository
+  GIT='git init -q . && git add -A && git -c user.name=ci -c user.email=ci@example.com commit -q -m one && echo more >> git-probe.txt && git -c user.name=ci -c user.email=ci@example.com commit -q -a -m two && git gc -q && echo "commits=$(git log --oneline | wc -l | tr -d " ")"'
+
+  prepare
+  rm -rf "$dir" "$mine"; mkdir -p "$dir" "$HOME/Documents"
+
+  say "kingo claude --in: the folders it does not take"
+  for d in / "$HOME" "$HOME/Documents" "$HOME/.config" /mnt/c/Users/someone "$KINGO_DIR" "$KINGO_DIR/shared" "$(dirname "$KINGO_DIR")" "$HOME/no-such-folder"; do
+    if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$d" 2>&1); then show "$out" 3; fail "kingo claude --in took the folder $d"; fi
+    printf '         | %s\n' "$(printf '%s\n' "$out" | tail -n 1 | cut -c1-140)"
+  done
+  ok "it refuses /, the home folder, Documents, a hidden folder, a Windows folder, kingo-pod, a folder that holds kingo-pod, a folder that is not there"
+
+  say "kingo claude --in: what it would start"
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$dir") || fail "kingo claude --in did not get as far as the start of Claude Code"
+  show "$dry" 2
+  has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- /usr/bin/python3 -I $KINGO_DIR/setup/claude/no_unix_sockets.py claude --settings $KINGO_DIR/setup/claude/settings-in.json --permission-mode default --append-system-prompt You were started with" \
+    || fail "kingo claude --in would not start Claude Code with the base profile, under the lock, with its own settings"
+  [ -z "$(ls -A "$dir")" ] || fail "kingo put a file into the folder: $(ls -A "$dir")"
+  ok "the base profile, the lock, settings from kingo-pod, and no file in the folder"
+
+  say "my-nono-profile.json: the student's own additions to the sandbox of the course"
+  out=$(in_sandbox "${LOCK[@]}" sh -c ': >> "$1" && echo WROTE || echo refused' sh "$KINGO_DIR/shared/own-probe.txt")
+  has "$out" refused || { show "$out" 12; fail "with the course profile alone, the sandbox can already write in shared: the check below would prove nothing"; }
+  sed 's/"extends": "kingo-claude",/"extends": "default",/' "$KINGO_DIR/setup/claude/my-nono-profile.example.json" > "$mine"
+  if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude 2>&1); then show "$out" 3; fail "kingo took a profile that does not extend the course profile"; fi
+  ok "a profile that does not extend the course profile: kingo does not start"
+  cp "$KINGO_DIR/setup/claude/my-nono-profile.example.json" "$mine"
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo claude did not start with the example of my-nono-profile.json"
+  has "$dry" "nono run --profile kingo-claude-mine --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "kingo does not start nono with the student's profile"; }
+  nono profile validate "$HOME/.config/nono/profiles/kingo-claude-mine.json" > "$CFG/tmp/validate.log" 2>&1 \
+    || { show "$(cat "$CFG/tmp/validate.log")" 8; fail "nono does not take the example of my-nono-profile.json"; }
+  out=$(kingo_env timeout 180 nono run --profile kingo-claude-mine --allow-cwd --read "$KINGO_DIR" -- "${LOCK[@]}" \
+    sh -c 'for f in "$@"; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done; echo "pg=$PGHOST n8n=${N8N_BASE_URL:+set}"' sh \
+    "$KINGO_DIR/shared/own-probe.txt" "$KINGO_DIR/own-probe.txt" "$mine" "$OUTSIDE/own-probe.txt" 2>&1 || true)
+  show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused|pg=)')" 6
+  has "$out" "WROTE $KINGO_DIR/shared/own-probe.txt" || { show "$out" 20; fail "with the example profile, the sandbox still cannot write in shared"; }
+  [ "$(printf '%s\n' "$out" | grep -c '^refused ')" = 3 ] || fail "with the example profile, the sandbox can write more than shared (kingo-pod, the profile itself, or a folder outside)"
+  has "$out" "pg=127.0.0.1 n8n=set" || fail "with the example profile, what the course profile gives is gone (PostgreSQL, n8n)"
+  rm -f "$mine" "$KINGO_DIR/shared/own-probe.txt"
+  ok "the example lets Claude Code write in shared and nowhere else new; kingo-pod and the profile itself stay closed"
+
+  stand_in      # writes the profiles again (my-nono-profile.json is gone) and puts the stand-in into the base profile
+  [ ! -e "$HOME/.config/nono/profiles/kingo-claude-mine.json" ] || fail "kingo left the student's profile behind after the file was removed"
+
+  say "the course profile is the base profile plus the course"
+  out=$(in_sandbox "${LOCK[@]}" sh -c 'echo "pg=$PGHOST/$PGDATABASE n8n=${N8N_BASE_URL:+set} langflow=${LANGFLOW_BASE_URL:+set} model=${ANTHROPIC_BASE_URL:+set}"')
+  has "$out" "pg=127.0.0.1/classroom n8n=set langflow=set model=set" || { show "$out" 12; fail "the course profile lost a route or the variables for PostgreSQL"; }
+  ok "course: PostgreSQL, n8n, Langflow and the model are there"
+
+  say "in a folder of one's own, with the base profile"
+  out=$(in_folder "${LOCK[@]}" sh -c 'echo "pg=$PGHOST n8n=${N8N_BASE_URL:-none} model=${ANTHROPIC_BASE_URL:+set}"; : >> here.txt && echo WROTE-HERE; head -n 1 "$1/setup/claude/README.md"; cat "$1/VERSION" 2>&1; cat "$2" 2>&1; ( : >> "$1/setup/claude/x" ) 2>/dev/null && echo WROTE-KINGO' sh "$KINGO_DIR" "$OUTSIDE/secret.txt")
+  has "$out" "pg= n8n=none model=set" || { show "$out" 12; fail "the base profile has something of the course in it, or lost the way to the model"; }
+  has "$out" WROTE-HERE || { show "$out" 12; fail "Claude Code could not write in its folder"; }
+  has "$out" "# How \`kingo claude\` differs" || { show "$out" 12; fail "setup/claude cannot be read: look and the settings are there"; }
+  if has "$out" "$(cat "$KINGO_DIR/VERSION")"; then fail "the rest of kingo-pod can be read from a folder of one's own"; fi
+  if has "$out" "$SECRET"; then fail "a file outside the folder was read"; fi
+  if has "$out" WROTE-KINGO; then fail "setup/claude can be written from a folder of one's own"; fi
+  ok "it writes in the folder, reads setup/claude, and neither the rest of kingo-pod nor a file outside; nothing of the course"
+
+  say "git keeps versions: in the folder, and in the course folder"
+  printf 'first\n' > "$dir/git-probe.txt"
+  out=$(in_folder "${LOCK[@]}" sh -c "$GIT")
+  has "$out" "commits=2" || { show "$out" 20; fail "git does not work in a folder of one's own inside the sandbox"; }
+  rm -rf "$KINGO_DIR/claude/.git"; printf 'first\n' > "$KINGO_DIR/claude/git-probe.txt"
+  out=$(in_sandbox "${LOCK[@]}" sh -c "$GIT")
+  has "$out" "commits=2" || { show "$out" 20; fail "git does not work in the course folder inside the sandbox"; }
+  [ -z "$(cd "$KINGO_DIR" && git status --porcelain -- claude)" ] || fail "kingo-pod's own git sees the repository in the course folder"
+  rm -rf "$KINGO_DIR/claude/.git" "$KINGO_DIR/claude/git-probe.txt"
+  ok "git init, two commits and git gc work in both; kingo-pod's own git does not see the course folder's repository"
+
+  say "the real Claude Code in a folder of one's own, with the settings from the command line"
+  PROBE="pwd; echo made > made-by-claude.txt; echo the-command-ended"
+  model_start "$log"
+  out=$(in_folder "${LOCK[@]}" claude --settings "$KINGO_DIR/setup/claude/settings-in.json" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
+  model_stop "$log"
+  has "$out" KINGO-PROBE-DONE || { show "$out" 40; fail "Claude Code did not finish the turn in a folder of one's own"; }
+  has "$(results "$log")" "$dir" || { show "$(results "$log")" 12; fail "the Bash tool did not run in the folder"; }
+  [ -s "$dir/made-by-claude.txt" ] || fail "the Bash tool did not write in the folder"
+  /usr/bin/python3 - "$log" <<'PYTHON' || fail "Claude Code did not ask for the course's model: the settings from the command line did not count"
+import json, sys
+models = {json.loads(line).get("model") for line in open(sys.argv[1]) if json.loads(line).get("method") == "POST"}
+print("         | models asked for: %s" % ", ".join(sorted(str(m) for m in models)))
+sys.exit(0 if models == {"z-ai/glm-5.3-flash"} else 1)
+PYTHON
+  ok "Claude Code works in the folder and asks for the model that settings-in.json names"
+}
+
 case "${1:-}" in
+  own)     part_own ;;
   look)    part_look ;;
   fresh)   part_fresh ;;
   leave)   part_leave ;;
@@ -536,6 +645,6 @@ case "${1:-}" in
   sandbox) part_sandbox ;;
   claude)  part_claude ;;
   session) part_session ;;
-  *) echo "usage: claude-sandbox.sh lock|sandbox|claude|session|leave|look|fresh"; exit 2 ;;
+  *) echo "usage: claude-sandbox.sh lock|sandbox|claude|session|leave|look|own|fresh"; exit 2 ;;
 esac
 printf '\nAll checks of "%s" passed.\n' "$1"

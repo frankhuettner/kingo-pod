@@ -25,5 +25,29 @@ without the way to OpenRouter.
 | Requests for permission | since version 2.1.283, Claude Code starts in auto mode: a model checks each command, runs what it judges safe and blocks the rest, without asking | Claude asks before a command (manual mode). Shift+Tab switches the mode, to auto mode too: there, GLM 5.3 Flash is the judge. `./kingo yolo` turns the requests off | `kingo-pod/kingo` starts Claude with `--permission-mode default`, and `./kingo yolo` starts it with `--dangerously-skip-permissions`. The sandbox stays the same. |
 | Updates | Claude Code updates itself | no self-update: run the install line again | `kingo-pod/claude/.claude/settings.json`: `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` also turns off the self-update. |
 
+## Changing the sandbox yourself
+
+The sandbox is a profile for nono: `setup/claude/nono-profile-base.json` and `nono-profile.json`, which extends it.
+Both have comments; read them to see what Claude Code gets. To give it more, for example the folder `kingo-pod/shared`:
+
+```
+cp setup/claude/my-nono-profile.example.json my-nono-profile.json
+```
+
+Change `my-nono-profile.json` and start `./kingo claude` again. Your file adds to the course profile; it cannot take
+anything of it away. Claude Code can read the file and cannot change it, so the sandbox is yours to widen, not
+Claude's. Delete the file to go back.
+
+## A folder of your own, without the course
+
+`./kingo claude --in ~/projects/thesis` starts the same Claude Code in that folder: the same sandbox, the same model
+and key, `look`. It writes only in that folder. There is no n8n, no Langflow and no database, and the pod need not
+run. kingo puts no file into your folder. The folder must be inside your home folder; kingo refuses the home folder
+itself, `Documents` as a whole, hidden folders, kingo-pod, and Windows folders (`/mnt/c/...`).
+
+To keep versions of what Claude Code writes, use git in the folder (`git init`); it works inside the sandbox, in the
+course folder `kingo-pod/claude` too. Claude Code can commit. It cannot push: your login for GitHub is outside the
+sandbox. Push from your own terminal.
+
 You may change `claude/.claude/settings.json` and `claude/AGENTS.md`: they are yours after the first start. The nono
 profile is written anew at every start, so a change there does not last.

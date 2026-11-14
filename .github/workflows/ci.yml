@@ -351,6 +351,9 @@ jobs:
       - name: look, with which Claude sees the pages it writes, inside nono under the lock
         run: bash .github/scripts/claude-sandbox.sh look
 
+      - name: A folder of one's own (kingo claude --in), the student's own profile, and git in the sandbox
+        run: bash .github/scripts/claude-sandbox.sh own
+
       - name: A fresh Ubuntu, where the packages that kingo names must be enough for the browser
         run: bash .github/scripts/claude-sandbox.sh fresh
 
