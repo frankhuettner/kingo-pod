@@ -642,6 +642,63 @@ print("         | models asked for: %s" % ", ".join(sorted(str(m) for m in model
 sys.exit(0 if models == {"z-ai/glm-5.3-flash"} else 1)
 PYTHON
   ok "Claude Code works in the folder and asks for the model that settings-in.json names"
+
+  # Another provider for the model. The student's profile gives the route "anthropic" again, with another address,
+  # another key file and another header; nono takes the student's entry in place of the base profile's. The
+  # settings of the course folder name the model. Here the other provider is the stand-in, asked with x-api-key.
+  say "my-nono-profile.json: another provider for the model, with a key of its own"
+  local settings="$KINGO_DIR/claude/.claude/settings.json" other="$HOME/.config/kingo/other.key" log2="$CFG/tmp/model-other.jsonl"
+  ( umask 077; printf 'other-provider-key' > "$other" )
+  cat > "$mine" <<EOF
+{
+  "extends": "kingo-claude",
+  "meta": { "name": "kingo-claude-mine", "version": "1", "description": "another provider for the model" },
+  "network": {
+    "custom_credentials": {
+      "anthropic": {
+        "upstream": "http://127.0.0.1:$MODEL_PORT",
+        "credential_key": "file://$other",
+        "env_var": "ANTHROPIC_API_KEY",
+        "inject_header": "x-api-key",
+        "credential_format": "{}"
+      }
+    }
+  }
+}
+EOF
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo claude did not start with a profile that names another provider"
+  grep -q '"upstream": "https://openrouter.ai/api"' "$HOME/.config/nono/profiles/kingo-claude-base.json" \
+    || fail "the base profile does not name OpenRouter: the run below would not show that the student's profile wins"
+  cp "$settings" "$settings.before"
+  /usr/bin/python3 - "$settings" <<'PYTHON'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+env = data["env"]
+env.pop("ANTHROPIC_API_KEY")                       # the course blanks it; the other provider's route sets it
+for name in list(env):
+    if name == "ANTHROPIC_MODEL" or name.endswith("_MODEL"):
+        env[name] = "other-model"
+json.dump(data, open(sys.argv[1], "w", encoding="utf-8"), indent=2)
+PYTHON
+  PROBE='echo "key-in-sandbox=$ANTHROPIC_API_KEY token-in-sandbox=${ANTHROPIC_AUTH_TOKEN:-none}"; echo the-command-ended'
+  model_start "$log2"
+  out=$(kingo_env timeout 180 nono run --profile kingo-claude-mine --allow-cwd --read "$KINGO_DIR" -- "${LOCK[@]}" \
+    claude --add-dir "$KINGO_DIR" --dangerously-skip-permissions -p "Run the probe." < /dev/null 2>&1 || true)
+  model_stop "$log2"
+  mv "$settings.before" "$settings"; rm -f "$mine" "$other"
+  has "$out" KINGO-PROBE-DONE || { show "$out" 40; fail "Claude Code did not finish the turn with the other provider"; }
+  /usr/bin/python3 - "$log2" <<'PYTHON' || fail "the request to the other provider did not carry its key in x-api-key, or not the model of the settings"
+import json, sys
+posts = [e for e in map(json.loads, open(sys.argv[1])) if e.get("method") == "POST" and e.get("kind") not in ("count", "unknown")]
+seen = sorted({(e.get("model"), e.get("key_header"), e.get("key")) for e in posts})
+for model, header, key in seen:
+    print("         | model %s, header %s, key %s" % (model, header, key))
+sys.exit(0 if seen == [("other-model", "x-api-key", "other-provider-key")] else 1)
+PYTHON
+  if has "$(results "$log2")" "other-provider-key"; then fail "the key of the other provider is readable inside the sandbox"; fi
+  has "$(results "$log2")" "token-in-sandbox=none" || { show "$(results "$log2")" 6; fail "the token of the base profile's route is still set inside the sandbox"; }
+  show "$(results "$log2")" 2
+  ok "the other provider gets its own key in x-api-key and the model of the settings; inside the sandbox the key is a stand-in"
 }
 
 case "${1:-}" in
