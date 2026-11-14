@@ -1,366 +1,31 @@
 name: ci
 
-# Boots the full stack on both engines and runs the smoke check, including a
-# second boot cycle (a first-run-only bug once shipped because a single cycle
-# passed). Replaces the old VM image-build workflow entirely.
+# ON THIS BRANCH ONLY (wip/playwright-trial): the jobs of the real CI are taken out, and one trial runs in their
+# place. This branch is never merged; main keeps its own ci.yml.
+#
+# The trial: can Claude click through a page with Playwright inside the sandbox of `kingo claude`?
+# See .github/scripts/playwright-trial.sh. It reports and fails only when it cannot set up.
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
-# A push supersedes any in-flight run of the same PR branch — without this, a
-# hung podman leg (see the pre-pull step) piles up zombie runs for hours. On
-# main, runs queue instead of cancelling: every main commit keeps its own CI
-# verdict (the job-level timeout bounds a hung run either way).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 jobs:
-  # The stack jobs below install their own engine + compose — they never
-  # execute setup-linux.sh. That is how a broken compose install once shipped
-  # and was first caught by a student in the field (2026-08). This job runs
-  # the REAL script's engine+compose section on a stock Ubuntu 24.04
-  # container — the same starting point as a WSL student's fresh Ubuntu.
-  setup-script:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: setup-linux.sh engine + compose install on stock Ubuntu 24.04
-        run: |
-          docker run --rm -v "$PWD:/repo" -w /repo \
-            -e KINGO_SETUP_ENGINE_ONLY=1 -e DEBIAN_FRONTEND=noninteractive \
-            ubuntu:24.04 bash -c '
-              bash setup/setup-linux.sh
-              docker-compose version --short | grep -Eq "^v?2\." \
-                && echo "compose v2 OK: $(docker-compose version --short)"
-            '
-
-  stack:
-    runs-on: ubuntu-latest
-    # The GitHub default is 360 min — a hang should fail fast with diagnostics
-    # instead. Step-level timeouts below are tighter still; this must stay
-    # ABOVE their sum (40+30+25+45+15 + setup), or a slow-but-legit run gets
-    # killed as a cancellation, which would skip the diagnostics step.
-    timeout-minutes: 175
-    strategy:
-      fail-fast: false
-      matrix:
-        engine: [docker, podman]
-    env:
-      KINGO_ENGINE: ${{ matrix.engine }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Free up disk space
-        # The stack extracts to ~15+ GB; a default runner has only ~14 GB free,
-        # so image pulls fail with "no space left on device". Drop preinstalled
-        # toolchains we don't use to reclaim ~25 GB.
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
-                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
-          df -h / | tail -1
-
-      - name: Show Docker Compose (docker leg)
-        if: matrix.engine == 'docker'
-        run: docker compose version
-
-      - name: Install Podman + Compose v2 provider (podman leg)
-        if: matrix.engine == 'podman'
-        # NOTE (plan §4): podman must use the docker-compose *v2* binary as its
-        # provider — NOT podman-compose, and NOT the apt 'docker-compose' package
-        # (that is the old Python v1). We install the v2 binary explicitly.
-        run: |
-          # The runner image ships its own podman in /usr/local, which wins on
-          # PATH over the apt one — and that build NEVER runs healthchecks
-          # (health stays 'starting' forever, no transient timers), so every
-          # `depends_on: condition: service_healthy` blocks `compose up -d`
-          # until the step times out. Students never have that build. Remove
-          # it and use the apt podman, i.e. exactly what Ubuntu/WSL students
-          # get (verified on the debug-healthcheck branch: apt podman runs
-          # healthchecks and the compose health gate passes).
-          sudo rm -f /usr/local/bin/podman
-          sudo rm -rf /usr/local/lib/podman \
-                      /usr/local/lib/systemd/user/podman.socket /usr/local/lib/systemd/user/podman.service \
-                      /usr/local/lib/systemd/system/podman.socket /usr/local/lib/systemd/system/podman.service \
-                      /usr/local/lib/systemd/system/podman-restart.service /usr/local/lib/systemd/system/podman-auto-update.*
-          sudo systemctl daemon-reload
-          sudo apt-get update
-          # skopeo: `kingo bundle` needs it to convert zstd layers (n8n ships
-          # them) into something docker-archive can carry — the instructor's
-          # machine needs it for the same reason.
-          sudo apt-get install -y podman uidmap skopeo
-          tag=$(curl -fsSL https://api.github.com/repos/docker/compose/releases/latest \
-                | grep -o '"tag_name":[^,]*' | cut -d'"' -f4)
-          sudo curl -fsSL "https://github.com/docker/compose/releases/download/${tag}/docker-compose-linux-x86_64" \
-            -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
-          podman --version
-          docker-compose version --short
-          # Rootless podman runs container healthchecks as systemd USER timers.
-          # The runner user has no login session, so without lingering there is
-          # no user manager: healthchecks never execute, every container stays
-          # health-less, and `depends_on: condition: service_healthy` blocks
-          # `compose up -d` forever (observed: Boot 1 hung for hours with the
-          # stack half-started). enable-linger starts the user manager; the
-          # socket start must be LOUD — silencing it hid exactly this failure.
-          sudo loginctl enable-linger "$(id -un)"
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
-          for i in $(seq 1 10); do [ -S "$XDG_RUNTIME_DIR/bus" ] && break; sleep 1; done
-          # daemon-reload so the user manager forgets the deleted /usr/local
-          # socket unit and picks up the apt one in /usr/lib.
-          systemctl --user daemon-reload
-          systemctl --user enable --now podman.socket
-          systemctl --user --no-pager status podman.socket
-
-      - name: Pre-pull images with retry (podman leg)
-        if: matrix.engine == 'podman'
-        timeout-minutes: 40
-        # Rootless podman pulls the ~10 GB stack much slower than docker, and a
-        # single stuck layer can hang `compose up -d` forever with zero output
-        # (observed: podman legs stuck in "Boot 1" for hours). `kingo pull`
-        # pulls per image with retries (incl. the jupyterhub BASE image the old
-        # jq filter missed) — the same command the setup scripts run for
-        # students, so CI tests the student path too.
-        run: ./kingo pull
-
-      - name: Boot 1 — up + smoke
-        timeout-minutes: 30
-        # fixports first, exactly like the setup scripts do — on a clean runner
-        # it's a no-op, but it keeps the student code path CI-tested.
-        run: |
-          ./kingo fixports
-          ./kingo up
-          ./kingo smoke
-
-      - name: Boot 2 — second cycle catches first-run-only survivors
-        timeout-minutes: 25
-        # With a backup in between, on purpose: with the stack down it has to
-        # start the database alone, and the `up` after it then meets a running
-        # postgres — the order `update` produces when the version changes. The
-        # dumps must hold the apps' real tables (pg_restore reads them back),
-        # and three more runs must leave exactly three folders.
-        run: |
-          set -euo pipefail
-          ./kingo down
-          ./kingo backup
-          d=$(ls -1d backups/*/ | tail -1)
-          for t in "langflow flow" "n8n workflow_entity"; do
-            set -- $t
-            l=$(${{ matrix.engine }} exec -i kingo-postgres pg_restore --list < "$d$1.dump")
-            case "$l" in *" TABLE public $2 "*) ;; *) echo "FAIL: $d$1.dump has no table $2"; exit 1 ;; esac
-          done
-          ./kingo up
-          ./kingo smoke
-          for i in 1 2 3; do sleep 1; ./kingo backup >/dev/null; done
-          n=$(ls -1d backups/*/ | wc -l | tr -d ' ')
-          [ "$n" = 3 ] || { echo "FAIL: $n backup folders, expected 3"; ls backups; exit 1; }
-
-      - name: Boot 3 — mode cycle (abp → n8n → langflow → bi → full)
-        timeout-minutes: 45
-        # Every mode boots and passes smoke (which also asserts compose.yml's
-        # profiles agree with kingo's table for all modes); the containers of
-        # the modes left behind are really gone; the read-only commands work in
-        # every mode; `pull` still sees every image from inside a partial mode
-        # (a class-day `mode full` must never download); `down` from a partial
-        # mode leaves no container and no network behind (that was the trap:
-        # `down` without the full profile exits 0 and keeps the network); and
-        # the colleague's path — the mode from the environment — boots too.
-        run: |
-          set -euo pipefail
-          for m in abp n8n langflow bi full; do
-            echo "=== mode $m"
-            ./kingo mode "$m"
-            ./kingo smoke
-            ./kingo status
-            ./kingo credentials >/dev/null
-            ./kingo version
-            ./kingo mcp >/dev/null
-            ./kingo mode >/dev/null
-            ./kingo memory >/dev/null
-            [ "$(grep '^KINGO_MODE=' .env.local | cut -d= -f2)" = "$m" ] || { echo "FAIL: .env.local does not say KINGO_MODE=$m"; cat .env.local; exit 1; }
-            case "$m" in
-              abp|n8n|langflow)
-                if ${{ matrix.engine }} ps -a --format '{{.Names}}' | grep -q '^kingo-metabase$'; then
-                  echo "FAIL: the Metabase container survived the switch to $m"; exit 1
-                fi ;;
-            esac
-            if [ "$m" = abp ]; then
-              n=$(./kingo pull | grep -c 'already present' || true)
-              [ "$n" -ge 9 ] || { echo "FAIL: pull sees only $n images from inside abp mode"; exit 1; }
-            fi
-          done
-          ./kingo mode abp
-          ./kingo down
-          n=$(${{ matrix.engine }} ps -a --filter name=kingo- -q | wc -l | tr -d ' ')
-          [ "$n" = 0 ] || { echo "FAIL: $n kingo containers left after down from abp"; ${{ matrix.engine }} ps -a; exit 1; }
-          if ${{ matrix.engine }} network ls --format '{{.Name}}' | grep -q '^kingo_default$'; then
-            echo "FAIL: the kingo_default network survived down"; exit 1
-          fi
-          KINGO_MODE=n8n ./kingo up
-          KINGO_MODE=n8n ./kingo smoke
-          KINGO_MODE=n8n ./kingo down
-          # leave the runner in full mode for the USB step (it needs the hub image)
-          ./kingo mode full
-
-      - name: Offline USB path — bundle, verify, wipe, load back
-        timeout-minutes: 15
-        # Issue #5: bundle/load were the only student-facing commands no
-        # machine ever ran, and that is exactly how a bundle holding 3 of 11
-        # images reached a USB stick while reporting success. A full 14 GB
-        # bundle does not fit a runner, so bundle TWO images — postgres and
-        # n8n, the one with the zstd layers that broke `save`. Same code path,
-        # 60 seconds, and it fails on the bug that shipped.
-        run: |
-          set -euo pipefail
-          ./kingo down
-          IMGS="pgvector/pgvector:pg16-trixie n8nio/n8n:2.41.6"
-          # KNOWN GAP, found by this very step on its first run (2026-08-30):
-          # on Ubuntu 24.04's podman 4.9.3 the zstd→gzip conversion does not
-          # stick — `save` still reports the zstd layers and fails. It works on
-          # the instructor machine that built the class bundles, so this is
-          # version-dependent and NOT understood yet. Rather than leave main
-          # red or hide the step behind continue-on-error, fall back to the
-          # gzip-only image: everything after this stays a hard gate on both
-          # engines, and the log says plainly which case ran.
-          if ! KINGO_BUNDLE_IMAGES="$IMGS" ./kingo bundle ci-bundle.tar; then
-            echo "NOTE: bundling the zstd image failed on this engine — known gap, continuing with the gzip image only."
-            IMGS="pgvector/pgvector:pg16-trixie"
-            KINGO_BUNDLE_IMAGES="$IMGS" ./kingo bundle ci-bundle.tar
-          fi
-          # grep -c counts LINES, and manifest.json is one line — count
-          # occurrences instead (this assertion was wrong on its first run).
-          n=$(tar -xOf ci-bundle.tar manifest.json | grep -o '"RepoTags"' | wc -l | tr -d ' ')
-          want=$(printf '%s\n' $IMGS | wc -l | tr -d ' ')
-          [ "$n" = "$want" ] || { echo "bundle holds $n images, expected $want"; exit 1; }
-          # Wipe them, so `load` has to do real work — without this the load is
-          # a no-op and proves nothing (the trap issue #5 names).
-          # shellcheck disable=SC2086
-          ${{ matrix.engine }} rmi -f $IMGS
-          ./kingo load ci-bundle.tar
-          for i in $IMGS; do ${{ matrix.engine }} image inspect "$i" >/dev/null; done
-          echo "load restored: $IMGS"
-          # A tampered/truncated bundle must be REFUSED, not loaded: the
-          # checksum in bundles.sha256 is the only thing standing between a
-          # student and a stick that is not the class file.
-          printf 'x' >> ci-bundle.tar
-          if ./kingo load ci-bundle.tar; then
-            echo "FAIL: a modified bundle was accepted"; exit 1
-          fi
-          echo "modified bundle correctly refused"
-          rm -f ci-bundle.tar
-
-      - name: Diagnostics on failure
-        # also on cancelled(): a job-level timeout cancels rather than fails,
-        # and those are exactly the runs whose logs we need most.
-        if: failure() || cancelled()
-        run: |
-          ${{ matrix.engine }} compose --profile full ps || true
-          ${{ matrix.engine }} compose --profile full logs --tail=80 || true
-
-      - name: Tear down
-        if: always()
-        run: ./kingo down || true
-
-  # Under Linux, and so under Windows (WSL2), nono does not keep a program in the sandbox away from Unix sockets:
-  # through Docker, Podman's API socket or the systemd user manager it could read and write outside the sandbox.
-  # So `kingo claude` starts Claude Code through setup/claude/no_unix_sockets.py. This job runs the real nono with
-  # the course profile. Each way out is tried twice: without that lock it must work (or the check proves nothing),
-  # with it it must not. Then the real Claude Code runs under the lock, a turn and a first session in a terminal,
-  # with a stand-in for the model. Both processor types, because the lock names system calls by number.
-  claude-sandbox:
+  playwright-trial:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        # The two Ubuntu versions that Windows (WSL) installs: 24.04 comes with Python 3.12, 26.04 with Python 3.14.
-        os: [ubuntu-24.04, ubuntu-24.04-arm, ubuntu-26.04, ubuntu-26.04-arm]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Claude Code with the line of the guide; kingo gets its own nono
-        # No nono is installed here: every nono in this job is the one that kingo downloads and checks.
-        run: |
-          curl -fsSL https://claude.ai/install.sh | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          ./kingo claude nono
-          dirname "$(ls "$HOME"/.local/share/kingo/nono/*/nono)" >> "$GITHUB_PATH"
-
-      - name: A user session with systemd, as on a student's Ubuntu
-        # The runner user has no login session. Lingering starts its systemd user manager, which the Podman setup
-        # of setup-linux.sh needs too.
-        run: |
-          sudo loginctl enable-linger "$(id -un)"
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
-          for i in $(seq 1 20); do [ -S "$XDG_RUNTIME_DIR/bus" ] && break; sleep 1; done
-          [ -S "$XDG_RUNTIME_DIR/bus" ]
-          command -v podman >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y podman uidmap; }
-
-      - name: Versions
-        run: |
-          . /etc/os-release && echo "$PRETTY_NAME"
-          uname -srm
-          nono --version
-          claude --version
-          /usr/bin/python3 --version
-          docker --version
-          podman --version
-          systemctl --version | head -1
-
-      - name: The lock by itself
-        run: bash .github/scripts/claude-sandbox.sh lock
-
-      - name: Inside nono, with the course profile
-        run: bash .github/scripts/claude-sandbox.sh sandbox
-
-      - name: Claude Code itself, with a stand-in for the model
-        run: bash .github/scripts/claude-sandbox.sh claude
-
-      - name: A session of Claude Code in a terminal, with the lock
-        run: bash .github/scripts/claude-sandbox.sh session
-
-      - name: The end of a session in a terminal, where nono must not ask to change the profile
-        run: bash .github/scripts/claude-sandbox.sh leave
-
-      - name: look, with which Claude sees the pages it writes, inside nono under the lock
-        run: bash .github/scripts/claude-sandbox.sh look
-
-      - name: A folder of one's own (kingo claude --in), the student's own profile, and git in the sandbox
-        run: bash .github/scripts/claude-sandbox.sh own
-
-      - name: kingo claude --login, with the student's Anthropic login in place of OpenRouter
-        run: bash .github/scripts/claude-sandbox.sh login
-
-      - name: A fresh Ubuntu, where the packages that kingo names must be enough for the browser
-        run: bash .github/scripts/claude-sandbox.sh fresh
-
-      - name: Keep the pictures that look made
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: look-${{ matrix.os }}
-          path: |
-            claude/look/*.png
-            claude/look/*.pdf
-          if-no-files-found: ignore
-
-  # look on a Mac: the sandbox is another one there (Seatbelt), and it keeps other things from the browser than
-  # Landlock does under Linux. No Claude Code turn here: the part "look" of the job above has that.
-  claude-look-mac:
-    runs-on: macos-15
-    timeout-minutes: 20
+        # Ubuntu 24.04 is what Windows (WSL) installs; the Mac has another sandbox (Seatbelt) and no lock.
+        os: [ubuntu-24.04, macos-15]
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Claude Code; kingo gets its own nono
-        # No brew install nono: the script below runs the nono that kingo downloads and checks.
         run: |
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
@@ -369,21 +34,22 @@ jobs:
 
       - name: Versions
         run: |
-          sw_vers
           uname -srm
           nono --version
           claude --version
+          node --version
+          npm --version
 
-      - name: look inside nono with the course profile
-        run: bash .github/scripts/claude-look-mac.sh
+      - name: Playwright inside nono with the course profile
+        run: bash .github/scripts/playwright-trial.sh
 
-      - name: Keep the pictures that look made
+      - name: Keep the pictures
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: look-macos
+          name: playwright-trial-${{ matrix.os }}
           path: |
             claude/look/*.png
-            claude/look/*.pdf
+            claude/.playwright-cli/*
           if-no-files-found: ignore
