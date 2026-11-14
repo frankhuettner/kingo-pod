@@ -27,8 +27,18 @@ without the way to OpenRouter.
 
 ## Changing the sandbox yourself
 
-The sandbox is a profile for nono: `setup/claude/nono-profile-base.json` and `nono-profile.json`, which extends it.
-Both have comments; read them to see what Claude Code gets. To give it more, for example the folder `kingo-pod/shared`:
+The sandbox is a profile for nono, built from small files in `setup/claude/`. Each has comments; read them to see
+what Claude Code gets.
+
+| File | What it holds |
+|---|---|
+| `nono-profile-core.json` | what Claude Code may read, the variables it gets, the rule for `look`. No way to a model |
+| `nono-profile-base.json` | core, and the way to OpenRouter with your key. `./kingo claude --in` starts with it |
+| `nono-profile-course.json` | what the course adds: n8n, Langflow, PostgreSQL |
+| `nono-profile.json` | base and course together. `./kingo claude` starts with it |
+| `nono-profile-login.json`, `-login-course.json`, `-login-open.json` | the same with your Anthropic login in place of OpenRouter (see below) |
+
+To give Claude Code more, for example the folder `kingo-pod/shared`:
 
 ```
 cp setup/claude/my-nono-profile.example.json my-nono-profile.json
@@ -48,6 +58,31 @@ itself, `Documents` as a whole, hidden folders, kingo-pod, and Windows folders (
 To keep versions of what Claude Code writes, use git in the folder (`git init`); it works inside the sandbox, in the
 course folder `kingo-pod/claude` too. Claude Code can commit. It cannot push: your login for GitHub is outside the
 sandbox. Push from your own terminal.
+
+## Your Claude subscription in place of OpenRouter
+
+Do you have a Claude subscription (Pro or Max)? Then `./kingo claude --login` starts the same Claude Code with it:
+Anthropic's models, paid by your subscription, and no OpenRouter key. `--login` goes together with `--in <folder>`.
+
+```
+./kingo claude --login
+```
+
+- **The first start asks you to log in.** On a Mac your browser opens. Under Windows (WSL), Claude Code shows an
+  address: open it in your browser, log in, and paste the code into the terminal.
+- **The login stays outside the sandbox.** nono, the sandbox, reads the answer of Anthropic's login server, keeps the
+  real login for itself and hands Claude Code stand-ins. What Claude Code holds is of no use outside this sandbox.
+  kingo checks this after the login: a login that is not a stand-in, it deletes.
+- **Where nono keeps it:** in `~/.local/state/nono/oauth-capture`, readable only by you, not encrypted, for up to
+  90 days.
+- **One session at a time.** Two sessions with `--login` at once can break the login (a known fault of nono 0.81).
+  Then log out and start again.
+- **To end the login:** `./kingo claude logout`. Do the same when Claude Code says that you are not logged in, and
+  start again.
+- **The model:** Claude Code picks one of Anthropic's models. `/model` inside Claude Code changes it.
+- **Settings and history** of these sessions are in `~/.kingo-claude-login`, apart from those of `./kingo claude`.
+
+Everything else is the same: the sandbox, `look`, and for the course n8n, Langflow and the database.
 
 You may change `claude/.claude/settings.json` and `claude/AGENTS.md`: they are yours after the first start. The nono
 profile is written anew at every start, so a change there does not last.

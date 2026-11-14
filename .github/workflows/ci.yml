@@ -334,6 +334,9 @@ jobs:
       - name: A folder of one's own (kingo claude --in), the student's own profile, and git in the sandbox
         run: bash .github/scripts/claude-sandbox.sh own
 
+      - name: kingo claude --login, with the student's Anthropic login in place of OpenRouter
+        run: bash .github/scripts/claude-sandbox.sh login
+
       - name: A fresh Ubuntu, where the packages that kingo names must be enough for the browser
         run: bash .github/scripts/claude-sandbox.sh fresh
 

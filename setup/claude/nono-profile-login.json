@@ -1,0 +1,56 @@
+{
+  // nono profile "kingo-claude-login": Claude Code with your Anthropic login (a Claude subscription) in a
+  // sandbox, without the course. Written to ~/.config/nono/profiles/kingo-claude-login.json on every start.
+  // `./kingo claude --login --in <folder>` starts Claude Code with this profile; "kingo-claude-login-course"
+  // (nono-profile-login-course.json) adds n8n, Langflow and PostgreSQL for `./kingo claude --login`.
+  // It extends "kingo-claude-core" (nono-profile-core.json) and has no way to OpenRouter.
+  //
+  // How the login stays outside the sandbox (nono calls it "OAuth capture"): the login runs inside the sandbox.
+  // nono's proxy reads the answer of platform.claude.com, keeps the real tokens outside the sandbox
+  // (~/.local/state/nono/oauth-capture, readable only by you, not encrypted) and hands Claude Code stand-ins.
+  // On the way to api.anthropic.com the proxy puts the real tokens back in. So what Claude Code holds, and
+  // what a program in the sandbox could read, is of no use outside this sandbox.
+  // For this, nono reads the traffic to these two hosts (its own certificate, which Claude Code is told to trust).
+  //
+  // Known in nono 0.81.0: two sandboxes with this login at the same time can break each other's login
+  // (nono issues 2087 and 2299). Then log in again: ./kingo claude logout, and start with --login.
+  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.81.
+  "extends": "kingo-claude-core",
+  "meta": {
+    "name": "kingo-claude-login",
+    "version": "0.6.0",
+    "description": "Kingo: Claude Code with an Anthropic login; writes only to the folder it starts in; the real login tokens stay with nono"
+  },
+  "filesystem": {
+    // A Claude config of its own, also apart from the one of the OpenRouter way (~/.kingo-claude): kingo deletes
+    // a login that it finds there, and here the login is wanted. What lies here are nono's stand-ins.
+    "allow": [
+      "$HOME/.kingo-claude-login",
+      "$HOME/.kingo-claude-login.lock"
+    ]
+  },
+  // The network stays open, through nono's proxy, as with the OpenRouter way.
+  "network": { "block": false },
+  "credential_providers": {
+    "claude_code": {
+      "type": "oauth_capture",
+      "token_endpoints": [
+        {
+          "host": "https://platform.claude.com",
+          "path": "/v1/oauth/token",
+          "response_fields": [
+            // The stand-in for the access token keeps the beginning that Claude Code expects of a login token.
+            { "path": "access_token", "kind": "opaque", "format": "sk-ant-oat01-{}" },
+            { "path": "refresh_token", "kind": "opaque" }
+          ],
+          "request_body": "auto",
+          "request_nonce_fields": ["access_token", "refresh_token"]
+        }
+      ],
+      "api_hosts": ["https://api.anthropic.com"]
+    }
+  },
+  "credential_routes": [
+    { "name": "claude_code_oauth", "provider": "claude_code" }
+  ]
+}

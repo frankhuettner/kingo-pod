@@ -63,8 +63,8 @@ grep -q "^CLAUDE_NONO_VERSION=$("$NONO_BIN" --version | sed -n 's/^nono \([0-9.]
   || fail "the nono that kingo downloaded says another version than kingo names: $("$NONO_BIN" --version)"
 "$NONO_BIN" profile validate "$HOME/.config/nono/profiles/kingo-claude.json" > "$CFG/tmp/validate.log" 2>&1 \
   || { show "$(cat "$CFG/tmp/validate.log")" 6; fail "nono does not take the course profile"; }
-grep -q 'allow mach-register (global-name-prefix .*org.chromium.Chromium.MachPortRendezvousServer\.' "$HOME/.config/nono/profiles/kingo-claude-base.json" \
-  || fail "the base profile, which the course profile extends, has no rule for Chrome's Mach service"
+grep -q 'allow mach-register (global-name-prefix .*org.chromium.Chromium.MachPortRendezvousServer\.' "$HOME/.config/nono/profiles/kingo-claude-core.json" \
+  || fail "the core profile, which every profile of kingo claude extends, has no rule for Chrome's Mach service"
 ok "nono is the one kingo downloaded ($("$NONO_BIN" --version | head -n 1)), and it takes the course profile"
 
 say "kingo gets the browser"
@@ -134,11 +134,13 @@ if curl -fsSL -m 60 -o "$HOME/Library/Fonts/Pacifico-Regular.ttf" https://raw.gi
     [ "$out" != "Pacifico:boxes" ] || fail "inside the sandbox, a font that the user installed is drawn as boxes"
     [ "$out" = "Pacifico:own" ] && ok "the browser draws the user's font inside the sandbox" \
       || echo "   RESULT  inside the sandbox the user's font is not drawn with its own letters: ${out:-nothing}"
-    # the comparison: a copy of the base profile without the folder of the user's fonts
-    NOFONT="$CFG/tmp/kingo-claude-base-without-fonts.json"
-    grep -v 'Library/Fonts' "$HOME/.config/nono/profiles/kingo-claude-base.json" > "$NOFONT"
-    if "$NONO_BIN" profile validate "$NOFONT" >/dev/null 2>&1; then
-      PROFILE="$NOFONT"
+    # the comparison: a copy of the core profile without the folder of the user's fonts, and a copy of the base
+    # profile that extends that copy
+    grep -v 'Library/Fonts' "$HOME/.config/nono/profiles/kingo-claude-core.json" > "$HOME/.config/nono/profiles/kingo-claude-core-ci.json"
+    sed 's/"extends": "kingo-claude-core"/"extends": "kingo-claude-core-ci"/' "$HOME/.config/nono/profiles/kingo-claude-base.json" > "$HOME/.config/nono/profiles/kingo-claude-base-ci.json"
+    grep -q '"extends": "kingo-claude-core-ci"' "$HOME/.config/nono/profiles/kingo-claude-base-ci.json" || fail "the copy of the base profile does not extend the copy of the core profile"
+    if "$NONO_BIN" profile validate "$HOME/.config/nono/profiles/kingo-claude-base-ci.json" >/dev/null 2>&1; then
+      PROFILE=kingo-claude-base-ci
       out=$(in_sandbox "$BROWSER_BIN" --headless --no-sandbox --disable-gpu --virtual-time-budget=3000 --user-data-dir="$CFG/tmp/font-inside-2" --dump-dom "file://$HERE/font_check.html#Pacifico" | glyphs)
       PROFILE=kingo-claude
       echo "   RESULT  without the folder of the user's fonts in the profile: ${out:-nothing}"
@@ -178,9 +180,12 @@ ok "one picture, and look says that it did not wait for scripts"
 MODE=""
 
 say "a profile without the rule for the Mach service: look must fall back to one program"
-# the rule is in the base profile, and nothing else is in its list: a copy of the base profile with an empty list
-COPY="$CFG/tmp/kingo-claude-base-without-mach-rule.json"
-python3 - "$HOME/.config/nono/profiles/kingo-claude-base.json" "$COPY" <<'PYTHON'
+# the rule is in the core profile, and nothing else is in its list: a copy of the core profile with an empty list,
+# and a copy of the base profile that extends that copy
+COPY="$HOME/.config/nono/profiles/kingo-claude-core-ci.json"
+sed 's/"extends": "kingo-claude-core"/"extends": "kingo-claude-core-ci"/' "$HOME/.config/nono/profiles/kingo-claude-base.json" > "$HOME/.config/nono/profiles/kingo-claude-base-ci.json"
+grep -q '"extends": "kingo-claude-core-ci"' "$HOME/.config/nono/profiles/kingo-claude-base-ci.json" || fail "the copy of the base profile does not extend the copy of the core profile"
+python3 - "$HOME/.config/nono/profiles/kingo-claude-core.json" "$COPY" <<'PYTHON'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 new, n = re.subn(r'\n\s*"\(allow mach-register [^\n]*"\n', "\n", text)
@@ -188,8 +193,8 @@ assert n == 1, n
 open(sys.argv[2], "w", encoding="utf-8").write(new)
 PYTHON
 if grep -q 'allow mach-register' "$COPY"; then fail "the copy of the profile still has the rule"; fi
-"$NONO_BIN" profile validate "$COPY" > "$CFG/tmp/validate.log" 2>&1 || { show "$(cat "$CFG/tmp/validate.log")" 6; fail "nono does not take the copy of the profile"; }
-PROFILE="$COPY"
+"$NONO_BIN" profile validate "$HOME/.config/nono/profiles/kingo-claude-base-ci.json" > "$CFG/tmp/validate.log" 2>&1 || { show "$(cat "$CFG/tmp/validate.log")" 6; fail "nono does not take the copy of the profile"; }
+PROFILE=kingo-claude-base-ci
 rm -rf "$DIR/look"
 out=$(in_sandbox look look-late.html)
 n=$(printf '%s\n' "$out" | sed -n 's/.* in \([0-9]*\) picture(s).*/\1/p')
@@ -238,6 +243,120 @@ has "$out" "n8n=set" || fail "with the example profile, the route to n8n of the 
 rm -f "$MINE" "$KINGO_DIR/shared/own-probe.txt"
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo claude did not start after the profile was removed"
 ok "the example of my-nono-profile.json lets the sandbox write in shared, and kingo-pod and the profile itself stay closed"
+
+# kingo claude --login on a Mac. No login can be made here: that needs an account. What is checked: what kingo
+# would start; that only the profile of the login step may open the browser; kingo's steps with a stand-in for
+# nono; what the real nono gives with the profiles of the login; and that their network is as closed as before.
+say "kingo claude --login on a Mac: what it would start"
+TPL="$KINGO_DIR/setup/claude"; LCFG="$HOME/.kingo-claude-login"; STORE="$HOME/.local/state/nono/oauth-capture"; PROF="$HOME/.config/nono/profiles"
+mkdir -p "$LCFG/tmp" "$LCFG.lock" "$STORE"
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login) || fail "kingo claude --login did not get as far as the start of Claude Code"
+show "$dry" 3
+has "$dry" "nono run --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- claude --add-dir $KINGO_DIR --settings $TPL/settings-login.json --permission-mode default" \
+  || fail "kingo claude --login would not start Claude Code with the course profile of the login and the settings of the login"
+if has "$dry" " CLAUDE_CODE_MAX_CONTEXT_TOKENS "; then fail "kingo claude --login tells Claude Code the context size of the course's model"; fi
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login --in "$OWN") || fail "kingo claude --login --in did not get as far as the start of Claude Code"
+has "$dry" "nono run --profile kingo-claude-login --allow-cwd --read $TPL -- claude --settings $TPL/settings-in-login.json --permission-mode default --append-system-prompt You were started with" \
+  || { show "$dry" 3; fail "kingo claude --login --in would not start Claude Code with the profile of the login and its own settings"; }
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude logout) || fail "kingo claude logout did not get as far as the logout"
+has "$dry" "nono run --profile kingo-claude-login --allow-cwd -- claude auth logout" || { show "$dry" 3; fail "kingo claude logout would not log out inside the sandbox of the login"; }
+for p in kingo-claude-core kingo-claude-base kingo-claude-course kingo-claude kingo-claude-login kingo-claude-login-course kingo-claude-login-open; do
+  "$NONO_BIN" profile validate "$PROF/$p.json" > "$CFG/tmp/validate.log" 2>&1 || { show "$(cat "$CFG/tmp/validate.log")" 8; fail "nono does not take the profile $p"; }
+done
+ok "the course with the login, a folder of one's own with the login, the logout; nono takes the seven profiles"
+
+say "only the login step may open the browser"
+out=$( ( cd "$LCFG/tmp" && "$NONO_BIN" run --dry-run --profile kingo-claude-login-open --allow-cwd --allow-launch-services -- claude auth login --claudeai ) 2>&1 ) \
+  || { show "$out" 8; fail "nono does not take the profile of the login step with --allow-launch-services"; }
+for p in kingo-claude-login kingo-claude-login-course kingo-claude kingo-claude-base; do
+  if ( cd "$LCFG/tmp" && "$NONO_BIN" run --dry-run --profile "$p" --allow-cwd --allow-launch-services -- true ) >/dev/null 2>&1; then
+    fail "with the profile $p, a session could be started with the right to open pages in the browser"
+  fi
+done
+ok "nono takes --allow-launch-services with kingo-claude-login-open, and with no profile of a session"
+
+say "the steps of kingo around the login, with a stand-in for nono"
+FH="$CFG/tmp/login-home"; CRED="$FH/.kingo-claude-login/.credentials.json"
+rm -rf "$FH"; mkdir -p "$FH/projects/thesis" "$FH/.local/share/kingo/nono/$(sed -n 's/^CLAUDE_NONO_VERSION=//p' "$KINGO_DIR/kingo")"
+cp "$HERE/fake_nono.sh" "$FH/.local/share/kingo/nono/$(sed -n 's/^CLAUDE_NONO_VERSION=//p' "$KINGO_DIR/kingo")/nono"
+chmod +x "$FH"/.local/share/kingo/nono/*/nono
+step() { # <what the stand-in leaves at a login> <arguments of kingo>
+  local login=$1; shift
+  ( cd "$KINGO_DIR" && HOME="$FH" XDG_CONFIG_HOME="" KINGO_CLAUDE_NO_BROWSER=1 STUB_LOGIN="$login" \
+      python3 -c 'import pty, sys; pty.spawn(sys.argv[1:])' ./kingo "$@" < /dev/null 2>&1 | tr -d '\r' ) || true
+}
+out=$(step phantom claude --login --in "$FH/projects/thesis")
+show "$(printf '%s\n' "$out" | grep -v '^STUB  ')" 6
+has "$out" "STUB nono run --profile kingo-claude-login-open --allow-cwd --allow-launch-services -- claude auth login --claudeai" \
+  || { show "$out" 30; fail "on a Mac, kingo does not run the login with the profile that may open the browser"; }
+has "$out" "Logged in." || { show "$out" 30; fail "kingo does not take a login that nono kept outside the sandbox"; }
+sess=$(printf '%s\n' "$out" | awk '/^STUB nono run .*--read /{f=1} f')
+has "$sess" "STUB nono run --profile kingo-claude-login --allow-cwd --read $TPL -- claude --settings $TPL/settings-in-login.json" \
+  || { show "$out" 30; fail "after the login, kingo does not start the session with the profile of the login"; }
+if has "$sess" "allow-launch-services"; then fail "the session after the login may open pages in the browser"; fi
+for p in "CLAUDE_CODE_DISABLE_ARTIFACT=1" "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1" "DISABLE_TELEMETRY=1" "DISABLE_ERROR_REPORTING=1" \
+         "CLAUDE_CODE_MAX_CONTEXT_TOKENS=unset" "CLAUDE_CONFIG_DIR=$FH/.kingo-claude-login" "GIT_CONFIG_NOSYSTEM=1" "NONO_NO_SAVE_PROMPT=1" "PATH starts with $TPL/bin"; do
+  has "$sess" "STUB   $p" || { show "$sess" 16; fail "the start of the session does not get: $p"; }
+done
+out=$(step real claude --login --in "$FH/projects/thesis")
+if has "$out" "auth login"; then show "$out" 30; fail "kingo asks for the login again although one is there"; fi
+out=$(step none claude logout)
+has "$out" "Logged out" || { show "$out" 30; fail "kingo claude logout does not say that it logged out"; }
+[ ! -e "$CRED" ] || fail "after kingo claude logout the login is still in the config folder"
+out=$(step real claude --login --in "$FH/projects/thesis")
+has "$out" "nono did not keep this login outside the sandbox" || { show "$out" 30; fail "kingo took a login that is not nono's stand-in"; }
+if has "$out" "--read "; then show "$out" 30; fail "kingo started a session with a login that is not nono's stand-in"; fi
+[ ! -e "$CRED" ] || fail "a login that is not nono's stand-in stayed in the config folder"
+rm -rf "$FH"
+ok "the login with the browser profile, the session without it and with kingo's variables; logout; a login that nono did not capture is deleted"
+
+say "the sandbox of the login: no way to OpenRouter, the course only with the course, nono's store stays outside"
+# in_login <profile> <folder> <what nono may read> command ...
+in_login() {
+  local profile=$1 where=$2 reads=$3; shift 3
+  ( cd "$where" &&
+    CLAUDE_CONFIG_DIR="$LCFG" CLAUDE_CODE_TMPDIR="$LCFG/tmp" TMPDIR="$LCFG/tmp" NONO_NO_SAVE_PROMPT=1 GIT_CONFIG_NOSYSTEM=1 \
+    PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
+    PATH="$TPL/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
+      "$NONO_BIN" run --profile "$profile" --allow-cwd --read "$reads" -- "$@" ) 2>&1 || true
+}
+MARK="mark-$$-$(date +%s)"
+printf 'store-%s\n' "$MARK" > "$STORE/ci-probe.txt"
+printf 'login-folder-%s\n' "$MARK" > "$LCFG/marker.txt"
+PROBE='echo "base=${ANTHROPIC_BASE_URL:-none} token=${ANTHROPIC_AUTH_TOKEN:-none} proxy=${HTTPS_PROXY:+set} ca=${NODE_EXTRA_CA_CERTS:+set} n8n=${N8N_BASE_URL:+set} langflow=${LANGFLOW_BASE_URL:+set} pg=${PGHOST:-none}"; cat "$1" 2>&1; ls "$(dirname "$1")" 2>&1; for f in "$2/probe" "$3/probe" ./probe-here; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done'
+out=$(in_login kingo-claude-login "$OWN" "$TPL" sh -c "$PROBE" sh "$STORE/ci-probe.txt" "$CFG" "$LCFG")
+show "$(printf '%s\n' "$out" | grep -E '^(base=|WROTE|refused)')" 5
+has "$out" "base=none token=none proxy=set ca=set n8n= langflow= pg=none" || { show "$out" 20; fail "the profile of the login: a way to OpenRouter or something of the course is there, or nono's proxy and certificate are not"; }
+if has "$out" "store-$MARK" || has "$out" "ci-probe.txt"; then fail "the sandbox of the login can read nono's store of the real tokens"; fi
+has "$out" "refused $CFG/probe" || fail "the sandbox of the login can write in the config folder of the OpenRouter way"
+has "$out" "WROTE $LCFG/probe" || fail "the sandbox of the login cannot write in its own config folder"
+has "$out" "WROTE ./probe-here" || fail "the sandbox of the login cannot write in the folder it starts in"
+out=$(in_login kingo-claude-login-course "$DIR" "$KINGO_DIR" sh -c "$PROBE" sh "$STORE/ci-probe.txt" "$CFG" "$LCFG")
+show "$(printf '%s\n' "$out" | grep -E '^(base=|WROTE|refused)')" 5
+has "$out" "base=none token=none proxy=set ca=set n8n=set langflow=set pg=127.0.0.1" || { show "$out" 20; fail "the course profile of the login: a way to OpenRouter is there, or n8n, Langflow or PostgreSQL are not"; }
+if has "$out" "store-$MARK" || has "$out" "ci-probe.txt"; then fail "the sandbox of the login, with the course, can read nono's store of the real tokens"; fi
+rm -f "$DIR/probe-here"
+out=$(in_sandbox sh -c 'cat "$1" 2>&1; cat "$2" 2>&1' sh "$LCFG/marker.txt" "$STORE/ci-probe.txt")
+if has "$out" "$MARK"; then fail "the sandbox of the OpenRouter way can read the config folder of the login, or nono's store"; fi
+ok "login: no OpenRouter, nono's proxy and certificate, its own config folder; the course's routes only with the course; the store is closed"
+
+# On a Mac, nono's rules for the network are what keeps a program in the sandbox from Unix sockets (Docker, Podman)
+# and from the ports of this machine. The OpenRouter way has them through its key route. The login must have them too.
+say "the network of the login's sandbox: no port of this machine and no Unix socket without nono's proxy"
+PORT=18790; WORD="outside-word-$$"
+python3 "$HERE/probe_server.py" "$PORT" "$OWN/probe.sock" "$WORD" &
+SRV=$!
+for i in $(seq 1 20); do curl -s -m 2 "http://127.0.0.1:$PORT/" 2>/dev/null | grep -q "$WORD" && break; sleep 0.5; done
+out="tcp=$(curl -s -m 5 "http://127.0.0.1:$PORT/" 2>/dev/null | head -c 60) unix=$(curl -s -m 5 --unix-socket "$OWN/probe.sock" http://localhost/ 2>/dev/null | head -c 60)"
+[ "$out" = "tcp=$WORD unix=$WORD" ] || { kill "$SRV" 2>/dev/null || true; fail "outside the sandbox the server does not answer ($out): the check would prove nothing"; }
+NET='echo "tcp=$(curl -s -m 5 --noproxy "*" "http://127.0.0.1:$1/" 2>/dev/null | head -c 60)"; echo "unix=$(curl -s -m 5 --noproxy "*" --unix-socket "$2" http://localhost/ 2>/dev/null | head -c 60)"'
+for p in kingo-claude-base kingo-claude-login kingo-claude-login-course; do
+  out=$(in_login "$p" "$OWN" "$TPL" sh -c "$NET" sh "$PORT" "$OWN/probe.sock" | grep -E '^(tcp|unix)=' | tr '\n' ' ')
+  echo "         | $p: $out"
+  if has "$out" "$WORD"; then kill "$SRV" 2>/dev/null || true; fail "with the profile $p, a program in the sandbox reaches a server on this machine without nono's proxy"; fi
+done
+kill "$SRV" 2>/dev/null || true; wait "$SRV" 2>/dev/null || true
+ok "neither the OpenRouter way nor the login reaches the port or the Unix socket"
 
 PROFILE=kingo-claude
 out=$(in_sandbox look look-cv.html)

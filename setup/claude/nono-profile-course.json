@@ -1,0 +1,52 @@
+{
+  // nono profile "kingo-claude-course": what the course adds to the sandbox, without a way to a model.
+  // Written to ~/.config/nono/profiles/kingo-claude-course.json on every start (ports filled in), from this file.
+  // No start uses it alone. The profiles of the course name it next to a way to the model:
+  //   kingo-claude               (nono-profile.json)               OpenRouter and the course
+  //   kingo-claude-login-course  (nono-profile-login-course.json)  the Anthropic login and the course
+  // Here: the keys for n8n and Langflow, which nono's proxy injects, and PostgreSQL, which psql reaches directly.
+  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
+  "extends": "kingo-claude-core",
+  "meta": {
+    "name": "kingo-claude-course",
+    "version": "0.6.0",
+    "description": "Kingo: what the course adds to the sandbox of Claude Code: keys for n8n and Langflow injected by the proxy, and PostgreSQL"
+  },
+  "environment": {
+    // In addition to the variables of the core profile: where psql finds PostgreSQL.
+    "allow_vars": ["PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE"]
+  },
+  "network": {
+    // The routes only inject keys. psql does not use the proxy: see the PostgreSQL rule at the end of this file.
+    "credentials": ["n8n", "langflow"],
+    "custom_credentials": {
+      // nono sets N8N_BASE_URL; Claude sends X-N8N-API-KEY: $N8N_API_KEY (a placeholder).
+      "n8n": {
+        "upstream": "http://127.0.0.1:__N8N_PORT__",
+        "credential_key": "file://__KEYS_DIR__/n8n.key",
+        "env_var": "N8N_API_KEY",
+        "inject_header": "X-N8N-API-KEY",
+        "credential_format": "{}"
+      },
+      // nono sets LANGFLOW_BASE_URL; Claude sends x-api-key: $LANGFLOW_API_KEY (a placeholder).
+      "langflow": {
+        "upstream": "http://127.0.0.1:__LANGFLOW_PORT__",
+        "credential_key": "file://__KEYS_DIR__/langflow.key",
+        "env_var": "LANGFLOW_API_KEY",
+        "inject_header": "x-api-key",
+        "credential_format": "{}"
+      }
+    }
+  },
+  // PostgreSQL, the one port besides the proxy that Claude may connect to.
+  // Mac: a rule of its own for exactly this connection. nono's open_port would also let every
+  // program in the sandbox listen on any port (Seatbelt cannot limit listening to one port).
+  // nono puts such a rule after its own "(deny network*)" only since 0.80; before, it has no effect.
+  "unsafe_macos_seatbelt_rules": [
+    "(allow network-outbound (remote tcp \"localhost:__POSTGRES_PORT__\"))"
+  ],
+  // Linux and Windows (WSL2): open_port, which is limited to this port there.
+  "platform_overrides": {
+    "linux": { "network": { "open_port": [__POSTGRES_PORT__] } }
+  }
+}

@@ -396,14 +396,33 @@ difference students choose between.
   `--version` and `ldd`). In `~/.kingo-claude` or the course folder, a program
   in the sandbox could swap them and would run outside at the next start. The
   CI part `look` tries to write there from inside and must fail.
-- **Two profiles: `kingo-claude-base` (`nono-profile-base.json`) and the course
-  profile `kingo-claude`, which extends it.** nono joins lists and never takes
-  a base entry away, so what every start needs (folders, variables, the route
-  to the model, the rule for `look`) goes into the base, and only n8n, Langflow
-  and PostgreSQL into the course profile. `./kingo claude --in <folder>` starts
-  with the base profile and reads only `setup/claude`. A student's
-  `my-nono-profile.json` (gitignored, in this folder, where the sandbox cannot
-  write) must extend `kingo-claude`. The CI part `own` checks all three.
+- **Seven profile files, because nono only ever adds.** nono joins lists and
+  never takes a base entry away, so each thing is in one file and a start
+  names what it needs (`"extends"` takes a list). `kingo-claude-core`: what
+  every start needs (folders, variables, the rule for `look`), no way to a
+  model. `kingo-claude-base`: core and the route to OpenRouter (`--in`).
+  `kingo-claude-course`: n8n, Langflow, PostgreSQL. `kingo-claude`: base and
+  course. `kingo-claude-login`, `-login-course`: the same with the Anthropic
+  login in place of OpenRouter. `-login-open`: the login step on a Mac. A
+  student's `my-nono-profile.json` (gitignored, in this folder, where the
+  sandbox cannot write) must extend `kingo-claude`; with `--login`, `kingo`
+  writes the login's course profile into the copy that nono reads. The CI
+  parts `own` and `login` check this.
+- **`kingo claude --login`: the login is made inside the sandbox, and nono
+  keeps it outside** (nono's "OAuth capture", `nono-profile-login.json`).
+  Claude Code holds stand-ins. Three rules: `kingo` looks at the form of the
+  tokens after every login and deletes one that is not a stand-in
+  (`claude_login_state`); only the login step gets the right to open the
+  browser (`-login-open` with `--allow-launch-services`), never a session; and
+  this way has its own config folder (`~/.kingo-claude-login`), because in
+  `~/.kingo-claude` `kingo` deletes every login. The CI cannot log in: it
+  checks `kingo`'s steps with a stand-in for nono (`fake_nono.sh`) and the
+  sandbox of the login with the real nono. A real login was tried by hand on a
+  Mac (14 Nov 2026).
+- **The variables for a start are one list (`envs` in `cmd_claude`), which the
+  dry run names and the start exports.** Do not go back to variables in front
+  of the `exec` line over several lines: a comment line between them once cut
+  five of them off without any error.
 - **`claude_in_folder` decides which folder `--in` takes.** It must keep out
   every folder in which a program of the sandbox could write something that
   runs outside later: the home folder, hidden folders, kingo-pod and any
