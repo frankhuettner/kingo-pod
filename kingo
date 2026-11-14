@@ -1333,7 +1333,13 @@ claude_login_state() { # config folder -> 0: both tokens are stand-ins of nono; 
 claude_login_run() { # nono, templates folder, profile, then: options of nono, "--", the command
   local nono=$1 tpl=$2 profile=$3 cfg=$CLAUDE_LOGIN_CFG opts=(); shift 3
   while [ "$1" != -- ]; do opts+=("$1"); shift; done; shift
-  if [ "$(uname -s)" = Linux ]; then set -- /usr/bin/python3 -I "$tpl/no_unix_sockets.py" "$@"; fi
+  # Under Linux the command starts through the lock, as a session does. A session may read kingo-pod (--read);
+  # this sandbox may not, so it gets the one file. (Without it: "can't open file ... Permission denied", and no
+  # login under Linux and WSL2. Found on Frank's Windows laptop, 14 Nov 2026.)
+  if [ "$(uname -s)" = Linux ]; then
+    opts+=(--read-file "$tpl/no_unix_sockets.py")
+    set -- /usr/bin/python3 -I "$tpl/no_unix_sockets.py" "$@"
+  fi
   ( cd "$cfg/tmp" && CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
       DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 GIT_CONFIG_NOSYSTEM=1 NONO_NO_SAVE_PROMPT=1 \
       "$nono" run --profile "$profile" --allow-cwd ${opts[@]+"${opts[@]}"} -- "$@" )

@@ -827,7 +827,7 @@ EOF
 
   out=$(step phantom claude --login --in "$fh/projects/thesis")
   show "$(printf '%s\n' "$out" | grep -v '^STUB  ')" 6
-  has "$out" "STUB nono run --profile kingo-claude-login --allow-cwd -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude auth login --claudeai" \
+  has "$out" "STUB nono run --profile kingo-claude-login --allow-cwd --read-file $tpl/no_unix_sockets.py -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude auth login --claudeai" \
     || { show "$out" 30; fail "without a login, kingo does not run the login inside the sandbox, under the lock"; }
   has "$out" "Logged in." || { show "$out" 30; fail "kingo does not take a login that nono kept outside the sandbox"; }
   sess=$(session_of "$out")
@@ -846,7 +846,7 @@ EOF
   ok "a login is there: kingo starts the session and does not ask again"
 
   out=$(step none claude logout)
-  has "$out" "STUB nono run --profile kingo-claude-login --allow-cwd -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude auth logout" || { show "$out" 30; fail "kingo claude logout does not log out inside the sandbox"; }
+  has "$out" "STUB nono run --profile kingo-claude-login --allow-cwd --read-file $tpl/no_unix_sockets.py -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude auth logout" || { show "$out" 30; fail "kingo claude logout does not log out inside the sandbox"; }
   has "$out" "Logged out" || { show "$out" 30; fail "kingo claude logout does not say that it logged out"; }
   [ ! -e "$cred" ] || fail "after kingo claude logout the login is still in the config folder"
   out=$(step none claude logout)
@@ -898,6 +898,48 @@ EOF
   out=$(in_sandbox "${LOCK[@]}" sh -c 'cat "$1" 2>&1; cat "$2" 2>&1; ls "$(dirname "$2")" 2>&1' sh "$lcfg/marker.txt" "$store/ci-probe.txt")
   if has "$out" "$SECRET"; then fail "the sandbox of the OpenRouter way can read the config folder of the login, or nono's store"; fi
   ok "login: no OpenRouter, nono's proxy and certificate, its own config folder; the course's routes only with the course; the store is closed"
+
+  # kingo itself, with the real nono. The checks above rebuild kingo's lines; here kingo runs them. "claude" is a
+  # stand-in on the PATH, in a folder that the sandbox reads: it says what it was started with, and for
+  # `claude auth login` it leaves a login as nono leaves one. (On 14 Nov 2026 the login step could not read the
+  # lock under WSL2, and no check saw it: every check here gave nono read access that kingo's login step did not.)
+  say "kingo claude --login itself, with the real nono and a stand-in for Claude Code"
+  local sb="$lcfg/stub-bin"
+  mkdir -p "$sb"; rm -f "$lcfg/.credentials.json"
+  cat > "$sb/claude" <<'STUB'
+#!/bin/sh
+echo "STUB-CLAUDE ran: $*" | cut -c1-200
+case "$*" in
+  "auth login"*) printf '{"claudeAiOauth":{"accessToken":"sk-ant-oat01-%s","refreshToken":"nono_%s","expiresAt":1}}' \
+                   abababababababababababababababababababababababababababababababab abababababababababababababababababababababababababababababababab \
+                   > "$CLAUDE_CONFIG_DIR/.credentials.json" ;;
+esac
+STUB
+  chmod +x "$sb/claude"
+  # the comparison: kingo's login step as it was, without read access to the lock
+  out=$( ( cd "$lcfg/tmp" && PATH="$sb:$PATH" CLAUDE_CONFIG_DIR="$lcfg" NONO_NO_SAVE_PROMPT=1 \
+             timeout 120 nono run --profile kingo-claude-login --allow-cwd -- /usr/bin/python3 -I "$tpl/no_unix_sockets.py" claude auth login --claudeai ) 2>&1 || true)
+  has "$out" "no_unix_sockets.py': [Errno 13] Permission denied" \
+    || { show "$out" 12; fail "without read access to the lock, the login step runs all the same: the check below would prove nothing"; }
+  [ ! -e "$lcfg/.credentials.json" ] || fail "the comparison left a login"
+  real_kingo() {
+    ( cd "$KINGO_DIR" && PATH="$sb:$PATH" KINGO_CLAUDE_NO_BROWSER=1 \
+        timeout 180 /usr/bin/python3 -I -c 'import pty, sys; pty.spawn(sys.argv[1:])' ./kingo "$@" < /dev/null 2>&1 | tr -d '\r' ) || true
+  }
+  out=$(real_kingo claude --login --in "$dir")
+  show "$(printf '%s\n' "$out" | grep -E 'STUB-CLAUDE|Logged in|ERROR|Permission denied')" 6
+  if has "$out" "can't open file"; then show "$out" 30; fail "kingo's login step cannot read the lock"; fi
+  has "$out" "STUB-CLAUDE ran: auth login --claudeai" || { show "$out" 40; fail "kingo's login step did not start Claude Code inside the real sandbox"; }
+  has "$out" "Logged in." || { show "$out" 40; fail "kingo did not take the login that its login step left"; }
+  has "$out" "STUB-CLAUDE ran: --settings $tpl/settings-in-login.json" || { show "$out" 40; fail "after its login step, kingo did not start the session inside the real sandbox"; }
+  ok "kingo runs its login step and then the session, both inside the real sandbox, both through the lock"
+  out=$(real_kingo claude logout)
+  show "$(printf '%s\n' "$out" | grep -E 'STUB-CLAUDE|Logged out|ERROR|Permission denied')" 4
+  has "$out" "STUB-CLAUDE ran: auth logout" || { show "$out" 40; fail "kingo claude logout did not start Claude Code inside the real sandbox"; }
+  has "$out" "Logged out" || { show "$out" 40; fail "kingo claude logout did not say that it logged out"; }
+  [ ! -e "$lcfg/.credentials.json" ] || fail "after kingo claude logout the login is still in the config folder"
+  ok "kingo claude logout runs inside the real sandbox too"
+  rm -rf "$sb"
 
   say "the network of the login's sandbox is as closed as that of the OpenRouter way"
   /usr/bin/python3 "$HERE/probe_server.py" "$port" "$dir/probe.sock" "$word" &
