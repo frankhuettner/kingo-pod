@@ -80,7 +80,8 @@ mkdir -p "$PW"
 [ -x "$PW/node_modules/.bin/playwright-cli" ] && [ -f "$PW/node_modules/@playwright/mcp/cli.js" ] || die "Playwright is not in $PW"
 for v in $MCP_OLD; do
   mkdir -p "$PW/old/$v"
-  ( cd "$PW/old/$v" && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts --no-audit --no-fund "@playwright/mcp@$v" 2>&1 | tail -n 1 ) \
+  # a package.json of its own: without one, npm installs into the folder above, which has one
+  ( cd "$PW/old/$v" && printf '{"name": "pw-trial-old", "private": true}\n' > package.json && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts --no-audit --no-fund "@playwright/mcp@$v" 2>&1 | tail -n 1 ) \
     || die "npm did not install the MCP server $v"
   [ -f "$PW/old/$v/node_modules/@playwright/mcp/cli.js" ] || die "the MCP server $v is not in $PW/old/$v"
 done
