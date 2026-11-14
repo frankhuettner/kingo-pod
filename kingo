@@ -1235,10 +1235,15 @@ cmd_claude() {
   # CLAUDE_CODE_MAX_CONTEXT_TOKENS: Claude Code does not know the course's model, assumes a context size (200k tokens,
   # or 1m in the version the TA had on 13 Nov 2026) and warns about it at every start. Saying 200k here drops the
   # warning and makes Claude Code compact a long session at 200k. The model itself takes 1m tokens (OpenRouter).
+  # NONO_NO_SAVE_PROMPT is for nono itself, not for Claude Code. When a session ends in which the sandbox refused
+  # something, nono asks whether to put that into the profile ("[g] grant / [s] suppress / [Enter] skip"). Here the
+  # question leads nowhere: the profile is written again at every start (above), so an answer is gone the next time.
+  # With the variable, nono does not ask. It still prints what it refused.
   CLAUDE_CODE_DISABLE_ARTIFACT=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1 \
   CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
   CLAUDE_CONFIG_DIR="$cfg" CLAUDE_CODE_TMPDIR="$cfg/tmp" TMPDIR="$cfg/tmp" \
   PGHOST=127.0.0.1 PGPORT="$P_POSTGRES" PGUSER="$KINGO_USER" PGPASSWORD="$KINGO_PASSWORD" PGDATABASE=classroom \
+  NONO_NO_SAVE_PROMPT=1 \
     exec nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- "$@"
 }
 
