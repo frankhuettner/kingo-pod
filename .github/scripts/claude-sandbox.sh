@@ -11,7 +11,8 @@
 #                               also: the result of a command holds no lines of bash about its startup files
 #   claude-sandbox.sh session   a session of Claude Code in a terminal, as a student has it (pty_session.py)
 #   claude-sandbox.sh leave     the end of a session in a terminal: nono does not ask to change the profile
-#   claude-sandbox.sh look      look page.html inside nono under the lock: kingo gets the browser, pictures come out
+#   claude-sandbox.sh look      look page.html inside nono under the lock: kingo gets the browser, pictures come out;
+#                               browse fills in a form and opens a page of the internet
 #   claude-sandbox.sh own       kingo claude --in <folder>, my-nono-profile.json, and git inside the sandbox
 #   claude-sandbox.sh login     kingo claude --login: the profiles, kingo's steps around the login, the sandbox
 #   claude-sandbox.sh fresh     a fresh Ubuntu in a container: the packages that kingo names are enough for the browser
@@ -131,7 +132,7 @@ prepare() {
   local v vars
   vars=" $(printf '%s\n' "$dry" | sed -n 's/^  variables: //p')"
   for v in CLAUDE_CODE_DISABLE_ARTIFACT CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC DISABLE_TELEMETRY DISABLE_ERROR_REPORTING \
-           CLAUDE_CODE_MAX_CONTEXT_TOKENS CLAUDE_CONFIG_DIR CLAUDE_CODE_TMPDIR TMPDIR PATH KINGO_BROWSER \
+           CLAUDE_CODE_MAX_CONTEXT_TOKENS CLAUDE_CONFIG_DIR CLAUDE_CODE_TMPDIR TMPDIR PATH KINGO_BROWSER KINGO_NODE KINGO_PLAYWRIGHT \
            GIT_CONFIG_NOSYSTEM NONO_NO_SAVE_PROMPT PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE; do
     has "$vars" " $v " || fail "kingo claude does not set the variable $v for the start"
   done
@@ -151,6 +152,7 @@ prepare() {
   ok "nono is the one kingo downloaded: $("$NONO_BIN" --version | head -n 1)"
   has "$dry" "--append-system-prompt When you have written or changed an HTML page, look at it" \
     || fail "kingo claude does not tell Claude Code how to look at a page"
+  has "$dry" "run it with: browse <script.js>" || fail "kingo claude does not tell Claude Code how to try a page with browse"
   ok "kingo claude puts look on the PATH, says where the browser is, and tells Claude Code how to look at a page"
 }
 
@@ -162,11 +164,12 @@ kingo_env() {
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" \
     PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
     NONO_NO_SAVE_PROMPT=1 GIT_CONFIG_NOSYSTEM=1 \
-    PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
+    PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" KINGO_NODE="$NODE_BIN" KINGO_PLAYWRIGHT="$PW_DIR" \
       "$@" )
 }
 SANDBOX=(nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" --)   # the line of kingo claude
 BROWSER_BIN=""                      # where kingo put the browser; part_look fills it in
+NODE_BIN="" PW_DIR=""               # where kingo put Node.js and playwright-core, for browse; part_look fills them in
 NONO_BIN=""                         # kingo's nono; prepare fills it in
 
 # in_sandbox command ...: run it as kingo claude runs Claude Code; prints its output and nono's.
@@ -437,8 +440,14 @@ part_look() {
   [ -x "$BROWSER_BIN" ] || fail "the browser is not where kingo says it is: $BROWSER_BIN"
   [ ! -e "$CFG/browsers" ] || fail "there is a browser in $CFG, a folder the sandbox can write"
   ok "the browser is there: $BROWSER_BIN"
+  NODE_BIN=$(ls "$HOME"/.local/share/kingo/node/*/node 2>/dev/null | head -n 1)
+  PW_DIR=$(ls -d "$HOME"/.local/share/kingo/playwright/*/ 2>/dev/null | head -n 1); PW_DIR=${PW_DIR%/}
+  [ -x "$NODE_BIN" ] || fail "kingo claude browser did not get Node.js into ~/.local/share/kingo/node"
+  [ -f "$PW_DIR/node_modules/playwright-core/package.json" ] || fail "kingo claude browser did not get playwright-core into ~/.local/share/kingo/playwright"
+  ok "Node.js $("$NODE_BIN" --version) and playwright-core $(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$PW_DIR/node_modules/playwright-core/package.json" | head -n 1), for browse"
   out=$(cd "$KINGO_DIR" && ./kingo claude browser 2>&1) || fail "a second kingo claude browser failed"
   if has "$out" "Getting a browser"; then fail "a second kingo claude browser downloaded it again"; fi
+  if has "$out" "Getting Node.js" || has "$out" "Getting playwright-core"; then fail "a second kingo claude browser downloaded Node.js or playwright-core again"; fi
   ok "a second kingo claude browser downloads nothing"
 
   cat > "$dir/look-cv.html" <<'HTML'
@@ -473,12 +482,13 @@ HTML
   say "the sandbox cannot change what kingo downloaded"
   out=$(in_sandbox "${LOCK[@]}" sh -c 'for f in "$@"; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done' sh \
     "$dir/look-write-probe" "$BROWSER_BIN" "$(dirname "$BROWSER_BIN")/new-file" "$NONO_BIN" "$(dirname "$NONO_BIN")/new-file" \
-    "$HOME/.local/share/kingo/new-file")
-  show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused) ')" 6
+    "$HOME/.local/share/kingo/new-file" "$NODE_BIN" "$(dirname "$NODE_BIN")/new-file" \
+    "$PW_DIR/node_modules/playwright-core/package.json" "$PW_DIR/new-file")
+  show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused) ')" 10
   has "$out" "WROTE $dir/look-write-probe" || fail "the probe proves nothing: it could not write in the course folder either"
-  [ "$(printf '%s\n' "$out" | grep -c '^refused ')" = 5 ] || fail "a program in the sandbox can write where kingo keeps nono or the browser"
+  [ "$(printf '%s\n' "$out" | grep -c '^refused ')" = 9 ] || fail "a program in the sandbox can write where kingo keeps nono, the browser, Node.js or playwright-core"
   rm -f "$dir/look-write-probe"
-  ok "inside the sandbox, the browser, nono and their folders cannot be written"
+  ok "inside the sandbox, the browser, nono, Node.js, playwright-core and their folders cannot be written"
 
   # A font that the user installed: the browser must draw its letters, not boxes. Reports, and fails only on boxes.
   say "a font that the user installed (~/.local/share/fonts)"
@@ -520,6 +530,16 @@ HTML
   out=$(in_sandbox "${LOCK[@]}" look look-cv.html --pdf)
   [ "$(head -c 4 "$dir/look/look-cv.pdf" 2>/dev/null)" = "%PDF" ] || { show "$out" 12; fail "look --pdf made no PDF"; }
   ok "600 pixels wide; a PDF of $(wc -c < "$dir/look/look-cv.pdf") bytes"
+
+  # browse: a script as Claude would write it fills in a form and sends it; then a page of the internet, through
+  # nono's proxy
+  say "browse inside nono, under the lock: a form is filled in and sent, and a page of the internet comes"
+  out=$(in_sandbox "${LOCK[@]}" browse "$HERE/browse_check.js" "$HERE/browse_shop.html" look/browse-shop.png https://github.com/)
+  show "$(printf '%s\n' "$out" | grep '^BROWSE-')" 3
+  has "$out" "BROWSE-SAID Thank you, Mina: 1 Coffee" || { show "$out" 20; fail "browse did not fill in and send the form inside the sandbox"; }
+  /usr/bin/python3 "$HERE/png_check.py" "$dir/look/browse-shop.png" | sed 's/^/         | /' || fail "browse made no picture of the page"
+  printf '%s\n' "$out" | grep '^BROWSE-TITLE ' | grep -q GitHub || { show "$out" 20; fail "browse did not get a page of the internet inside the sandbox"; }
+  ok "browse filled in the form, read the answer, made a picture, and opened github.com"
 
   say "the real Claude Code runs look with its Bash tool"
   PROBE="look look-cv.html; echo the-command-ended"
@@ -571,8 +591,13 @@ part_fresh() {
     cd /w
     bash /k/setup/claude/bin/look page.html
     python3 /k/.github/scripts/png_check.py look/page-1.png
+    # browse: Node.js and playwright-core came with ./kingo claude browser
+    out=$(bash /k/setup/claude/bin/browse /k/.github/scripts/browse_check.js /k/.github/scripts/browse_shop.html look/browse.png 2>&1) \
+      || { echo "$out" | tail -n 8; echo "FRESH: browse did not run"; exit 1; }
+    case "$out" in *"BROWSE-SAID Thank you, Mina: 1 Coffee"*) echo "$out" | grep "^BROWSE-" ;; *) echo "$out" | tail -n 8; echo "FRESH: browse did not fill in the form"; exit 1 ;; esac
+    python3 /k/.github/scripts/png_check.py look/browse.png
   ' || fail "on a fresh $image the browser does not run with the packages that kingo names"
-  ok "kingo named the missing packages, look said what to do, kingo installed them after a yes, and the browser made a picture"
+  ok "kingo named the missing packages, look said what to do, kingo installed them after a yes, the browser made a picture, and browse filled in a form"
 }
 
 # ── a folder of one's own, one's own profile, and git ────────────────────────

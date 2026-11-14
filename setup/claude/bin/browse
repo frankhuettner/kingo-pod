@@ -1,0 +1,64 @@
+#!/bin/bash
+# browse: run a script that opens pages in the browser of look and works with them, as a person would: fill in a
+# form, press a button, read what the page shows then.
+#
+#     browse try.js        runs try.js with Node.js. In it, require('playwright-core') works, and
+#                          chromium.launch() starts the browser of look.
+#
+# The script is CommonJS (require, not import). An example, in the folder of the page:
+#
+#     const { chromium } = require('playwright-core');
+#     const path = require('path');
+#     (async () => {
+#       const browser = await chromium.launch();
+#       const page = await browser.newPage();
+#       await page.goto('file://' + path.resolve('form.html'));
+#       await page.fill('#name', 'Mina');
+#       await page.click('text=Send');
+#       console.log(await page.textContent('#answer'));
+#       await page.screenshot({ path: 'look/form-after-send.png' });
+#       await browser.close();
+#     })();
+#
+# Pages on the internet work too: the browser goes through nono's proxy (browse-setup.js). A web server that a
+# program in the sandbox starts cannot be reached: the sandbox lets no program listen on a port.
+#
+# `kingo claude` gets Node.js and playwright-core with the browser (`./kingo claude browser` gets them again) and
+# says where they are (KINGO_NODE, KINGO_PLAYWRIGHT, KINGO_BROWSER). Everything runs inside the sandbox.
+# Not Playwright's MCP server or its CLI: both open a Unix socket for their browser, which the sandbox refuses
+# (tried on 14 Nov 2026). playwright-core by itself talks to the browser through pipes.
+set -u
+
+stop() { printf 'browse: %s\n' "$*" >&2; exit 1; }
+usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit "${1:-0}"; }
+case "${1:-}" in
+  -h|--help) usage ;;
+  '') usage 2 ;;
+esac
+script=$1; shift
+[ -f "$script" ] || stop "there is no file $script"
+case "$script" in
+  *.mjs|*.mts|*.ts) stop "browse runs CommonJS scripts: a .js or .cjs file that uses require(). Write $script as one." ;;
+esac
+
+here=$(cd "$(dirname "$0")" && pwd -P)
+ask="Ask the student to run this in their own terminal, in the kingo-pod folder:  ./kingo claude browser"
+share="$HOME/.local/share/kingo"
+node=${KINGO_NODE:-}
+if [ -z "$node" ] || [ ! -x "$node" ]; then node=$(ls -d "$share"/node/*/node 2>/dev/null | sort | tail -n 1); fi
+{ [ -n "$node" ] && [ -x "$node" ]; } || stop "Node.js is not installed. $ask"
+pw=${KINGO_PLAYWRIGHT:-}
+if [ -z "$pw" ] || [ ! -f "$pw/node_modules/playwright-core/package.json" ]; then
+  pw=$(ls -d "$share"/playwright/*/node_modules/playwright-core 2>/dev/null | sort | tail -n 1); pw=${pw%/node_modules/playwright-core}
+fi
+{ [ -n "$pw" ] && [ -f "$pw/node_modules/playwright-core/package.json" ]; } || stop "playwright-core is not installed. $ask"
+browser=${KINGO_BROWSER:-}
+if [ -z "$browser" ] || [ ! -x "$browser" ]; then
+  browser=$(ls -d "$share"/browsers/*/chrome-headless-shell-*/chrome-headless-shell 2>/dev/null | sort | tail -n 1)
+fi
+{ [ -n "$browser" ] && [ -x "$browser" ]; } || stop "the browser is not installed. $ask"
+
+# NODE_PATH: require('playwright-core') finds kingo's copy from a script in any folder.
+# UNDICI-EHPA: Node.js says at every start that its support for HTTPS_PROXY is new; nono sets that variable.
+export KINGO_BROWSER="$browser" NODE_PATH="$pw/node_modules"
+exec "$node" --disable-warning=UNDICI-EHPA --require "$here/../browse-setup.js" "$script" "$@"

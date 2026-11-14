@@ -39,13 +39,15 @@
       "$HOME/.cache/claude",
       { "path": "$HOME/Library/Caches/claude-cli-nodejs", "when": "macos" }
     ],
-    // The Claude Code binary from the native installer, and the browser that kingo downloads for look. Read only:
+    // The Claude Code binary from the native installer, the browser that kingo downloads for look, and Node.js and
+    // playwright-core for browse. Read only:
     // kingo starts the browser outside the sandbox too (--version, ldd), so the sandbox must not be able to change it.
     // And the fonts that the user installed. The system knows them by name; when the browser of look cannot read
     // their files, a page that names such a font (for example Pretendard) shows a box for every letter.
     // nono leaves out a folder that does not exist.
     "read": [
       "$HOME/.local/share/claude", "$HOME/.local/share/kingo/browsers",
+      "$HOME/.local/share/kingo/node", "$HOME/.local/share/kingo/playwright",
       { "path": "$HOME/Library/Fonts", "when": "macos" },
       { "path": "$HOME/.local/share/fonts", "when": "linux" },
       { "path": "$HOME/.fonts", "when": "linux" }
@@ -63,7 +65,7 @@
       "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_TMPDIR", "TMPDIR",
       "CLAUDE_CODE_DISABLE_ARTIFACT", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING",
       "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
-      "KINGO_BROWSER", "KINGO_BROWSER_MODE",
+      "KINGO_BROWSER", "KINGO_BROWSER_MODE", "KINGO_NODE", "KINGO_PLAYWRIGHT",
       "GIT_CONFIG_NOSYSTEM"
     ]
   },
