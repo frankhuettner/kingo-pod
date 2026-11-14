@@ -379,6 +379,73 @@ difference students choose between.
   send stays at `sending` for a person to check — it never sends a row twice
   by itself.
 
+## `kingo claude` (Claude Code in the nono sandbox)
+
+- **Under Linux and Windows (WSL2), Claude Code starts through
+  `setup/claude/no_unix_sockets.py`; keep it in the launch line, with no switch
+  around it.** nono does not cover Unix sockets there: Landlock does not see
+  `connect(2)`, and nono's own guard (`linux.af_unix_mediation`) needs seccomp
+  user notification, which WSL2 lacks. Docker, Podman's API socket (which
+  `setup-linux.sh` turns on) and the systemd user manager listen on such sockets
+  and work OUTSIDE the sandbox: one `docker run -v` from inside read a file
+  outside it (found under WSL2, 2026-11-13). The file takes Unix sockets away
+  with a plain seccomp filter; it names system calls by number, per processor
+  type. A Mac needs none of this: the profile's key routes put nono into proxy
+  mode, and there its network rules cover Unix sockets. Dropping the key routes
+  from the profile would open the same gap on a Mac.
+- **The CI job `claude-sandbox` is the proof, on x86-64 and arm64**: with the
+  real nono and the course profile, each way out (Docker, Podman, systemd) is
+  tried without the lock, where it must WORK or the check proves nothing, and
+  with it, where it must not. Then the real Claude Code runs a turn and a first
+  terminal session against a stand-in for the model
+  (`.github/scripts/fake_model.py`, `pty_session.py`). A new Claude Code start
+  screen shows up as a failed session step, with every screen in the log.
+- **`kingo` starts its own nono, one fixed version (`CLAUDE_NONO_VERSION`,
+  with checksums).** The profile leans on how that version behaves. To move to
+  a newer nono: change the version and the four checksums, run the CI, then
+  release. A nono that is installed on the laptop is only the fallback when
+  the download fails.
+- **What `kingo` downloads for Claude Code (nono, the browser of `look`) lives
+  in `~/.local/share/kingo`, never in a folder the sandbox can write.** `kingo`
+  starts these files OUTSIDE the sandbox (nono itself; the browser for
+  `--version` and `ldd`). In `~/.kingo-claude` or the course folder, a program
+  in the sandbox could swap them and would run outside at the next start. The
+  CI part `look` tries to write there from inside and must fail.
+- **Seven profile files, because nono only ever adds.** nono joins lists and
+  never takes a base entry away, so each thing is in one file and a start
+  names what it needs (`"extends"` takes a list). `kingo-claude-core`: what
+  every start needs (folders, variables, the rule for `look`), no way to a
+  model. `kingo-claude-base`: core and the route to OpenRouter (`--in`).
+  `kingo-claude-course`: n8n, Langflow, PostgreSQL. `kingo-claude`: base and
+  course. `kingo-claude-login`, `-login-course`: the same with the Anthropic
+  login in place of OpenRouter. `-login-open`: the login step on a Mac. A
+  student's `my-nono-profile.json` (gitignored, in this folder, where the
+  sandbox cannot write) must extend `kingo-claude`; with `--login`, `kingo`
+  writes the login's course profile into the copy that nono reads. The CI
+  parts `own` and `login` check this.
+- **`kingo claude --login`: the login is made inside the sandbox, and nono
+  keeps it outside** (nono's "OAuth capture", `nono-profile-login.json`).
+  Claude Code holds stand-ins. Three rules: `kingo` looks at the form of the
+  tokens after every login and deletes one that is not a stand-in
+  (`claude_login_state`); only the login step gets the right to open the
+  browser (`-login-open` with `--allow-launch-services`), never a session; and
+  this way has its own config folder (`~/.kingo-claude-login`), because in
+  `~/.kingo-claude` `kingo` deletes every login. The CI cannot log in: it
+  checks `kingo`'s steps with a stand-in for nono (`fake_nono.sh`) and the
+  sandbox of the login with the real nono. A real login was tried by hand on a
+  Mac (14 Nov 2026).
+- **The variables for a start are one list (`envs` in `cmd_claude`), which the
+  dry run names and the start exports.** Do not go back to variables in front
+  of the `exec` line over several lines: a comment line between them once cut
+  five of them off without any error.
+- **`claude_in_folder` decides which folder `--in` takes.** It must keep out
+  every folder in which a program of the sandbox could write something that
+  runs outside later: the home folder, hidden folders, kingo-pod and any
+  folder that holds kingo-pod.
+- **`look` on a Mac needs the `mach-register` rule in the profile** (Chrome's
+  helper programs). Without it `look` falls back to `--single-process`, which
+  cannot wait for a page's scripts. The CI job `claude-look-mac` runs both.
+
 ## Layout
 
 - `compose.yml` — the 10-service stack (ports via `KINGO_PORT_*`; profiles =

@@ -46,3 +46,10 @@ shared/*
 
 # Screenshots taken while checking the site locally.
 .playwright-mcp/
+
+# Your own additions to the sandbox of `kingo claude` (see
+# setup/claude/my-nono-profile.example.json) — yours, never part of the class repo.
+/my-nono-profile.json
+
+# What Python leaves behind when it runs a script of this repo.
+__pycache__/
