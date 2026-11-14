@@ -325,3 +325,19 @@ jobs:
 
       - name: The end of a session in a terminal, where nono must not ask to change the profile
         run: bash .github/scripts/claude-sandbox.sh leave
+
+      # A trial, not a check: it reports and fails nothing. The lines that start with RESULT say what worked.
+      - name: "A trial: a browser in the sandbox makes a picture of a page"
+        continue-on-error: true
+        run: bash .github/scripts/claude-sandbox.sh browser
+
+      - name: Keep the pictures of the trial
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-trial-${{ matrix.os }}
+          path: |
+            claude/probe-*.png
+            claude/probe-page.pdf
+          if-no-files-found: ignore
