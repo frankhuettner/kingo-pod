@@ -11,6 +11,7 @@
 #                               also: the result of a command holds no lines of bash about its startup files
 #   claude-sandbox.sh session   a session of Claude Code in a terminal, as a student has it (pty_session.py)
 #   claude-sandbox.sh leave     the end of a session in a terminal: nono does not ask to change the profile
+#   claude-sandbox.sh browser   a trial, not a check: does a browser in the sandbox make a picture of a page?
 #
 # Each way out is tried twice. Without the lock it must work, or the check would prove nothing. With the lock it
 # must not work.
@@ -383,12 +384,113 @@ part_leave() {
   ok "the program ends, and nono does not ask"
 }
 
+# ── a trial: a browser in the sandbox ────────────────────────────────────────
+# Can a program in the sandbox look at a page it has built? It needs a browser without a window that makes a
+# picture of the page. This part tries that and reports; it fails nothing. Each browser is tried three times:
+# outside the sandbox, inside nono with the course profile, and inside nono under the lock, as kingo claude starts
+# Claude Code. --no-sandbox turns off Chromium's own sandbox, which needs rights that nono takes away; nono's stays.
+part_browser() {
+  local page="$KINGO_DIR/claude/probe-page.html" store="$CFG/browsers" out bin name where png n=0 best="" list=()
+
+  say "what kingo claude would start"
+  prepare
+
+  say "the browsers of Playwright, put into $store, a folder that the course profile grants"
+  if command -v npx >/dev/null 2>&1; then
+    out=$(PLAYWRIGHT_BROWSERS_PATH="$store" npx -y playwright@latest install --with-deps chromium chromium-headless-shell 2>&1) \
+      || out=$out$'\n'$(PLAYWRIGHT_BROWSERS_PATH="$store" npx -y playwright@latest install chromium chromium-headless-shell 2>&1) \
+      || true
+    show "$out" 6
+    du -sh "$store" 2>/dev/null | sed 's/^/         | size: /' || true
+  else
+    echo "         | no npx on this machine"
+  fi
+  while IFS= read -r bin; do list+=("$bin"); done < <(
+    find "$store" -type f \( -name chrome -o -name chrome-headless-shell -o -name headless_shell \) 2>/dev/null | sort)
+  for name in google-chrome chromium chromium-browser; do
+    if bin=$(command -v "$name" 2>/dev/null); then list+=("$bin"); fi
+  done
+  [ "${#list[@]}" -gt 0 ] || { echo "   RESULT  no browser on this machine: nothing tried"; return 0; }
+
+  cat > "$page" <<'HTML'
+<!doctype html><html><head><meta charset="utf-8"><title>Probe</title>
+<style>body{font-family:sans-serif;margin:40px}h1{color:#1a4d8f}.bar{height:60px;background:linear-gradient(90deg,#e4572e,#f3a712,#76b041)}
+.cols{display:flex;gap:20px;margin-top:20px}.cols div{flex:1;border:1px solid #888;padding:10px}</style></head>
+<body><h1>Curriculum Vitae</h1><div class="bar"></div>
+<div class="cols"><div><b>Education</b><br>MBA, 2026</div><div><b>Experience</b><br>Analyst, 2021 to 2025</div></div>
+<p id="p">the script did not run</p><script>document.getElementById("p").textContent = "the script ran: " + (6 * 7)</script>
+</body></html>
+HTML
+
+  # picture <file>: says its size and how much it shows; fails when it is no picture or shows one colour only
+  picture() {
+    /usr/bin/python3 - "$1" <<'PY'
+import struct, sys, zlib
+data = open(sys.argv[1], "rb").read()
+assert data[:8] == b"\x89PNG\r\n\x1a\n", "not a PNG"
+width, height = struct.unpack(">II", data[16:24])
+at, pixels = 8, b""
+while at < len(data):
+    length, kind = struct.unpack(">I4s", data[at:at + 8])
+    if kind == b"IDAT":
+        pixels += data[at + 8:at + 8 + length]
+    at += 12 + length
+values = len(set(zlib.decompress(pixels)))
+print("%d x %d, %d kB, %d different values" % (width, height, len(data) // 1024, values))
+sys.exit(0 if values > 8 else 1)
+PY
+  }
+
+  # look <where> command ...: run the browser, then say whether the picture is there
+  look() {
+    local got; where=$1; shift
+    png="$KINGO_DIR/claude/probe-$n-$where.png"
+    rm -f "$png"
+    out=$("$@" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --hide-scrollbars --window-size=900,600 \
+      --user-data-dir="$CFG/tmp/browser-$n-$where" --screenshot="$png" "file://$page" 2>&1) || true
+    if [ -s "$png" ] && got=$(picture "$png" 2>&1); then
+      printf '   RESULT  %-24s %-18s a picture (%s)\n' "$name" "$where" "$got"
+      return 0
+    fi
+    printf '   RESULT  %-24s %-18s NO picture\n' "$name" "$where"
+    show "$out" 8
+    return 1
+  }
+
+  for bin in "${list[@]}"; do
+    n=$((n + 1))
+    name=$(basename "$bin")
+    case "$bin" in "$store"/*) name="playwright $name" ;; esac
+    say "browser $n: $bin"
+    show "$(try 20 "$bin" --version)" 1
+    look outside kingo_env timeout 90 "$bin" || true
+    look in-nono kingo_env timeout 180 "${SANDBOX[@]}" timeout 90 "$bin" || true
+    if look in-nono-locked kingo_env timeout 180 "${SANDBOX[@]}" "${LOCK[@]}" timeout 90 "$bin"; then
+      [ -n "$best" ] || best=$bin
+    fi
+  done
+
+  say "what else the first browser that works under the lock can do there"
+  if [ -z "$best" ]; then echo "   RESULT  no browser made a picture under the lock"; return 0; fi
+  out=$(in_sandbox "${LOCK[@]}" timeout 90 "$best" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+    --user-data-dir="$CFG/tmp/browser-dom" --dump-dom "file://$page")
+  if has "$out" "the script ran: 42"; then echo "   RESULT  the script of the page ran"
+  else echo "   RESULT  the script of the page did NOT run"; show "$out" 6; fi
+  rm -f "$KINGO_DIR/claude/probe-page.pdf"
+  out=$(in_sandbox "${LOCK[@]}" timeout 90 "$best" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+    --user-data-dir="$CFG/tmp/browser-pdf" --no-pdf-header-footer --print-to-pdf="$KINGO_DIR/claude/probe-page.pdf" "file://$page")
+  if [ "$(head -c 4 "$KINGO_DIR/claude/probe-page.pdf" 2>/dev/null)" = "%PDF" ]; then
+    echo "   RESULT  the page as a PDF: $(wc -c < "$KINGO_DIR/claude/probe-page.pdf") bytes"
+  else echo "   RESULT  NO PDF of the page"; show "$out" 6; fi
+}
+
 case "${1:-}" in
+  browser) part_browser ;;
   leave)   part_leave ;;
   lock)    part_lock ;;
   sandbox) part_sandbox ;;
   claude)  part_claude ;;
   session) part_session ;;
-  *) echo "usage: claude-sandbox.sh lock|sandbox|claude|session|leave"; exit 2 ;;
+  *) echo "usage: claude-sandbox.sh lock|sandbox|claude|session|leave|browser"; exit 2 ;;
 esac
 printf '\nAll checks of "%s" passed.\n' "$1"
