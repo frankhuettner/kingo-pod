@@ -40,8 +40,8 @@ jobs:
           node --version
           npm --version
 
-      - name: Playwright inside nono with the course profile
-        run: bash .github/scripts/playwright-trial.sh
+      - name: "Round 3: one port of localhost inside nono, and playwright-core on its page and on the internet"
+        run: bash .github/scripts/port-trial.sh
 
       - name: Keep the pictures
         if: always()
@@ -51,5 +51,4 @@ jobs:
           name: playwright-trial-${{ matrix.os }}
           path: |
             claude/look/*.png
-            claude/.playwright-cli/*
           if-no-files-found: ignore
