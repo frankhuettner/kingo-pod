@@ -10,6 +10,7 @@
 #   claude-sandbox.sh claude    one turn of Claude Code inside nono, with a stand-in for the model (fake_model.py)
 #                               also: the result of a command holds no lines of bash about its startup files
 #   claude-sandbox.sh session   a session of Claude Code in a terminal, as a student has it (pty_session.py)
+#   claude-sandbox.sh leave     the end of a session in a terminal: nono does not ask to change the profile
 #
 # Each way out is tried twice. Without the lock it must work, or the check would prove nothing. With the lock it
 # must not work.
@@ -120,6 +121,9 @@ prepare() {
   has "$dry" "-- /usr/bin/python3 -I $KINGO_DIR/setup/claude/no_unix_sockets.py claude --add-dir $KINGO_DIR --permission-mode default" \
     || fail "under Linux, kingo claude would start Claude Code without the lock"
   ok "kingo claude starts Claude Code through the lock, and has written the nono profile"
+  grep -q '^  NONO_NO_SAVE_PROMPT=1 \\$' "$KINGO_DIR/kingo" \
+    || fail "kingo claude does not start nono with NONO_NO_SAVE_PROMPT=1: nono would ask to change the profile when a session ends"
+  ok "kingo claude starts nono with NONO_NO_SAVE_PROMPT=1"
 }
 
 # kingo_env command ...: run it in the course folder with the variables that kingo claude sets for Claude Code
@@ -129,6 +133,7 @@ kingo_env() {
     CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 \
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" \
     PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
+    NONO_NO_SAVE_PROMPT=1 \
       "$@" )
 }
 SANDBOX=(nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" --)   # the line of kingo claude
@@ -302,15 +307,19 @@ part_claude() {
 # What a student does at the first ./kingo claude under Linux: the start screens, a prompt, yes to the command.
 # The command line is the one kingo claude runs, with the lock. pty_session.py plays the student and keeps every
 # screen; the model is the stand-in again.
-part_session() {
-  local log="$CFG/tmp/model-session.jsonl" screens="$CFG/tmp/session-screens.txt" rc=0
-
-  stand_in
+need_pyte() {
   /usr/bin/python3 -c 'import pyte' 2>/dev/null \
     || /usr/bin/python3 -m pip install --user --break-system-packages -q pyte 2>/dev/null \
     || sudo apt-get install -y -q python3-pyte >/dev/null \
     || fail "pyte, which pty_session.py needs, could not be installed"
   /usr/bin/python3 -c 'import pyte' || fail "pyte, which pty_session.py needs, is not there"
+}
+
+part_session() {
+  local log="$CFG/tmp/model-session.jsonl" screens="$CFG/tmp/session-screens.txt" rc=0
+
+  stand_in
+  need_pyte
 
   say "a first session: theme, security notes, trust in the folder, a prompt, yes to the command"
   model_start "$log"
@@ -329,11 +338,57 @@ part_session() {
   show "$(results "$log")" 4
 }
 
+# ── the end of a session ─────────────────────────────────────────────────────
+# When a program in a terminal ends and the sandbox refused something on the way, nono asks whether to put that into
+# the profile: a list under "Review denied paths", or one line that ends with "[Enter] skip". kingo claude writes the
+# profile again at every start, so it starts nono with NONO_NO_SAVE_PROMPT=1, and nono does not ask. Tried twice
+# here, in a terminal: without the variable, as a comparison, and with it. The program reads the file outside, which
+# the sandbox refuses, and ends.
+
+# leave <screens> [env arguments ...]: -> "asked", "ended" or "stuck"
+leave() {
+  local screens=$1 steps="$CFG/tmp/leave-steps.json" rc=0; shift
+  printf '%s\n' '{"until": ["Review denied paths", "[Enter] skip"], "seconds": 60, "steps": []}' > "$steps"
+  kingo_env timeout 120 env "$@" /usr/bin/python3 "$HERE/pty_session.py" "$steps" "$screens" \
+    "${SANDBOX[@]}" "${LOCK[@]}" sh -c "cat '$OUTSIDE/secret.txt'; echo the-program-ended" >/dev/null || rc=$?
+  if [ "$rc" = 0 ]; then echo asked
+  elif grep -q '^===== the program ended' "$screens"; then echo ended
+  else echo stuck; fi
+}
+
+part_leave() {
+  local plain="$CFG/tmp/leave-plain.txt" quiet="$CFG/tmp/leave-quiet.txt" got
+
+  say "what kingo claude would start"
+  prepare
+  need_pyte
+
+  say "without the variable, as a comparison"
+  got=$(leave "$plain" -u NONO_NO_SAVE_PROMPT)
+  sed 's/^/         | /' "$plain" | cut -c1-170 | tail -n 25
+  has "$(cat "$plain")" the-program-ended || fail "the program did not run in the terminal"
+  if has "$(cat "$plain")" "$SECRET"; then fail "the program read the file outside"; fi
+  case "$got" in
+    asked) ok "nono asks whether to change the profile (this is the question that students got)" ;;
+    ended) ok "this nono does not ask here, even without the variable: the run below proves less" ;;
+    *)     fail "the program did not end, and nono's question did not come" ;;
+  esac
+
+  say "with NONO_NO_SAVE_PROMPT=1, as kingo claude starts nono"
+  got=$(leave "$quiet")
+  sed 's/^/         | /' "$quiet" | cut -c1-170 | tail -n 25
+  has "$(cat "$quiet")" the-program-ended || fail "the program did not run in the terminal"
+  if has "$(cat "$quiet")" "$SECRET"; then fail "the program read the file outside"; fi
+  [ "$got" = ended ] || fail "nono still asks, or the program did not end ($got)"
+  ok "the program ends, and nono does not ask"
+}
+
 case "${1:-}" in
+  leave)   part_leave ;;
   lock)    part_lock ;;
   sandbox) part_sandbox ;;
   claude)  part_claude ;;
   session) part_session ;;
-  *) echo "usage: claude-sandbox.sh lock|sandbox|claude|session"; exit 2 ;;
+  *) echo "usage: claude-sandbox.sh lock|sandbox|claude|session|leave"; exit 2 ;;
 esac
 printf '\nAll checks of "%s" passed.\n' "$1"

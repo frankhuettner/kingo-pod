@@ -342,3 +342,6 @@ jobs:
 
       - name: A session of Claude Code in a terminal, with the lock
         run: bash .github/scripts/claude-sandbox.sh session
+
+      - name: The end of a session in a terminal, where nono must not ask to change the profile
+        run: bash .github/scripts/claude-sandbox.sh leave

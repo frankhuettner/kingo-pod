@@ -2,7 +2,7 @@
 
     python3 pty_session.py STEPS.json SCREENS.txt command [argument ...]
 
-STEPS.json: {"until": "a word that ends the session with success", "seconds": 120,
+STEPS.json: {"until": "a word that ends the session with success (or a list of such words)", "seconds": 120,
              "steps": [{"see": "a regular expression on the screen", "send": "keys", "name": "..."}, ...]}
 
 The steps are tried in their order whenever the screen has changed and then stood still for a moment. A step is used
@@ -38,6 +38,7 @@ def main():
     screen = pyte.Screen(COLUMNS, ROWS)
     stream = pyte.ByteStream(screen)
     steps = [dict(step, done=False) for step in plan["steps"]]
+    words = [plan["until"]] if isinstance(plan["until"], str) else plan["until"]
     end = time.time() + plan.get("seconds", 120)
     shown, last_change, result, alive = None, time.time(), None, True
 
@@ -64,7 +65,7 @@ def main():
             if now != shown:
                 shown, last_change = now, time.time()
                 note("screen")
-            if plan["until"] in now:
+            if any(word in now for word in words):
                 result = 0
             elif not alive:
                 result = 1
