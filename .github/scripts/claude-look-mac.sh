@@ -10,10 +10,10 @@
 #     allows exactly that name. Without the rule, look starts Chrome as one program (--single-process), which
 #     cannot wait for a page's scripts.
 # The checks: kingo gets its own nono and the browser; a program in the sandbox cannot change either; look makes
-# pictures and a PDF inside nono with the course profile and waits for scripts; testpage fills in a form and opens a
+# pictures and a PDF inside nono with the course profile and waits for scripts; clickthrough fills in a form and opens a
 # page of the internet through nono's proxy, and its pages cannot reach a service on this laptop by http or
-# WebSocket; under a copy of the profile without
-# the rule, look falls back to one program and says so.
+# WebSocket, whatever the script does (its own routes, a copy of Playwright of its own, the other ways of Playwright's
+# API); under a copy of the profile without the rule, look falls back to one program and says so.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -23,7 +23,7 @@ DIR="$KINGO_DIR/claude"
 PROFILE=kingo-claude
 MODE=""                            # KINGO_BROWSER_MODE; kingo claude sets none
 NONO_BIN=""
-NODE_BIN_FOR_TESTPAGE="" PW_DIR=""   # Node.js and playwright-core for testpage; filled in after kingo claude browser
+NODE_BIN_FOR_CLICKTHROUGH="" PW_DIR=""   # Node.js and playwright-core for clickthrough; filled in after kingo claude browser
 
 say()  { printf '\n── %s\n' "$*"; }
 ok()   { printf '   ok    %s\n' "$*"; }
@@ -36,60 +36,128 @@ in_sandbox() {
   ( cd "$DIR" &&
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 \
     PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" KINGO_BROWSER_MODE="$MODE" \
-    KINGO_NODE="$NODE_BIN_FOR_TESTPAGE" KINGO_PLAYWRIGHT="$PW_DIR" KINGO_DEV_PORT=5173 \
+    KINGO_NODE="$NODE_BIN_FOR_CLICKTHROUGH" KINGO_PLAYWRIGHT="$PW_DIR" KINGO_DEV_PORT=5173 \
       "$NONO_BIN" run --profile "$PROFILE" --allow-cwd --read "$KINGO_DIR" -- "$@" ) 2>&1 || true
 }
-# testpage_block <where> command ...: a listener on the runner stands for n8n; the pages of testpage_block.js try to reach it
-# by http and by WebSocket (setup/claude/testpage-setup.js closes both). curl reaches it first, or the check proves nothing.
-testpage_block() {
-  local where=$1 port=18765 log="$CFG/tmp/testpage-listener.log" out pid; shift
+# clickthrough_block <where> command ...: a listener on the runner stands for n8n; the pages of clickthrough_block.js try to reach it
+# by http and by WebSocket (setup/claude/clickthrough-setup.js closes both). curl reaches it first, or the check proves nothing.
+clickthrough_block() {
+  local where=$1 port=18765 log="$CFG/tmp/clickthrough-listener.log" out pid; shift
   mkdir -p "$CFG/tmp"; : > "$log"
-  python3 "$HERE/testpage_listener.py" "$port" "$log" & pid=$!
+  python3 "$HERE/clickthrough_listener.py" "$port" "$log" & pid=$!
   sleep 1
   curl -s -m 5 "http://127.0.0.1:$port/control" > /dev/null || true
   grep -q '/control' "$log" || { kill "$pid"; fail "the listener on port $port does not answer curl"; }
   : > "$log"
-  out=$("$@" "$HERE/testpage_block.js" "$port" "$HERE/testpage_shop.html" https://github.com/ 2>&1) || true
+  out=$("$@" "$HERE/clickthrough_block.js" "$port" "$HERE/clickthrough_shop.html" https://github.com/ 2>&1) || true
   sleep 2; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true
-  has "$out" BLOCK-DONE || { show "$out" 20; fail "$where, testpage_block.js did not finish"; }
-  ! grep -q '^ARRIVED' "$log" || { show "$(cat "$log")" 12; fail "$where, a page in testpage reached a service on this laptop"; }
-  has "$out" "BLOCK-GOTO testpage opens https pages and files" || { show "$out" 20; fail "$where, page.goto on an http address did not stop with testpage's words"; }
+  has "$out" BLOCK-DONE || { show "$out" 20; fail "$where, clickthrough_block.js did not finish"; }
+  ! grep -q '^ARRIVED' "$log" || { show "$(cat "$log")" 12; fail "$where, a page in clickthrough reached a service on this laptop"; }
+  has "$out" "BLOCK-GOTO clickthrough opens https pages and files" || { show "$out" 20; fail "$where, page.goto on an http address did not stop with clickthrough's words"; }
   ok "$where: no request arrived from the pages ($(grep -c '^TLS' "$log" || true) TLS handshakes, no request in them); page.goto said: $(printf '%s\n' "$out" | sed -n 's/^BLOCK-GOTO //p' | cut -c1-60) ..."
 }
-# testpage_dev <where> command ...: testpage --dev with a stand-in dev server (testpage_devserver.py) on the runner,
+# clickthrough_dev <where> command ...: clickthrough --dev with a stand-in dev server (clickthrough_devserver.py) on the runner,
 # outside nono, as a student's own terminal runs npm run dev. Its page loads, fetches and opens its WebSocket; a page
 # of the internet must not reach it by http.
-testpage_dev() {
-  local where=$1 port=5173 log="$CFG/tmp/testpage-dev.log" out pid; shift
+clickthrough_dev() {
+  local where=$1 port=5173 log="$CFG/tmp/clickthrough-dev.log" out pid; shift
   mkdir -p "$CFG/tmp"; : > "$log"
-  python3 "$HERE/testpage_devserver.py" "$port" "$log" > /dev/null & pid=$!
+  python3 "$HERE/clickthrough_devserver.py" "$port" "$log" > /dev/null & pid=$!
   sleep 1
-  out=$("$@" --dev "$port" "$HERE/testpage_dev.js" "$port" https://github.com/ 2>&1) || true
+  out=$("$@" --dev "$port" "$HERE/clickthrough_dev.js" "$port" https://github.com/ 2>&1) || true
   sleep 1; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true
-  has "$out" DEV-DONE || { show "$out" 20; show "$(cat "$log")" 8; fail "$where, testpage_dev.js did not finish"; }
+  has "$out" DEV-DONE || { show "$out" 20; show "$(cat "$log")" 8; fail "$where, clickthrough_dev.js did not finish"; }
   has "$out" "DEV-TITLE DEV-WS pong" || { show "$out" 20; show "$(cat "$log")" 8; fail "$where, the dev page's WebSocket did not answer"; }
   has "$out" "DEV-API dev answer" || { show "$out" 20; show "$(cat "$log")" 8; fail "$where, the dev page could not fetch from its server"; }
-  ! grep -q 'from-internet-http' "$log" || { show "$(cat "$log")" 10; fail "$where, a page of the internet reached the dev server by http"; }
-  ok "$where: the dev page loaded, fetched from its server and its WebSocket answered; a page of the internet reached it by http not once"
-  if grep -q 'from-internet-ws' "$log"; then echo "   RESULT  a WebSocket of a page of the internet reached the dev server (expected: testpage cannot see WebSockets)"; fi
+  has "$out" "DEV-AGAIN dev answer" || { show "$out" 20; show "$(cat "$log")" 8; fail "$where, page.goto of the script did not open the dev page from a data: page"; }
+  ! grep -q 'from-internet-http' "$log" || { show "$(cat "$log")" 10; fail "$where, a page that does not come from the dev server reached it by http"; }
+  ok "$where: the dev page loaded, fetched from its server and its WebSocket answered, also after page.goto from a data: page; no other page reached it by http, nor sent the tab there (a form, location, window.open)"
+  if grep -q 'from-internet-ws' "$log"; then echo "   RESULT  a WebSocket of a page of the internet reached the dev server (expected: clickthrough cannot see WebSockets)"; fi
 }
-# testpage_dev_inside command ...: may a dev server listen inside nono? Reported, never a failure.
-testpage_dev_inside() {
+# clickthrough_dev_inside command ...: may a dev server listen inside nono? Reported, never a failure.
+clickthrough_dev_inside() {
   local out
-  out=$("$@" bash -c '"$1" "$2" 5173 "$3" & s=$!; sleep 2; testpage --dev 5173 "$4" 5173 https://github.com/; kill $s 2>/dev/null' _ \
-    "/usr/bin/python3" "$HERE/testpage_devserver.py" "$CFG/tmp/testpage-dev-inside.log" "$HERE/testpage_dev.js")
+  out=$("$@" bash -c '"$1" "$2" 5173 "$3" & s=$!; sleep 2; clickthrough --dev 5173 "$4" 5173 https://github.com/; kill $s 2>/dev/null' _ \
+    "/usr/bin/python3" "$HERE/clickthrough_devserver.py" "$CFG/tmp/clickthrough-dev-inside.log" "$HERE/clickthrough_dev.js")
   if has "$out" LISTEN-DENIED; then
     echo "   RESULT  inside nono a program may not listen on the dev port: $(printf '%s\n' "$out" | sed -n 's/^LISTEN-DENIED //p' | head -n 1)"
   elif has "$out" "DEV-TITLE DEV-WS pong"; then
-    echo "   RESULT  inside nono a dev server may listen on the dev port, and testpage reaches it"
+    echo "   RESULT  inside nono a dev server may listen on the dev port, and clickthrough reaches it"
   else
     echo "   RESULT  inside nono: unclear"; show "$out" 12
   fi
 }
+# clickthrough_routes <where> command ...: the script's own routes (clickthrough_routes.js), with the stand-in dev server and a
+# listener that stands for n8n. No page reaches the dev server past a route of the script, lock 2 stays after
+# unrouteAll, and a redirect that Node.js would follow for route.fetch reaches nothing.
+clickthrough_routes() {
+  local where=$1 log="$CFG/tmp/clickthrough-routes-dev.log" llog="$CFG/tmp/clickthrough-routes-listener.log" out dpid lpid; shift
+  mkdir -p "$CFG/tmp"; : > "$log"; : > "$llog"
+  python3 "$HERE/clickthrough_devserver.py" 5173 "$log" > /dev/null & dpid=$!
+  python3 "$HERE/clickthrough_listener.py" 18765 "$llog" & lpid=$!
+  sleep 1
+  out=$("$@" --dev 5173 "$HERE/clickthrough_routes.js" 5173 18765 2>&1) || true
+  sleep 2; kill "$dpid" "$lpid" 2>/dev/null; wait "$dpid" "$lpid" 2>/dev/null || true
+  has "$out" ROUTES-DONE || { show "$out" 20; show "$(cat "$log")" 8; fail "$where, clickthrough_routes.js did not finish"; }
+  ! grep -q 'from-internet-http' "$log" || { show "$(cat "$log")" 10; fail "$where, a page reached the dev server by http past a route of the script"; }
+  ! grep -q . "$llog" || { show "$(cat "$llog")" 8; fail "$where, a request reached the listener: a redirect that route.fetch followed in Node.js"; }
+  if has "$out" "ROUTES-DEV dev answer"; then
+    ok "$where: past the script's routes no page reached the dev server, lock 2 stayed after unrouteAll, and route.fetch followed no redirect"
+  else
+    # route.fetch sends the request from Node.js; inside nono through nono's proxy, which need not take the dev port
+    case "$where" in outside*) show "$out" 12; fail "$where, the dev page did not come through route.fetch: the redirect was not tried" ;; esac
+    echo "   RESULT  $where: the dev page did not come through route.fetch ($(printf '%s\n' "$out" | grep '^ROUTES-DEV' | cut -c1-60)), so the redirect was not tried here"
+    ok "$where: past the script's routes no page reached the dev server, and lock 2 stayed after unrouteAll"
+  fi
+}
+# clickthrough_copy <where> command ...: a folder with a copy of Playwright of its own in node_modules, as a Vite project
+# may hold one: here a copy of kingo's, which would start the browser without the locks. A script there gets kingo's
+# copy all the same: clickthrough_copy.js tries the ways to Playwright, and clickthrough_block.js, which names the browser
+# itself there, reaches no service.
+clickthrough_copy() {
+  local where=$1 d="$DIR/copy" port=18765 log="$CFG/tmp/clickthrough-copy-listener.log" out pid w; shift
+  rm -rf "$d"; mkdir -p "$d/node_modules" "$CFG/tmp"
+  cp -R "$PW_DIR/node_modules/playwright-core" "$d/node_modules/"
+  cp "$HERE/clickthrough_copy.js" "$HERE/clickthrough_block.js" "$d/"
+  out=$("$@" "$d/clickthrough_copy.js" 2>&1) || true
+  has "$out" COPY-DONE || { show "$out" 20; fail "$where, clickthrough_copy.js did not finish"; }
+  for w in require require-playwright createRequire import import-playwright; do
+    has "$out" "COPY $w kingo" || { show "$(printf '%s\n' "$out" | grep '^COPY')" 12; fail "$where, $w next to a copy of its own did not give kingo's playwright-core"; }
+  done
+  for w in require-path require-file import-path; do
+    has "$out" "COPY $w refused clickthrough: the script loads a copy of Playwright of its own" \
+      || { show "$(printf '%s\n' "$out" | grep '^COPY')" 12; fail "$where, $w loaded the copy of its own"; }
+  done
+  : > "$log"
+  python3 "$HERE/clickthrough_listener.py" "$port" "$log" & pid=$!
+  sleep 1
+  out=$("$@" "$d/clickthrough_block.js" "$port" "$HERE/clickthrough_shop.html" https://github.com/ own 2>&1) || true
+  sleep 2; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true
+  rm -rf "$d"
+  has "$out" BLOCK-DONE || { show "$out" 20; fail "$where, clickthrough_block.js next to a copy of Playwright did not finish"; }
+  ! grep -q '^ARRIVED' "$log" || { show "$(cat "$log")" 12; fail "$where, next to a copy of Playwright of its own, a page reached a service on this laptop"; }
+  has "$out" "BLOCK-GOTO clickthrough opens https pages and files" || { show "$out" 20; fail "$where, next to a copy of Playwright, page.goto on an http address did not stop with clickthrough's words"; }
+  ok "$where: next to a copy of Playwright of its own, require and import by name get kingo's, the copy by its path is refused, and no page reached the listener"
+}
+# clickthrough_ways <where> command ...: the other ways of Playwright's API past the locks (clickthrough_ways.js). Each stops
+# with clickthrough's words, and nothing connects to the listener.
+clickthrough_ways() {
+  local where=$1 port=18765 log="$CFG/tmp/clickthrough-ways-listener.log" out pid n; shift
+  mkdir -p "$CFG/tmp"; : > "$log"
+  python3 "$HERE/clickthrough_listener.py" "$port" "$log" & pid=$!
+  sleep 1
+  out=$("$@" "$HERE/clickthrough_ways.js" "$port" "$HERE/clickthrough_shop.html" 2>&1) || true
+  sleep 2; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true
+  has "$out" WAYS-DONE || { show "$out" 24; fail "$where, clickthrough_ways.js did not finish"; }
+  n=$(printf '%s\n' "$out" | grep -c '^WAYS .* refused clickthrough' || true)
+  [ "$n" = 15 ] || { show "$(printf '%s\n' "$out" | grep '^WAYS')" 24; fail "$where, $n of the 15 other ways were refused"; }
+  ! grep -q . "$log" || { show "$(cat "$log")" 8; fail "$where, a page connected to the listener (a context with a proxy of its own, or ignoreDefaultArgs)"; }
+  ok "$where: 15 other ways refused (launchServer, connect, connectOverCDP, bind, newBrowserCDPSession, firefox, webkit, clientCertificates twice, six arguments for Chrome); nothing connected to the listener"
+}
 # outside command ...: as in_sandbox, without nono
 outside() {
   ( cd "$DIR" && KINGO_BROWSER="$BROWSER_BIN" KINGO_BROWSER_MODE="$MODE" \
-    KINGO_NODE="$NODE_BIN_FOR_TESTPAGE" KINGO_PLAYWRIGHT="$PW_DIR" "$@" ) 2>&1 || true
+    KINGO_NODE="$NODE_BIN_FOR_CLICKTHROUGH" KINGO_PLAYWRIGHT="$PW_DIR" "$@" ) 2>&1 || true
 }
 pictures() { # <how many> <name>
   local i
@@ -106,15 +174,30 @@ dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo c
 show "$dry" 2
 has "$dry" "--append-system-prompt When you have written or changed an HTML page, look at it" \
   || fail "kingo claude does not tell Claude Code how to look at a page"
-has "$dry" "run it with: testpage <script.js>" || fail "kingo claude does not tell Claude Code how to try a page with testpage"
+has "$dry" "run it with: clickthrough <script.cjs>" || fail "kingo claude does not tell Claude Code how to try a page with clickthrough"
 if has "$dry" no_unix_sockets.py; then fail "on a Mac, kingo claude would start Claude Code through the lock for Linux"; fi
 ok "kingo claude tells Claude Code how to look at a page"
+# The ports of kingo-pod, which clickthrough --dev refuses: in_sandbox below sets none, so clickthrough takes its own list,
+# which must be kingo's (from its service table).
+pods=$(printf '%s\n' "$dry" | sed -n 's/^  ports: .*KINGO_POD_PORTS=//p' | tr ' ' '\n' | grep . | sort -n | tr '\n' ' ' || true)
+list=$(sed -n 's/.*KINGO_POD_PORTS:-\([0-9 ]*\)}.*/\1/p' "$KINGO_DIR/setup/claude/bin/clickthrough" | head -n 1 || true)
+[ -n "$pods" ] || fail "the dry run does not name the ports of kingo-pod"
+[ "$(printf '%s\n' $list | sort -n | tr '\n' ' ')" = "$pods" ] || fail "clickthrough's list of the ports of kingo-pod is not kingo's: '$list'; kingo says: $pods"
+ok "clickthrough's list of the ports of kingo-pod is kingo's: $pods"
+# --in on a Mac: no n8n there, and nothing for the user's own terminal; a dev server cannot listen in the sandbox here
+mkdir -p "$HOME/projects/thesis"
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$HOME/projects/thesis") || fail "kingo claude --in did not get as far as the start of Claude Code"
+if has "$dry" 'N8N_BASE_URL'; then fail "kingo claude --in tells Claude Code about n8n, which is not there"; fi
+if has "$dry" "in their own terminal (npm run dev)"; then fail "kingo claude --in asks Claude Code to send the user to their own terminal, which CLAUDE_IN_HINT forbids"; fi
+has "$dry" "On this Mac the sandbox lets no program listen on that port" || fail "on a Mac, kingo claude --in does not tell Claude Code that it cannot start a dev server"
+ok "kingo claude --in names no n8n, and says that a dev server cannot listen in the sandbox on a Mac"
+(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude > /dev/null) || fail "kingo claude did not write the profile of the course again"
 
 say "kingo gets its own nono"
 if command -v nono >/dev/null 2>&1; then echo "         | on the PATH of this job: $(command -v nono)"; fi
 out=$(cd "$KINGO_DIR" && ./kingo claude nono 2>&1) || { show "$out" 8; fail "kingo claude nono failed"; }
 show "$out" 3
-NONO_BIN=$(ls "$HOME"/.local/share/kingo/nono/*/nono 2>/dev/null | head -n 1)
+NONO_BIN=$(ls "$HOME"/.local/share/kingo/nono/*/nono 2>/dev/null | head -n 1 || true)
 [ -x "$NONO_BIN" ] || fail "kingo's nono is not in ~/.local/share/kingo/nono"
 grep -q "^CLAUDE_NONO_VERSION=$("$NONO_BIN" --version | sed -n 's/^nono \([0-9.]*\).*/\1/p')\$" "$KINGO_DIR/kingo" \
   || fail "the nono that kingo downloaded says another version than kingo names: $("$NONO_BIN" --version)"
@@ -127,15 +210,15 @@ ok "nono is the one kingo downloaded ($("$NONO_BIN" --version | head -n 1)), and
 say "kingo gets the browser"
 out=$(cd "$KINGO_DIR" && ./kingo claude browser 2>&1) || { show "$out" 8; fail "kingo claude browser failed"; }
 show "$out" 3
-BROWSER_BIN=$(find "$HOME/.local/share/kingo/browsers" -type f -name chrome-headless-shell 2>/dev/null | head -n 1)
+BROWSER_BIN=$(find "$HOME/.local/share/kingo/browsers" -type f -name chrome-headless-shell 2>/dev/null | head -n 1 || true)
 [ -x "$BROWSER_BIN" ] || fail "the browser is not in ~/.local/share/kingo/browsers"
 [ ! -e "$CFG/browsers" ] || fail "there is a browser in $CFG, a folder the sandbox can write"
 ok "the browser is there: $BROWSER_BIN"
-NODE_BIN_FOR_TESTPAGE=$(ls "$HOME"/.local/share/kingo/node/*/node 2>/dev/null | head -n 1)
-PW_DIR=$(ls -d "$HOME"/.local/share/kingo/playwright/*/ 2>/dev/null | head -n 1); PW_DIR=${PW_DIR%/}
-[ -x "$NODE_BIN_FOR_TESTPAGE" ] || fail "kingo claude browser did not get Node.js into ~/.local/share/kingo/node"
+NODE_BIN_FOR_CLICKTHROUGH=$(ls "$HOME"/.local/share/kingo/node/*/node 2>/dev/null | head -n 1 || true)
+PW_DIR=$(ls -d "$HOME"/.local/share/kingo/playwright/*/ 2>/dev/null | head -n 1 || true); PW_DIR=${PW_DIR%/}
+[ -x "$NODE_BIN_FOR_CLICKTHROUGH" ] || fail "kingo claude browser did not get Node.js into ~/.local/share/kingo/node"
 [ -f "$PW_DIR/node_modules/playwright-core/package.json" ] || fail "kingo claude browser did not get playwright-core into ~/.local/share/kingo/playwright"
-ok "Node.js $("$NODE_BIN_FOR_TESTPAGE" --version) and playwright-core, for testpage"
+ok "Node.js $("$NODE_BIN_FOR_CLICKTHROUGH" --version) and playwright-core, for clickthrough"
 
 cat > "$DIR/look-cv.html" <<'HTML'
 <!doctype html><html><head><meta charset="utf-8"><title>Probe</title>
@@ -171,7 +254,7 @@ rm -rf "$DIR/look"
 say "the sandbox cannot change what kingo downloaded"
 out=$(in_sandbox sh -c 'for f in "$@"; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done' sh \
   "$DIR/look-write-probe" "$BROWSER_BIN" "$(dirname "$BROWSER_BIN")/new-file" "$NONO_BIN" "$(dirname "$NONO_BIN")/new-file" \
-  "$HOME/.local/share/kingo/new-file" "$NODE_BIN_FOR_TESTPAGE" "$(dirname "$NODE_BIN_FOR_TESTPAGE")/new-file" \
+  "$HOME/.local/share/kingo/new-file" "$NODE_BIN_FOR_CLICKTHROUGH" "$(dirname "$NODE_BIN_FOR_CLICKTHROUGH")/new-file" \
   "$PW_DIR/node_modules/playwright-core/package.json" "$PW_DIR/new-file")
 show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused) ')" 10
 has "$out" "WROTE $DIR/look-write-probe" || { show "$out" 20; fail "the probe proves nothing: it could not write in the course folder either"; }
@@ -179,34 +262,55 @@ has "$out" "WROTE $DIR/look-write-probe" || { show "$out" 20; fail "the probe pr
 rm -f "$DIR/look-write-probe"
 ok "inside the sandbox, the browser, nono, Node.js, playwright-core and their folders cannot be written"
 
-# testpage: a script as Claude would write it fills in a form and sends it; then a page of the internet. On a Mac,
-# Chrome does not take HTTPS_PROXY: testpage-setup.js gives it nono's proxy, or the page would not come.
-say "testpage inside nono: a form is filled in and sent, and a page of the internet comes"
-out=$(in_sandbox testpage "$HERE/testpage_check.js" "$HERE/testpage_shop.html" look/testpage-shop.png https://github.com/)
-show "$(printf '%s\n' "$out" | grep '^TESTPAGE-')" 3
-has "$out" "TESTPAGE-SAID Thank you, Mina: 1 Coffee" || { show "$out" 20; fail "testpage did not fill in and send the form inside the sandbox"; }
-python3 "$HERE/png_check.py" "$DIR/look/testpage-shop.png" | sed 's/^/         | /' || fail "testpage made no picture of the page"
-printf '%s\n' "$out" | grep '^TESTPAGE-TITLE ' | grep -q GitHub || { show "$out" 20; fail "testpage did not get a page of the internet inside the sandbox"; }
-ok "testpage filled in the form, read the answer, made a picture, and opened github.com"
+# clickthrough: a script as Claude would write it fills in a form and sends it; then a page of the internet. On a Mac,
+# Chrome does not take HTTPS_PROXY: clickthrough-setup.js gives it nono's proxy, or the page would not come.
+say "clickthrough inside nono: a form is filled in and sent, and a page of the internet comes"
+out=$(in_sandbox clickthrough "$HERE/clickthrough_check.js" "$HERE/clickthrough_shop.html" look/clickthrough-shop.png https://github.com/)
+show "$(printf '%s\n' "$out" | grep '^CLICKTHROUGH-')" 3
+has "$out" "CLICKTHROUGH-SAID Thank you, Mina: 1 Coffee" || { show "$out" 20; fail "clickthrough did not fill in and send the form inside the sandbox"; }
+python3 "$HERE/png_check.py" "$DIR/look/clickthrough-shop.png" | sed 's/^/         | /' || fail "clickthrough made no picture of the page"
+printf '%s\n' "$out" | grep '^CLICKTHROUGH-TITLE ' | grep -q GitHub || { show "$out" 20; fail "clickthrough did not get a page of the internet inside the sandbox"; }
+ok "clickthrough filled in the form, read the answer, made a picture, and opened github.com"
 
 # Outside nono a direct connection to 127.0.0.1 works; inside nono a page could go through nono's proxy, which lets the
 # laptop's own addresses through when the network is open.
-say "testpage: a page cannot reach a service on this laptop by http or WebSocket"
-testpage_block "outside nono, without a proxy" outside bash "$KINGO_DIR/setup/claude/bin/testpage"
-testpage_block "inside nono" in_sandbox testpage
+say "clickthrough: a page cannot reach a service on this laptop by http or WebSocket"
+clickthrough_block "outside nono, without a proxy" outside bash "$KINGO_DIR/setup/claude/bin/clickthrough"
+clickthrough_block "inside nono" in_sandbox clickthrough
 
-# testpage --dev: the student's dev server on this laptop. On a Mac the profile has one Seatbelt rule for the dev port
+# clickthrough --dev: the student's dev server on this laptop. On a Mac the profile has one Seatbelt rule for the dev port
 # (KINGO_DEV_PORT, 5173), as for PostgreSQL.
-say "testpage --dev 5173: the dev server's page works, and nothing else opens"
+say "clickthrough --dev 5173: the dev server's page works, and nothing else opens"
 grep -q 'remote tcp \\"localhost:5173\\"' "$HOME/.config/nono/profiles/kingo-claude-core.json" \
   || fail "kingo did not open the dev port 5173 in the core profile (Seatbelt rule)"
-out=$(in_sandbox testpage --dev 5678 "$HERE/testpage_dev.js")
-has "$out" "is a port of kingo-pod" || { show "$out" 6; fail "testpage --dev 5678 did not refuse n8n's port"; }
-ok "testpage --dev refuses n8n's port"
-testpage_dev "outside nono, without a proxy" outside bash "$KINGO_DIR/setup/claude/bin/testpage"
-testpage_dev "inside nono" in_sandbox testpage
-testpage_block "inside nono, with --dev 5173" in_sandbox testpage --dev 5173
-testpage_dev_inside in_sandbox
+out=$(in_sandbox clickthrough --dev 5678 "$HERE/clickthrough_dev.js")
+has "$out" "is a port of kingo-pod" || { show "$out" 6; fail "clickthrough --dev 5678 did not refuse n8n's port"; }
+ok "clickthrough --dev refuses n8n's port"
+clickthrough_dev "outside nono, without a proxy" outside bash "$KINGO_DIR/setup/claude/bin/clickthrough"
+clickthrough_dev "inside nono" in_sandbox clickthrough
+clickthrough_block "inside nono, with --dev 5173" in_sandbox clickthrough --dev 5173
+clickthrough_dev_inside in_sandbox
+
+# Whatever the script does (setup/claude/clickthrough-setup.js): the locks hold for every way of Playwright's API.
+say "clickthrough: the locks hold, whatever the script does (its own routes, a copy of Playwright of its own, other ways)"
+clickthrough_routes "outside nono, without a proxy" outside bash "$KINGO_DIR/setup/claude/bin/clickthrough"
+clickthrough_routes "inside nono" in_sandbox clickthrough
+clickthrough_copy "outside nono, without a proxy" outside bash "$KINGO_DIR/setup/claude/bin/clickthrough"
+clickthrough_copy "inside nono" in_sandbox clickthrough
+clickthrough_ways "outside nono, without a proxy" outside bash "$KINGO_DIR/setup/claude/bin/clickthrough"
+clickthrough_ways "inside nono" in_sandbox clickthrough
+
+say "clickthrough in a Vite project, where a .js is an ES module; and --dev without leading zeros"
+mkdir -p "$DIR/vite"; printf '{ "name": "a-vite-project", "type": "module" }\n' > "$DIR/vite/package.json"
+cp "$HERE/clickthrough_check.js" "$DIR/vite/try.js"; cp "$HERE/clickthrough_check.js" "$DIR/vite/try.cjs"
+out=$(in_sandbox clickthrough vite/try.js "$HERE/clickthrough_shop.html" look/vite.png)
+has "$out" "Write the script as a .cjs file" || { show "$out" 6; fail "clickthrough did not stop at a .js in a project of type module, or did not say to write a .cjs"; }
+out=$(in_sandbox clickthrough vite/try.cjs "$HERE/clickthrough_shop.html" look/vite.png)
+has "$out" "CLICKTHROUGH-SAID Thank you, Mina: 1 Coffee" || { show "$out" 12; fail "clickthrough did not run the .cjs in a project of type module"; }
+rm -rf "$DIR/vite"
+out=$(in_sandbox clickthrough --dev 05678 "$HERE/clickthrough_dev.js")
+has "$out" "a number without leading zeros" || { show "$out" 6; fail "clickthrough --dev 05678 did not refuse the leading zero"; }
+ok "in a project of type module clickthrough asks for a .cjs, and the .cjs runs; --dev 05678 is refused"
 rm -rf "$DIR/look"
 
 # A font that the user installed: the system knows it by name; when the sandbox cannot read its file, the browser

@@ -1,16 +1,18 @@
-"""CI: a stand-in for a dev server such as Vite's, for testpage --dev: http and a WebSocket on one port.
+"""CI: a stand-in for a dev server such as Vite's, for clickthrough --dev: http and a WebSocket on one port.
 
-    python3 testpage_devserver.py PORT LOG
+    python3 clickthrough_devserver.py PORT LOG
 
 Prints LISTENING once it listens, or LISTEN-DENIED and the error when the system refuses (the sandbox, on a Mac).
 Writes one line into LOG for every request (REQ, with its path and Origin) and for the WebSocket's message (WS).
 GET / is a page that fetches /api and opens a WebSocket to /hmr, as Vite's page reloads itself over one.
+GET /redirect?to=<address> sends the browser on to that address (302), for clickthrough_routes.js.
 """
 import base64
 import hashlib
 import socket
 import sys
 import threading
+import urllib.parse
 
 PORT, LOG = int(sys.argv[1]), sys.argv[2]
 lock = threading.Lock()
@@ -72,6 +74,9 @@ def answer(conn):
             reply(conn, b"200 OK", PAGE)
         elif path == "/api":
             reply(conn, b"200 OK", b"dev answer", "text/plain")
+        elif path.startswith("/redirect?to="):
+            to = urllib.parse.unquote(path.split("=", 1)[1]).encode()
+            conn.sendall(b"HTTP/1.1 302 Found\r\nLocation: " + to + b"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
         else:
             reply(conn, b"404 Not Found", b"no", "text/plain")
     except OSError:

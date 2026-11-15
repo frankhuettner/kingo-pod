@@ -40,7 +40,7 @@
       { "path": "$HOME/Library/Caches/claude-cli-nodejs", "when": "macos" }
     ],
     // The Claude Code binary from the native installer, the browser that kingo downloads for look, and Node.js and
-    // playwright-core for testpage. Read only:
+    // playwright-core for clickthrough. Read only:
     // kingo starts the browser outside the sandbox too (--version, ldd), so the sandbox must not be able to change it.
     // And the fonts that the user installed. The system knows them by name; when the browser of look cannot read
     // their files, a page that names such a font (for example Pretendard) shows a box for every letter.
@@ -74,7 +74,7 @@
   // and Chrome then stops at its start. The rule allows names with exactly this beginning and no other. It gives
   // no file and no network. What it leaves open: a program in the sandbox could take such a name before a Chromium
   // outside the sandbox with that process number asks for it, and that Chromium would then not start.
-  // For testpage --dev: the student's dev server on this laptop (KINGO_DEV_PORT, 5173 unless the student names another;
+  // For clickthrough --dev: the student's dev server on this laptop (KINGO_DEV_PORT, 5173 unless the student names another;
   // kingo fills it in and never takes a port of kingo-pod). Mac: a rule for exactly this connection, as for
   // PostgreSQL in the course profile; a program in the sandbox cannot listen there (Seatbelt cannot limit listening to
   // one port, so nono's open_port is not used on a Mac). The student starts the dev server in their own terminal.

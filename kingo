@@ -1007,22 +1007,33 @@ cmd_mcp() {
 CLAUDE_KEYS="$HOME/.config/kingo"
 # What kingo downloads for Claude Code, nono and the browser, goes here: outside everything the sandbox may write.
 # kingo starts both files outside the sandbox (nono itself; the browser for --version and ldd), so a program inside
-# the sandbox must not be able to swap them. The sandbox may read the browser, Node.js and playwright-core (for testpage),
-# and nothing else of this folder.
+# the sandbox must not be able to swap them. The sandbox may read the browser, Node.js and playwright-core (for
+# clickthrough), and nothing else of this folder.
 CLAUDE_SHARE="$HOME/.local/share/kingo"
-# The port of the student's dev server (Vite: 5173), which testpage --dev may use: the profile lets the sandbox connect
-# to it (Mac: one Seatbelt rule; Linux and WSL2: open_port, which also lets a program in the sandbox listen on it).
-# KINGO_DEV_PORT before ./kingo claude names another. Never a port of kingo-pod: a page in testpage could reach that
-# service then.
+# The port of the student's dev server (Vite: 5173), which clickthrough --dev may use: the profile lets the sandbox
+# connect to it (Mac: one Seatbelt rule; Linux and WSL2: open_port, which also lets a program in the sandbox listen on
+# it). KINGO_DEV_PORT before ./kingo claude names another. Never a port of kingo-pod: a page in clickthrough could
+# reach that service then. The port goes into the profile as a number, so it is checked as KINGO_PORT_POSTGRES is:
+# 08080 would land there as [08080], which is no JSON, and nono would not start.
 claude_dev_port() {
-  local want=${KINGO_DEV_PORT:-5173} pod=" $P_POSTGRES $P_N8N 5679 $P_LANGFLOW $P_JUPYTERLAB $P_JUPYTERHUB $P_MCP $P_METABASE $P_CLOUDBEAVER $P_QDRANT $P_QDRANT_GRPC "
-  case "$want" in ''|*[!0-9]*) warn "KINGO_DEV_PORT=$want is not a port; the dev server's port stays 5173."; want=5173 ;; esac
-  if [ "$want" -lt 1024 ] || [ "$want" -gt 65535 ]; then warn "KINGO_DEV_PORT=$want is not a port from 1024 to 65535; it stays 5173."; want=5173; fi
-  case "$pod" in *" $want "*) warn "KINGO_DEV_PORT=$want is a port of kingo-pod; the dev server's port stays 5173."; want=5173 ;; esac
-  case "$pod" in *" $want "*) want=5174 ;; esac   # 5173 itself taken by a port of kingo-pod
+  local want=${KINGO_DEV_PORT:-} why="" pod
+  pod=" $(claude_pod_ports) "
+  if [ -n "$want" ]; then
+    case "$want" in
+      0*|*[!0-9]*|??????*) why="is not a port number" ;;
+      *) if [ "$want" -lt 1024 ] || [ "$want" -gt 65535 ]; then why="is not a port from 1024 to 65535"
+         else case "$pod" in *" $want "*) why="is a port of kingo-pod" ;; esac; fi ;;
+    esac
+  fi
+  { [ -n "$want" ] && [ -z "$why" ]; } || want=5173
+  # 5173 taken by a port of kingo-pod (KINGO_PORT_*): the next port that is not one
+  while case "$pod" in *" $want "*) true ;; *) false ;; esac; do want=$((want + 1)); done
+  [ -z "$why" ] || warn "KINGO_DEV_PORT=$KINGO_DEV_PORT $why; the dev server's port is $want."
   printf '%s' "$want"
 }
-claude_pod_ports() { printf '%s' "$P_POSTGRES $P_N8N 5679 $P_LANGFLOW $P_JUPYTERLAB $P_JUPYTERHUB $P_MCP $P_METABASE $P_CLOUDBEAVER $P_QDRANT $P_QDRANT_GRPC"; }
+# The ports of kingo-pod, which clickthrough --dev refuses: those of the service table, and 5679, where n8n's task
+# runners talk to n8n.
+claude_pod_ports() { printf '%s' "$(host_ports | tr '\n' ' ')5679"; }
 
 # ── kingo claude: its own nono ───────────────────────────────────────────────
 # The course profile leans on how one version of nono behaves: the place of the Seatbelt rules on a Mac, the policy
@@ -1204,10 +1215,11 @@ mac-x64:89c56fb080ab4e9ba76656d5669af2b2dfc313c11434871e8f4e351c08a5ffca
 linux64:77a6442fd3c8acd3bef9e1067fc26f5ef464277d22f0e8cb58dc3e4077a3e458
 linux-arm64:e1262e9f4f244c441dcb54aa0e9abe4cf7b266ab02dc666fd975bd55aba9b3dc
 "
-# Node.js and playwright-core, so that Claude can try a page as a person would: fill in a form, press a button, read
-# the answer. `testpage try.js` (setup/claude/bin/testpage) runs such a script with this Node.js, and in it
-# chromium.launch() starts the browser above (setup/claude/testpage-setup.js). Fixed versions with checksums, kept
-# next to the browser, read only for the sandbox; ./kingo claude browser gets them with the browser. Never fatal.
+# Node.js and playwright-core, so that Claude can click through a page as a person would: fill in a form, press a
+# button, read the answer. `clickthrough try.cjs` (setup/claude/bin/clickthrough) runs such a script with this Node.js,
+# and in it chromium.launch() starts the browser above (setup/claude/clickthrough-setup.js). Fixed versions with
+# checksums, kept next to the browser, read only for the sandbox; ./kingo claude browser gets them with the browser.
+# Never fatal.
 # Not Playwright's MCP server or its CLI: both open a Unix socket for their browser, and the sandbox refuses that
 # (under Linux kingo's lock refuses every Unix socket); playwright-core by itself needs none (tried on 14 Nov 2026).
 # Node.js: the checksums are those of SHASUMS256.txt of the release, whose signature was checked with the keys of
@@ -1222,8 +1234,21 @@ linux-arm64:261af2af250dfd7e9f25cf151d1b2713a0adf8f10a9ad116c4947f68627affe8
 CLAUDE_PLAYWRIGHT_VERSION=1.65.1
 CLAUDE_PLAYWRIGHT_SUM=6f5a60be62a4fddfbe7d10c448d8fbd54547da3358f2f8a04211440471ee863e
 # What Claude Code is told at every start, in addition to AGENTS.md: that file is the student's after the first
-# start, so a line added to its template would not reach the course folders that exist.
-CLAUDE_LOOK_HINT='When you have written or changed an HTML page, look at it before you say it is done. Run: look <file.html> (add --width 600 for a phone, --pdf for the page as it prints). It makes pictures of the whole page in the folder look/. Read them with the Read tool and check the layout. To use a page as a person would (fill in a form, press a button, read what the page shows then), write a short Node.js script that uses require("playwright-core") and run it with: testpage <script.js> (testpage --help shows an example). There chromium.launch() starts the same browser; open a file with "file://" and its full path. Pages on the internet work too, by https; to only read the internet, use your web tools. In testpage, http addresses and WebSockets are closed, so that no page can reach the services on this laptop (to try an n8n webhook, use curl with $N8N_BASE_URL/webhook/... and the header X-N8N-API-KEY). For a dev server on this laptop (Vite and the like), run: testpage --dev <port> <script.js>; the sandbox opens one port for it, $KINGO_DEV_PORT. Ask the student to start the dev server in their own terminal (npm run dev).'
+# start, so a line added to its template would not reach the course folders that exist. The script is a .cjs: in a
+# Vite project ("type": "module") a .js is an ES module, in which require is missing.
+CLAUDE_PAGE_HINT='When you have written or changed an HTML page, look at it before you say it is done. Run: look <file.html> (add --width 600 for a phone, --pdf for the page as it prints). It makes pictures of the whole page in the folder look/. Read them with the Read tool and check the layout. To click through a page as a person would (fill in a form, press a button, read what the page shows then), write a short Node.js script that uses require("playwright-core"), name it .cjs, and run it with: clickthrough <script.cjs> (clickthrough --help shows an example). The name says what it does: look takes a picture of a page, clickthrough clicks through it, and to read the internet you have your web tools. There chromium.launch() starts the same browser; open a file with require("url").pathToFileURL(path).href. Pages on the internet work too, by https.'
+CLAUDE_LOOK_HINT="$CLAUDE_PAGE_HINT"' In clickthrough, http addresses and WebSockets are closed, so that no page can reach the services on this laptop (to try an n8n webhook, use curl with $N8N_BASE_URL/webhook/... and the header X-N8N-API-KEY). For a dev server on this laptop (Vite and the like), run: clickthrough --dev <port> <script.cjs>; the sandbox opens one port for it, $KINGO_DEV_PORT. Ask the student to start the dev server in their own terminal (npm run dev).'
+# With --in, after CLAUDE_IN_HINT: no n8n there, and the user is never asked to run what Claude could not run here.
+# The dev server: under Linux and WSL2 a program in the sandbox may listen on the dev port, so Claude starts it; on a
+# Mac the sandbox lets none listen there (the profile has a rule to connect to it, not to listen), so Claude says so.
+claude_look_hint_in() {
+  local dev='For a dev server in this folder (Vite and the like), run: clickthrough --dev <port> <script.cjs>; the sandbox opens one port for it, $KINGO_DEV_PORT.'
+  case "$(uname -s)" in
+    Darwin) dev="$dev"' On this Mac the sandbox lets no program listen on that port, so you cannot start the dev server yourself: say so, and leave it to the user whether to start it (npm run dev).' ;;
+    *)      dev="$dev"' Start the dev server yourself (npm run dev), on that port.' ;;
+  esac
+  printf '%s' "$CLAUDE_PAGE_HINT"' In clickthrough, http addresses and WebSockets are closed, so that no page can reach the services on this laptop. '"$dev"
+}
 
 claude_browser_platform() { # -> the name of this machine in Chrome for Testing, or nothing
   case "$(uname -s)-$(uname -m)" in
@@ -1387,7 +1412,7 @@ claude_playwright_get() {
   echo "playwright-core is in $root."
 }
 
-claude_testpage_get() { claude_node_get && claude_playwright_get; }   # what testpage needs besides the browser
+claude_clickthrough_get() { claude_node_get && claude_playwright_get; }   # what clickthrough needs besides the browser
 
 # Linux: says which packages are missing. In a terminal it asks whether it shall install them (a fresh Ubuntu under
 # WSL has none of them, and a warning before the start of Claude Code scrolls away: Frank's Windows laptop, 14 Nov
@@ -1420,19 +1445,22 @@ claude_browser_check_packages() { # browser
 }
 
 claude_browser_cmd() { # ./kingo claude browser: get the browser, or say why it does not run
-  local bin
+  local bin tried=0
   claude_browser_get || return 1
-  claude_testpage_get || return 1
+  # Never fatal for look: without Node.js or playwright-core (claude_node_get and claude_playwright_get said why), the
+  # packages of the system that the browser needs are still named, and the end returns 1.
+  claude_clickthrough_get || { warn "clickthrough cannot run until ./kingo claude browser gets Node.js and playwright-core; look can."; tried=1; }
   bin=$(claude_browser_path)
   claude_browser_check_packages "$bin" || return 1
   if "$bin" --version >/dev/null 2>&1; then
     echo "The browser is ready: $("$bin" --version 2>/dev/null | head -n 1)"
     echo "In ./kingo claude, Claude looks at a page with:  look page.html"
-    echo "and tries one (fills in a form, presses a button) with:  testpage script.js"
+    [ "$tried" = 1 ] || echo "and clicks through one (fills in a form, presses a button) with:  clickthrough script.cjs"
   else
     warn "the browser is installed but does not start: $bin --version"
     return 1
   fi
+  return "$tried"
 }
 
 # ── kingo claude --login: your Anthropic login in place of OpenRouter ─────────
@@ -1549,7 +1577,7 @@ cmd_claude() {
       echo "  The first start gets nono $CLAUDE_NONO_VERSION, the sandbox: kingo starts its own, not one that is installed."
       echo "  ./kingo claude nono gets it again, and says which nono kingo claude starts."
       echo "  The first start gets a browser, so that Claude can look at the pages it writes (look page.html)."
-      echo "  With Node.js and playwright-core, which come with it, Claude also tries a page: fills in a form (testpage script.js)."
+      echo "  With Node.js and playwright-core, which come with it, Claude also clicks through a page: fills in a form (clickthrough script.cjs)."
       echo "  ./kingo claude browser gets it again, and says what is missing when it does not run."
       echo "  Claude asks before every command; ./kingo yolo lets it work"
       echo "  without asking (the sandbox protects your laptop either way; ./kingo backup saves your workflows and flows)."
@@ -1642,7 +1670,7 @@ cmd_claude() {
     fi
     if [ "${KINGO_CLAUDE_NO_BROWSER:-}" != 1 ] && claude_browser_get; then
       claude_browser_check_packages "$(claude_browser_path)" || true
-      claude_testpage_get || true
+      claude_clickthrough_get || true
     fi
   elif [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ]; then
     { check "$P_N8N" /healthz && check "$P_LANGFLOW" /health; } \
@@ -1669,7 +1697,7 @@ cmd_claude() {
     # Never fatal: without the browser Claude starts as before.
     if [ "${KINGO_CLAUDE_NO_BROWSER:-}" != 1 ] && claude_browser_get; then
       claude_browser_check_packages "$(claude_browser_path)" || true
-      claude_testpage_get || true
+      claude_clickthrough_get || true
     fi
   fi
 
@@ -1728,9 +1756,9 @@ cmd_claude() {
   else
     rm -f "$prof/kingo-claude-mine.json"
   fi
-  # nono grants only folders that exist.
+  # nono grants only folders that exist: also those of the browser, Node.js and playwright-core, when a download failed.
   mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude" \
-           "$CLAUDE_SHARE/browsers"
+           "$CLAUDE_SHARE/browsers" "$CLAUDE_SHARE/node" "$CLAUDE_SHARE/playwright"
   case "$(uname -s)" in
     Darwin) mkdir -p "$HOME/Library/Caches/claude-cli-nodejs" ;;
     *)      mkdir -p "$HOME/.cache/claude-cli-nodejs" ;;
@@ -1778,7 +1806,7 @@ cmd_claude() {
   done
   if [ -n "$in_dir" ]; then
     # no AGENTS.md from kingo there: what the sandbox is comes on the command line, with the hint for look
-    if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT $CLAUDE_LOOK_HINT"
+    if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT $(claude_look_hint_in)"
     elif [ "$hint" = 1 ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT"; fi
     if [ "$login" = 1 ]; then set -- claude --settings "$tpl/settings-in-login.json" "$@"
     else set -- claude --settings "$tpl/settings-in.json" "$@"; fi
@@ -1809,8 +1837,8 @@ cmd_claude() {
   # The variables that kingo sets for nono and Claude Code; the profile lets them through. One list, so that the
   # dry run can name them and no line can fall out unseen (on 14 Nov 2026 a comment line between two lines of
   # variables cut five of them off: bash took the first lines for a command of their own).
-  # look and testpage (setup/claude/bin): PATH, KINGO_BROWSER, and for testpage KINGO_NODE and KINGO_PLAYWRIGHT, the
-  # port of the student's dev server (KINGO_DEV_PORT) and the ports of kingo-pod that testpage --dev refuses
+  # look and clickthrough (setup/claude/bin): PATH, KINGO_BROWSER, and for clickthrough KINGO_NODE and KINGO_PLAYWRIGHT,
+  # the port of the student's dev server (KINGO_DEV_PORT) and the ports of kingo-pod that clickthrough --dev refuses
   # (KINGO_POD_PORTS). On a Mac, Chrome registers a Mach service
   # for its helper programs, which nono's sandbox refuses by itself; the core profile has one rule that allows
   # exactly this name. Should a Mac still refuse it, look starts Chrome as one program (--single-process) and says
@@ -1844,6 +1872,7 @@ cmd_claude() {
     echo "dry run — would start in $dir:"
     echo "  nono run --profile $profile --allow-cwd --read $reads -- $*"
     echo "  variables: $(printf '%s ' "${envs[@]%%=*}")"
+    echo "  ports: KINGO_DEV_PORT=$dev_port KINGO_POD_PORTS=$(claude_pod_ports)"
     return
   fi
   # --login: the login first, when there is none. A login that is not nono's does not stay.

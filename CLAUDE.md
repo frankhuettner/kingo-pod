@@ -391,7 +391,7 @@ difference students choose between.
   release. A nono that is installed on the laptop is only the fallback when
   the download fails.
 - **What `kingo` downloads for Claude Code (nono, the browser of `look`,
-  Node.js and playwright-core for `testpage`) lives
+  Node.js and playwright-core for `clickthrough`) lives
   in `~/.local/share/kingo`, never in a folder the sandbox can write.** `kingo`
   starts these files OUTSIDE the sandbox (nono itself; the browser for
   `--version` and `ldd`). In `~/.kingo-claude` or the course folder, a program
@@ -431,19 +431,30 @@ difference students choose between.
 - **`look` on a Mac needs the `mach-register` rule in the profile** (Chrome's
   helper programs). Without it `look` falls back to `--single-process`, which
   cannot wait for a page's scripts. The CI job `claude-look-mac` runs both.
-- **`testpage` is playwright-core as a library, not Playwright's MCP server or
-  its CLI.** Both of those open a Unix socket for their browser; the sandbox
+- **`clickthrough` is playwright-core as a library, not Playwright's MCP server
+  or its CLI.** Both of those open a Unix socket for their browser; the sandbox
   refuses it (under Linux the lock refuses every Unix socket). Tried on 14 Nov
-  2026 on the branch `wip/playwright-trial`. `testpage-setup.js` gives
+  2026 on the branch `wip/playwright-trial`. `clickthrough-setup.js` gives
   `chromium.launch()` kingo's browser and nono's proxy: on a Mac, Chrome does
   not take `HTTPS_PROXY` and cannot reach the internet without it.
-- **`testpage` (called `browse` until 15 Nov 2026; Frank: the name said too
-  little, Claude reads the internet anyway) closes http and WebSockets** in
-  Chrome (dead proxies) and in every context (route), so that no page can
-  reach n8n or Langflow. `--dev <port>` opens one port for the student's dev
-  server: the bypass list sends it direct, the route lets it through only for
-  pages from the dev server. The profile opens `KINGO_DEV_PORT` (5173): a
+- **`clickthrough` (Frank's word „Durchklicken“, 15 Nov 2026: `look` takes a
+  picture of a page, `clickthrough` clicks through it as a person would, and
+  Claude reads the internet with its web tools; first called `browse`, which
+  said too little) closes http and WebSockets** in Chrome (dead proxies) and in
+  every context (route), so that no page can reach n8n or Langflow. `--dev
+  <port>` opens one port for the student's dev server: the bypass list sends it
+  direct, the route lets it through only for pages from the dev server and for
+  `page.goto` of the script. The profile opens `KINGO_DEV_PORT` (5173): a
   Seatbelt rule on a Mac, `open_port` under Linux. Never a port of kingo-pod.
+- **The locks of `clickthrough` hold whatever the script does through
+  Playwright's API** (a review, 15 Nov 2026): every `require` and `import` of
+  Playwright gets kingo's copy, also next to a copy in `node_modules`; a route
+  of the script asks lock 2 first; a context gets no proxy of its own; the
+  other ways to a browser are refused (`clickthrough-setup.js` lists them, and
+  what stays outside: a script that goes around the API). A newer
+  playwright-core may bring a new way: the CI tries each one
+  (`clickthrough_routes.js`, `clickthrough_copy.js`, `clickthrough_ways.js`).
+  Scripts are `.cjs`: in a Vite project a `.js` is an ES module.
 
 ## Layout
 
