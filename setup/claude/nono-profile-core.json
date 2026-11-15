@@ -39,13 +39,15 @@
       "$HOME/.cache/claude",
       { "path": "$HOME/Library/Caches/claude-cli-nodejs", "when": "macos" }
     ],
-    // The Claude Code binary from the native installer, and the browser that kingo downloads for look. Read only:
+    // The Claude Code binary from the native installer, the browser that kingo downloads for look, and Node.js and
+    // playwright-core for testpage. Read only:
     // kingo starts the browser outside the sandbox too (--version, ldd), so the sandbox must not be able to change it.
     // And the fonts that the user installed. The system knows them by name; when the browser of look cannot read
     // their files, a page that names such a font (for example Pretendard) shows a box for every letter.
     // nono leaves out a folder that does not exist.
     "read": [
       "$HOME/.local/share/claude", "$HOME/.local/share/kingo/browsers",
+      "$HOME/.local/share/kingo/node", "$HOME/.local/share/kingo/playwright",
       { "path": "$HOME/Library/Fonts", "when": "macos" },
       { "path": "$HOME/.local/share/fonts", "when": "linux" },
       { "path": "$HOME/.fonts", "when": "linux" }
@@ -63,7 +65,7 @@
       "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_TMPDIR", "TMPDIR",
       "CLAUDE_CODE_DISABLE_ARTIFACT", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING",
       "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
-      "KINGO_BROWSER", "KINGO_BROWSER_MODE",
+      "KINGO_BROWSER", "KINGO_BROWSER_MODE", "KINGO_NODE", "KINGO_PLAYWRIGHT", "KINGO_DEV_PORT", "KINGO_POD_PORTS",
       "GIT_CONFIG_NOSYSTEM"
     ]
   },
@@ -72,7 +74,17 @@
   // and Chrome then stops at its start. The rule allows names with exactly this beginning and no other. It gives
   // no file and no network. What it leaves open: a program in the sandbox could take such a name before a Chromium
   // outside the sandbox with that process number asks for it, and that Chromium would then not start.
+  // For testpage --dev: the student's dev server on this laptop (KINGO_DEV_PORT, 5173 unless the student names another;
+  // kingo fills it in and never takes a port of kingo-pod). Mac: a rule for exactly this connection, as for
+  // PostgreSQL in the course profile; a program in the sandbox cannot listen there (Seatbelt cannot limit listening to
+  // one port, so nono's open_port is not used on a Mac). The student starts the dev server in their own terminal.
   "unsafe_macos_seatbelt_rules": [
-    "(allow mach-register (global-name-prefix \"org.chromium.Chromium.MachPortRendezvousServer.\"))"
-  ]
+    "(allow mach-register (global-name-prefix \"org.chromium.Chromium.MachPortRendezvousServer.\"))",
+    "(allow network-outbound (remote tcp \"localhost:__DEV_PORT__\"))"
+  ],
+  // Linux and Windows (WSL2): open_port, which is limited to this port there; a program in the sandbox may also
+  // listen on it, so Claude can start the dev server itself.
+  "platform_overrides": {
+    "linux": { "network": { "open_port": [__DEV_PORT__] } }
+  }
 }

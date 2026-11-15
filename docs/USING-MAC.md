@@ -236,6 +236,7 @@ open -e ~/kingo-pod/claude/AGENTS.md
 | read `kingo-pod`: `compose.yml`, the guides | change `kingo-pod`, or run `./kingo` |
 | change your n8n workflows, Langflow flows and database | see your keys: it gets stand-ins |
 | look things up on the web | see your own Claude Code settings, if you use Claude Code already |
+| look at the pages it writes, and try them as a person would (`look`, `testpage`) | open http addresses on your laptop, apart from your dev server with `testpage --dev 5173` |
 
 **It asks before every command,** unless you start it with
 `./kingo yolo`. Inside the sandbox, Claude Code's requests for permission do not

@@ -405,7 +405,8 @@ difference students choose between.
   a newer nono: change the version and the four checksums, run the CI, then
   release. A nono that is installed on the laptop is only the fallback when
   the download fails.
-- **What `kingo` downloads for Claude Code (nono, the browser of `look`) lives
+- **What `kingo` downloads for Claude Code (nono, the browser of `look`,
+  Node.js and playwright-core for `testpage`) lives
   in `~/.local/share/kingo`, never in a folder the sandbox can write.** `kingo`
   starts these files OUTSIDE the sandbox (nono itself; the browser for
   `--version` and `ldd`). In `~/.kingo-claude` or the course folder, a program
@@ -445,6 +446,19 @@ difference students choose between.
 - **`look` on a Mac needs the `mach-register` rule in the profile** (Chrome's
   helper programs). Without it `look` falls back to `--single-process`, which
   cannot wait for a page's scripts. The CI job `claude-look-mac` runs both.
+- **`testpage` is playwright-core as a library, not Playwright's MCP server or
+  its CLI.** Both of those open a Unix socket for their browser; the sandbox
+  refuses it (under Linux the lock refuses every Unix socket). Tried on 14 Nov
+  2026 on the branch `wip/playwright-trial`. `testpage-setup.js` gives
+  `chromium.launch()` kingo's browser and nono's proxy: on a Mac, Chrome does
+  not take `HTTPS_PROXY` and cannot reach the internet without it.
+- **`testpage` (called `browse` until 15 Nov 2026; Frank: the name said too
+  little, Claude reads the internet anyway) closes http and WebSockets** in
+  Chrome (dead proxies) and in every context (route), so that no page can
+  reach n8n or Langflow. `--dev <port>` opens one port for the student's dev
+  server: the bypass list sends it direct, the route lets it through only for
+  pages from the dev server. The profile opens `KINGO_DEV_PORT` (5173): a
+  Seatbelt rule on a Mac, `open_port` under Linux. Never a port of kingo-pod.
 
 ## Layout
 
