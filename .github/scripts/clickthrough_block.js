@@ -1,11 +1,14 @@
-// CI: a page tries to reach a service on this laptop, as a page of the internet could (setup/claude/testpage-setup.js).
-//   testpage testpage_block.js <port of a listener on 127.0.0.1> <page.html> <the address of a page on the internet>
+// CI: a page tries to reach a service on this laptop, as a page of the internet could (setup/claude/clickthrough-setup.js).
+//   clickthrough clickthrough_block.js <port of a listener on 127.0.0.1> <page.html> <the address of a page on the internet> [own]
 // From the page of the internet, from the file and from a data: page: a POST (fetch), an image and a WebSocket, each to
 // 127.0.0.1, localhost and 127.0.0.1.nip.io (a name that points to 127.0.0.1); then page.goto on such an http address.
-// Nothing may arrive at the listener: the shell reads its log. Prints BLOCK-GOTO <what testpage said>, BLOCK-DONE.
+// With "own", the script names the browser itself, as a script must with a copy of Playwright of its own (the shell
+// puts this file next to one, clickthrough_copy).
+// Nothing may arrive at the listener: the shell reads its log. Prints BLOCK-PLAYWRIGHT <the playwright-core that
+// require found>, BLOCK-GOTO <what clickthrough said>, BLOCK-DONE.
 const { chromium } = require('playwright-core');
-const path = require('path');
-const [port, file, internet] = process.argv.slice(2);
+const { pathToFileURL } = require('url');
+const [port, file, internet, own] = process.argv.slice(2);
 const hosts = ['127.0.0.1', 'localhost', '127.0.0.1.nip.io'];
 
 async function tryAll(page) {
@@ -22,11 +25,13 @@ async function tryAll(page) {
 }
 
 (async () => {
-  const browser = await chromium.launch();
+  console.log('BLOCK-PLAYWRIGHT ' + require.resolve('playwright-core'));
+  const browser = await chromium.launch(own ? { executablePath: process.env.KINGO_BROWSER, chromiumSandbox: false,
+    args: process.env.KINGO_BROWSER_MODE === 'single' ? ['--single-process'] : [] } : undefined);
   const page = await browser.newPage();
   await page.goto(internet, { timeout: 60000 });
   await tryAll(page);
-  await page.goto('file://' + path.resolve(file));
+  await page.goto(pathToFileURL(file).href);
   await tryAll(page);
   await page.goto('data:text/html,<title>data</title><p>a page without an origin</p>');
   await tryAll(page);

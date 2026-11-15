@@ -1,0 +1,114 @@
+#!/bin/bash
+# clickthrough: run a script that opens a page in the browser of look and clicks through it as a person would: fill in
+# a form, press a button, read what the page shows then. The name says what it does: look takes a picture of a page,
+# clickthrough clicks through it, and to read pages of the internet Claude has its web tools.
+#
+#     clickthrough try.cjs             runs try.cjs with Node.js. In it, require('playwright-core') works, and
+#                                      chromium.launch() starts the browser of look.
+#     clickthrough --dev 5173 try.cjs  the same, and the pages may also use the dev server on localhost:5173 (Vite's
+#                                      port): http and its WebSocket, for pages that come from it, and for page.goto
+#                                      of the script. kingo opens one port for it in the sandbox: 5173, or the one in
+#                                      KINGO_DEV_PORT when ./kingo claude starts. Never a port of kingo-pod (n8n,
+#                                      Langflow, PostgreSQL and the others). The dev server itself (npm run dev) may
+#                                      run inside the sandbox under Linux and WSL2; on a Mac the sandbox lets no
+#                                      program listen there.
+#
+# The script is CommonJS (require, not import). Name it .cjs: in a folder whose package.json says "type": "module" (a
+# Vite project), Node.js takes a .js for an ES module, in which require is missing. An example, in the folder of the
+# page:
+#
+#     const { chromium } = require('playwright-core');
+#     const { pathToFileURL } = require('url');
+#     (async () => {
+#       const browser = await chromium.launch();
+#       const page = await browser.newPage();
+#       await page.goto(pathToFileURL('form.html').href);
+#       await page.fill('#name', 'Mina');
+#       await page.click('text=Send');
+#       console.log(await page.textContent('#answer'));
+#       await page.screenshot({ path: 'look/form-after-send.png' });
+#       await browser.close();
+#     })();
+#
+# Pages on the internet work too, by https: the browser goes through nono's proxy (clickthrough-setup.js). http
+# addresses and WebSockets are closed, so that no page can reach n8n, Langflow or another service on this laptop. In
+# the course, to try a webhook of n8n, use curl with "$N8N_BASE_URL/webhook/..." and the header X-N8N-API-KEY
+# (AGENTS.md).
+#
+# `kingo claude` gets Node.js and playwright-core with the browser (`./kingo claude browser` gets them again) and
+# says where they are (KINGO_NODE, KINGO_PLAYWRIGHT, KINGO_BROWSER). Everything runs inside the sandbox. A script
+# always gets kingo's playwright-core, also in a folder with a copy of its own in node_modules (clickthrough-setup.js).
+# Not Playwright's MCP server or its CLI: both open a Unix socket for their browser, which the sandbox refuses
+# (tried on 14 Nov 2026). playwright-core by itself talks to the browser through pipes.
+set -u
+
+stop() { printf 'clickthrough: %s\n' "$*" >&2; exit 1; }
+usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit "${1:-0}"; }
+case "${1:-}" in
+  -h|--help) usage ;;
+  '') usage 2 ;;
+esac
+# --dev <port>: the student's dev server on this laptop. Never a port of kingo-pod, nor nono's proxy: a page could
+# reach that service then. kingo names the one port the sandbox opens for it (KINGO_DEV_PORT).
+dev=""
+if [ "${1:-}" = --dev ]; then
+  dev=${2:-}
+  # A number as kingo writes it, without leading zeros: the ports of kingo-pod below are compared as text, and Chrome
+  # takes 05678 for 5678.
+  case "$dev" in ''|0*|*[!0-9]*|??????*) stop "--dev takes the port of your dev server, a number without leading zeros, for example: clickthrough --dev 5173 try.cjs" ;; esac
+  [ "$dev" -ge 1 ] && [ "$dev" -le 65535 ] || stop "$dev is not a port"
+  pod=" ${KINGO_POD_PORTS:-5432 5678 5679 6333 6334 7860 8000 8888 4040 3000 8978} "
+  proxy_port=$(printf '%s' "${HTTPS_PROXY:-${https_proxy:-}}" | sed -n 's|.*:\([0-9][0-9]*\)/*$|\1|p')
+  case "$pod" in *" $dev "*) stop "port $dev is a port of kingo-pod (n8n, Langflow, PostgreSQL and the others). clickthrough never opens those, so that no page can reach them. Use your dev server's port, for example 5173." ;; esac
+  [ "$dev" != "$proxy_port" ] || stop "port $dev is nono's proxy, not a dev server"
+  if [ -n "${KINGO_DEV_PORT:-}" ] && [ "$dev" != "$KINGO_DEV_PORT" ]; then
+    stop "the sandbox opens port $KINGO_DEV_PORT for a dev server, not $dev. Run the dev server on $KINGO_DEV_PORT, or ask the student to start Claude with:  KINGO_DEV_PORT=$dev ./kingo claude"
+  fi
+  shift 2
+  [ -n "${1:-}" ] || usage 2
+fi
+script=$1; shift
+[ -f "$script" ] || stop "there is no file $script"
+case "$script" in
+  *.mjs|*.mts|*.ts) stop "clickthrough runs CommonJS scripts: a .cjs file that uses require(). Write $script as one." ;;
+esac
+
+here=$(cd "$(dirname "$0")" && pwd -P)
+ask="Ask the student to run this in their own terminal, in the kingo-pod folder:  ./kingo claude browser"
+share="$HOME/.local/share/kingo"
+node=${KINGO_NODE:-}
+if [ -z "$node" ] || [ ! -x "$node" ]; then node=$(ls -d "$share"/node/*/node 2>/dev/null | sort | tail -n 1); fi
+{ [ -n "$node" ] && [ -x "$node" ]; } || stop "Node.js is not installed. $ask"
+pw=${KINGO_PLAYWRIGHT:-}
+if [ -z "$pw" ] || [ ! -f "$pw/node_modules/playwright-core/package.json" ]; then
+  pw=$(ls -d "$share"/playwright/*/node_modules/playwright-core 2>/dev/null | sort | tail -n 1); pw=${pw%/node_modules/playwright-core}
+fi
+{ [ -n "$pw" ] && [ -f "$pw/node_modules/playwright-core/package.json" ]; } || stop "playwright-core is not installed. $ask"
+browser=${KINGO_BROWSER:-}
+if [ -z "$browser" ] || [ ! -x "$browser" ]; then
+  browser=$(ls -d "$share"/browsers/*/chrome-headless-shell-*/chrome-headless-shell 2>/dev/null | sort | tail -n 1)
+fi
+{ [ -n "$browser" ] && [ -x "$browser" ]; } || stop "the browser is not installed. $ask"
+
+# A .js is an ES module when the nearest package.json says "type": "module" (a Vite project does), and then require is
+# missing. Node.js reads the package.json: it is JSON, not a line for grep.
+case "$script" in
+  *.js)
+    d=$(cd "$(dirname "$script")" && pwd -P)
+    while :; do
+      if [ -f "$d/package.json" ]; then
+        if "$node" -e 'process.exit(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).type === "module" ? 0 : 1)' "$d/package.json" 2>/dev/null; then
+          stop "$script is an ES module here: $d/package.json says \"type\": \"module\", and then require is missing. Write the script as a .cjs file (${script%.js}.cjs); clickthrough runs CommonJS scripts."
+        fi
+        break
+      fi
+      [ "$d" != / ] && [ -n "$d" ] || break
+      d=$(dirname "$d")
+    done ;;
+esac
+
+# KINGO_PLAYWRIGHT: the folder of kingo's playwright-core, which clickthrough-setup.js gives every require and import of
+# Playwright. NODE_PATH: the same for require.resolve of a tool that looks there.
+# UNDICI-EHPA: Node.js says at every start that its support for HTTPS_PROXY is new; nono sets that variable.
+export KINGO_BROWSER="$browser" KINGO_PLAYWRIGHT="$pw" NODE_PATH="$pw/node_modules" KINGO_CLICKTHROUGH_DEV="$dev"
+exec "$node" --disable-warning=UNDICI-EHPA --require "$here/../clickthrough-setup.js" "$script" "$@"

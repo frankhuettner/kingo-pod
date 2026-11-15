@@ -1,6 +1,6 @@
-"""CI: a service on this laptop, as n8n is one, for the question whether a page in testpage can reach it.
+"""CI: a service on this laptop, as n8n is one, for the question whether a page in clickthrough can reach it.
 
-    python3 testpage_listener.py PORT LOG
+    python3 clickthrough_listener.py PORT LOG
 
 Listens on 127.0.0.1:PORT and writes one line into LOG for every connection that arrives: ARRIVED with its first
 bytes, TLS when they open a TLS handshake, EMPTY when none come in 3 seconds. A page may still reach the port by https
