@@ -6,6 +6,11 @@
 set -euo pipefail
 
 KINGO_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" && pwd)"
+# The folder kingo was started from, before the cd: kingo claude --in takes a folder named from there (--in . is the
+# folder you are in, which kc of ./kingo shortcuts passes). $PWD as the student's shell keeps it, so that ../x goes
+# where cd ../x goes in their terminal. Not a KINGO_ name: those come from the environment (_cli_overrides below).
+_kingo_from=$PWD
+[ -d "$_kingo_from" ] || _kingo_from=""
 cd "$KINGO_DIR"
 
 # .env holds the shared classroom defaults (committed). .env.local holds
@@ -1531,8 +1536,17 @@ claude_login_step() { # nono, templates folder
 CLAUDE_IN_HINT='You were started with "./kingo claude --in" and run in a sandbox (nono). You can write only in the folder you were started in. The sandbox is there so that a mistake cannot harm this laptop: a wrong command, a wrong path, a file deleted by accident. It is not a puzzle and not a test of you: do not look for a way around it. When it blocks something, say what was blocked and stop. Never ask the user to run a command in their own terminal that you could not run here, and never suggest starting you without ./kingo claude.'
 
 # The folder must be one that Claude Code may get as a whole. Prints its full path, or says why not and fails.
-claude_in_folder() { # folder
+# kingo-pod or a folder in it is the course (Frank, 15 Nov 2026): then it prints nothing, and kingo claude starts as
+# without --in, in kingo-pod/claude. That comes first, before the rules for a folder of one's own: it gives the
+# sandbox of ./kingo claude, wherever kingo-pod is. A folder that holds kingo-pod stays refused.
+claude_in_folder() { # folder, as the student typed it
   local want=$1 dir home rel pod
+  # A relative folder is named from where kingo was started, not from kingo-pod (kingo has done a cd there).
+  case "$want" in
+    /*) ;;
+    *) [ -n "$_kingo_from" ] || die "kingo cannot tell which folder you are in. Name the folder in full, for example:  ./kingo claude --in ~/projects/thesis"
+       want="$_kingo_from/$want" ;;
+  esac
   case "$want" in
     /mnt/*) die "$want is a Windows folder. kingo claude --in takes a folder in Linux, for example ~/projects/thesis: there the sandbox is tested. To move files between Windows and that folder, open it in Windows with: explorer.exe ." ;;
   esac
@@ -1540,6 +1554,9 @@ claude_in_folder() { # folder
   dir=$(cd "$want" && pwd -P) || die "cannot open the folder $want"
   home=$(cd "$HOME" && pwd -P)
   pod=$(cd "$KINGO_DIR" && pwd -P)
+  case "$dir/" in
+    "$pod"/*) return 0 ;;
+  esac
   case "$dir" in
     /mnt/*) die "$want is a Windows folder ($dir). kingo claude --in takes a folder in Linux, for example ~/projects/thesis." ;;
   esac
@@ -1552,9 +1569,6 @@ claude_in_folder() { # folder
     .*) die "$dir is a hidden folder of your home folder, where programs keep their settings and keys. Choose a folder for your work, for example ~/projects/thesis." ;;
     Desktop|Documents|Downloads|Pictures|Music|Movies|Library|Library/*)
       die "$dir is too wide: Claude Code may write everywhere in the folder you give it. Choose a folder inside it, or make one:  mkdir -p ~/projects/thesis" ;;
-  esac
-  case "$dir/" in
-    "$pod"/*) die "$dir is kingo-pod or a folder in it. For the course, start Claude Code with:  ./kingo claude" ;;
   esac
   case "$pod/" in
     "$dir"/*) die "$dir holds kingo-pod ($pod). Claude Code could then change kingo itself. Choose a folder that kingo-pod is not in." ;;
@@ -1584,6 +1598,8 @@ cmd_claude() {
       echo "kingo claude --in <folder> [claude options]  the same Claude Code for a folder of your own, without the course:"
       echo "  Claude writes only in that folder. No n8n, no Langflow, no database; the pod need not run."
       echo "  The folder is inside your home folder, and not a Windows folder (/mnt/c/...)."
+      echo "  Name it from where you are: --in . is the folder you are in. kingo-pod or a folder in it starts the course."
+      echo "  ./kingo shortcuts makes kc for kingo claude --in . (and ky for kingo yolo --in .)."
       echo "Your own additions to the sandbox of the course: copy setup/claude/my-nono-profile.example.json to"
       echo "  $KINGO_DIR/my-nono-profile.json and change it. Claude can read that file and not change it."
       echo "kingo claude --login [--in <folder>] [claude options]  with your Claude subscription in place of OpenRouter:"
@@ -1610,6 +1626,8 @@ cmd_claude() {
   [ "$take" != 1 ] || die "kingo claude --in needs a folder, for example:  ./kingo claude --in ~/projects/thesis"
   if [ "$take" = 2 ]; then
     in_dir=$(claude_in_folder "$in_dir") || exit 1
+    # kingo-pod or a folder in it: the course, as without --in
+    [ -n "$in_dir" ] || echo "This folder is in kingo-pod: Claude Code starts for the course, in ${KINGO_DIR##*/}/claude."
   fi
   if [ "$take" = 2 ] || [ "$login" = 1 ]; then
     set -- ${keep[@]+"${keep[@]}"}
@@ -1900,6 +1918,325 @@ cmd_claude() {
   fi
   export "${envs[@]}"
   exec "$nono" run --profile "$profile" --allow-cwd --read "$reads" -- "$@"
+}
+
+# ── shortcuts: kc, ky and kingo as commands of the student's own terminal ─────
+# ./kingo shortcuts (Frank, 15 Nov 2026) writes shell functions into the file that a new terminal reads, for the shell
+# in $SHELL: zsh ~/.zshrc; bash ~/.bashrc under Linux and WSL, ~/.bash_profile on a Mac (Terminal starts a login
+# shell there, and bash then reads only the first of ~/.bash_profile, ~/.bash_login and ~/.profile). They are one
+# block between two marker lines: a second run replaces it, remove takes it out, nothing else in the file changes, and
+# a copy of the file comes first. The functions call this script by its full path, so what they do comes with
+# ./kingo update; kc and the others pass --in ., the folder you are in (claude_in_folder; in kingo-pod the course).
+# The block defines them with "function name {", which an alias of the same name cannot bend, and unaliases its names
+# first. KINGO_SHORTCUTS_SKIP=1 switches the block off: that is how kingo asks the shell which names something else has.
+SC_NAMES="kc kcl ky kyl kingo"
+SC_START="# >>> kingo shortcuts >>>"
+SC_END="# <<< kingo shortcuts <<<"
+
+shortcuts_args() { # name: what its function passes to kingo, before the student's own arguments
+  case "$1" in
+    kc)  echo "claude --in ." ;;
+    kcl) echo "claude --login --in ." ;;
+    ky)  echo "yolo --in ." ;;
+    kyl) echo "yolo --login --in ." ;;
+    *)   echo "" ;;
+  esac
+}
+shortcuts_what() { # name: one line for the student
+  case "$1" in
+    kc)    echo "kingo claude in the folder you are in" ;;
+    kcl)   echo "the same with --login: your own Claude subscription" ;;
+    ky)    echo "kingo yolo in the folder you are in: Claude works without asking" ;;
+    kyl)   echo "the same with --login" ;;
+    kingo) echo "kingo from any folder, for example: kingo status" ;;
+  esac
+}
+shortcuts_short() { # path: ~/... for a path in the home folder, as the student would type it
+  case "$1" in "$HOME"/*) printf '~/%s' "${1#"$HOME"/}" ;; *) printf '%s' "$1" ;; esac
+}
+shortcuts_real() { readlink -f "$1" 2>/dev/null || printf '%s' "$1"; }
+
+# The file that a new terminal reads, for the shell in $SHELL.
+shortcuts_rc() {
+  case "${SHELL:-}" in
+    */zsh|zsh)   printf '%s' "${ZDOTDIR:-$HOME}/.zshrc" ;;
+    */bash|bash) if [ "$(uname -s)" = Darwin ]; then printf '%s' "$HOME/.bash_profile"; else printf '%s' "$HOME/.bashrc"; fi ;;
+    *) die "kingo shortcuts writes them for zsh and bash, and your shell is ${SHELL:-not set}. Without them, type for example:  ./kingo claude --in ." ;;
+  esac
+}
+
+# Lines "name what it is now" for each of SC_NAMES that the student's terminal knows already, from something other
+# than kingo. Their shell is asked as a new terminal starts it (on a Mac a login shell), with kingo's block off, and
+# without the terminal: in a session of its own (perl's setsid), stdin /dev/null. A startup file that asks a question
+# (zsh's compinit does, when it finds insecure directories) then gets no answer at once: the question does not wait
+# for the student's keys, does not show on their screen, and takes none of their keys. It runs without job control
+# (+m, a precaution) and gets 10 seconds; a shell that is later than that is not asked, and kingo looks for the names
+# in the startup file only (shortcuts_defined). A command on the PATH counts too; this kingo itself does not.
+shortcuts_taken() { # startup file
+  local rc=$1 sh=${SHELL:-} probe="" out pid t0 n kind path what seen=" " login="" zd late=0 line
+  [ "$(uname -s)" != Darwin ] || login=-l
+  case "$sh" in
+    */zsh|zsh)
+      probe='for n in '"$SC_NAMES"'; do w=$(whence -w -- $n 2>/dev/null) || continue; print -r -- "KINGO-HAS $n ${w##*: } $(whence -p -- $n 2>/dev/null || print -- -) $(whence -v -- $n 2>/dev/null)"; done'
+      # Without any startup file, zsh offers its setup for new users; and there is nothing of the student's to find.
+      zd=${ZDOTDIR:-$HOME}
+      [ -e "$zd/.zshenv" ] || [ -e "$zd/.zprofile" ] || [ -e "$zd/.zshrc" ] || [ -e "$zd/.zlogin" ] || probe="" ;;
+    */bash|bash)
+      probe='for n in '"$SC_NAMES"'; do t=$(type -t -- "$n" 2>/dev/null) || continue; echo "KINGO-HAS $n $t $(type -P -- "$n" 2>/dev/null || echo -) $(type -- "$n" 2>/dev/null | head -n 1)"; done' ;;
+  esac
+  out=$(mktemp "${TMPDIR:-/tmp}/kingo-shortcuts.XXXXXX")
+  if [ -n "$probe" ]; then
+    # perl is part of macOS and of Ubuntu (perl-base); without it, the shell is asked in the terminal, as before.
+    if command -v perl >/dev/null 2>&1; then
+      KINGO_SHORTCUTS_SKIP=1 perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or exit 127' -- "$sh" +m $login -i -c "$probe" < /dev/null > "$out" 2>/dev/null &
+    else
+      KINGO_SHORTCUTS_SKIP=1 "$sh" +m $login -i -c "$probe" < /dev/null > "$out" 2>/dev/null &
+    fi
+    pid=$!
+    # The clock, not a count of rounds: on a slow machine 50 rounds of sleep 0.2 took 14 seconds (CI on a Mac).
+    t0=$SECONDS
+    while kill -0 "$pid" 2>/dev/null; do
+      if [ $((SECONDS - t0)) -gt 10 ]; then
+        kill -KILL "$pid" 2>/dev/null || true    # an interactive shell ignores SIGTERM
+        warn "your shell did not answer within 10 seconds, so kingo looked for your aliases and functions only in $(shortcuts_short "$rc"), and checked the commands on your PATH."
+        late=1
+        break
+      fi
+      sleep 0.2
+    done
+    wait "$pid" 2>/dev/null || true
+  fi
+  while read -r _ n kind path what; do
+    case " $SC_NAMES " in *" $n "*) ;; *) continue ;; esac
+    case "$seen" in *" $n "*) continue ;; esac
+    seen="$seen$n "
+    if [ "$n" = kingo ] && { [ "$kind" = command ] || [ "$kind" = file ] || [ "$kind" = hashed ]; } \
+       && [ "$(shortcuts_real "$path")" = "$(shortcuts_real "$KINGO_DIR/kingo")" ]; then
+      continue
+    fi
+    echo "$n $what"
+  done <<<"$(LC_ALL=C grep '^KINGO-HAS ' "$out" || true)"
+  rm -f "$out"
+  if [ "$late" = 1 ]; then
+    for n in $SC_NAMES; do
+      case "$seen" in *" $n "*) continue ;; esac
+      line=$(shortcuts_defined "$rc" "$n") || continue
+      seen="$seen$n "
+      echo "$n $line (in $(shortcuts_short "$rc"))"
+    done
+  fi
+  for n in $SC_NAMES; do
+    case "$seen" in *" $n "*) continue ;; esac
+    path=$(type -P "$n" 2>/dev/null) || continue
+    if [ "$n" = kingo ] && [ "$(shortcuts_real "$path")" = "$(shortcuts_real "$KINGO_DIR/kingo")" ]; then continue; fi
+    echo "$n $n is $path"
+  done
+}
+
+# shortcuts_defined <file> <name>: the first line of the file, outside kingo's block, that makes the name an alias
+# or a function (alias kc=..., kc() {, function kc {), and fails when there is none. Only for a shell that did not
+# answer in time: it misses what other files define, which the shell itself would have said.
+shortcuts_defined() {
+  local l
+  [ -f "$1" ] || return 1
+  l=$(shortcuts_edit "$1" 2>/dev/null | LC_ALL=C grep -m 1 -E "^[[:space:]]*(alias[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*$2=|function[[:space:]]+$2([[:space:]({]|\$)|$2[[:space:]]*[(][)])") || return 1
+  l=${l#"${l%%[![:space:]]*}"}
+  printf '%s' "${l:0:120}"
+}
+
+# What the student typed: prints the names, or says what is wrong and fails. Enter alone is all of them.
+shortcuts_pick() {
+  local t n x i out="" toks=()
+  IFS=' ,' read -r -a toks <<<"$1" || true
+  [ "${#toks[@]}" -gt 0 ] || { echo "$SC_NAMES"; return 0; }
+  for t in "${toks[@]}"; do
+    [ -n "$t" ] || continue
+    i=1; n=""
+    for x in $SC_NAMES; do
+      if [ "$t" = "$i" ] || [ "$t" = "$x" ]; then n=$x; fi
+      i=$((i + 1))
+    done
+    [ -n "$n" ] || { echo "$t is not on the list. Type numbers from 1 to 5, for example: 1 3 5" >&2; return 1; }
+    out="$out $n"
+  done
+  echo "$out"
+}
+
+shortcuts_have() { # file: the names in its block, each with a space after it
+  [ -f "$1" ] || return 0
+  LC_ALL=C awk -v s="$SC_START" -v e="$SC_END" '
+    { l = $0; sub(/\r$/, "", l) }
+    l == s { b = 1; next }
+    l == e { b = 0; next }
+    b && l ~ /^  function [a-z]+ [{]/ { split(l, w, " "); printf "%s ", w[2] }
+  ' "$1" || true
+}
+
+shortcuts_block() { # names
+  local q n args
+  q="'$(printf '%s' "$KINGO_DIR/kingo" | sed "s/'/'\\\\''/g")'"
+  echo "$SC_START"
+  echo "# Made by ./kingo shortcuts, which replaces these lines when it runs again. To take them out:  $q shortcuts remove"
+  echo 'if [ -z "${KINGO_SHORTCUTS_SKIP:-}" ]; then'
+  echo "  unalias $1 2>/dev/null"
+  for n in $1; do
+    args=$(shortcuts_args "$n")
+    echo "  function $n { $q ${args:+$args }\"\$@\"; }"
+  done
+  echo "fi"
+  echo "$SC_END"
+}
+
+# shortcuts_edit <file> [<block file>]: prints the file with that block in place of the old one, or at its end;
+# without a block file, the file without its block. Every other line comes through as it is. Exit code 3: a marker
+# line without its partner.
+shortcuts_edit() {
+  LC_ALL=C awk -v s="$SC_START" -v e="$SC_END" -v blk="${2:-}" '
+    { l = $0; sub(/\r$/, "", l) }
+    l == s { if (inb) bad = 1; inb = 1; if (blk != "" && !done) { while ((getline x < blk) > 0) print x; done = 1 }; next }
+    l == e { if (!inb) bad = 1; inb = 0; next }
+    inb    { next }
+           { print }
+    END    { if (inb) bad = 1; if (bad) exit 3; if (blk != "" && !done) while ((getline x < blk) > 0) print x }
+  ' "$1"
+}
+# Stops, changing nothing, when the file's block is not whole.
+shortcuts_whole() { # file
+  local st=0
+  [ -e "$1" ] || return 0
+  shortcuts_edit "$1" > /dev/null || st=$?
+  [ "$st" != 3 ] || die "$(shortcuts_short "$1") has a line '$SC_START' without its line '$SC_END', or the other way round. kingo changed nothing. Take the lines of kingo shortcuts out of the file by hand, then run ./kingo shortcuts again."
+  [ "$st" = 0 ] || die "kingo could not read $(shortcuts_short "$1"), and changed nothing."
+}
+
+# shortcuts_write <file> <names>: the block with these names in place of the old one, or at the end of the file; no
+# names takes it out. Nothing else in the file changes, a copy of it comes first, and the file is written in place
+# (a link stays a link). A marker line without its partner: it changes nothing and fails. Sets SC_DID (unchanged,
+# made, changed), SC_BACKUP (the copy) and SC_FROM (the file that a new ~/.bash_profile reads first).
+shortcuts_write() {
+  local rc=$1 names=$2 blk="" tmp f n=1
+  SC_DID=unchanged; SC_BACKUP=""; SC_FROM=""
+  shortcuts_whole "$rc"
+  tmp=$(mktemp "${TMPDIR:-/tmp}/kingo-shortcuts.XXXXXX")
+  if [ -n "$names" ]; then blk=$(mktemp "${TMPDIR:-/tmp}/kingo-shortcuts.XXXXXX"); shortcuts_block "$names" > "$blk"; fi
+  if [ -e "$rc" ]; then
+    shortcuts_edit "$rc" "$blk" > "$tmp" || { rm -f "$tmp" ${blk:+"$blk"}; die "kingo could not read $(shortcuts_short "$rc"), and changed nothing."; }
+    if cmp -s "$tmp" "$rc"; then rm -f "$tmp" ${blk:+"$blk"}; return 0; fi
+    SC_BACKUP="$rc.kingo-backup-$(date +%Y%m%d-%H%M%S)"
+    while [ -e "$SC_BACKUP" ]; do n=$((n + 1)); SC_BACKUP="$rc.kingo-backup-$(date +%Y%m%d-%H%M%S)-$n"; done
+    cp -p "$rc" "$SC_BACKUP" || { rm -f "$tmp" ${blk:+"$blk"}; die "kingo could not make a copy of $(shortcuts_short "$rc"), and changed nothing."; }
+    SC_DID=changed
+  else
+    # bash reads only the first of these files: a new ~/.bash_profile would end the reading of the other one.
+    if [ "$rc" = "$HOME/.bash_profile" ]; then
+      for f in .bash_login .profile; do
+        if [ -f "$HOME/$f" ]; then
+          printf '# bash reads only the first of ~/.bash_profile, ~/.bash_login and ~/.profile. It read ~/%s before kingo made this file:\n[ -r ~/%s ] && . ~/%s\n' "$f" "$f" "$f" > "$tmp"
+          SC_FROM=$f
+          break
+        fi
+      done
+    fi
+    [ -z "$blk" ] || cat "$blk" >> "$tmp"
+    SC_DID=made
+  fi
+  cat "$tmp" > "$rc" || { rm -f "$tmp" ${blk:+"$blk"}; die "kingo could not write $(shortcuts_short "$rc").${SC_BACKUP:+ The file as it was before is in $(shortcuts_short "$SC_BACKUP").}"; }
+  rm -f "$tmp" ${blk:+"$blk"}
+}
+
+shortcuts_remove() {
+  local f found=0
+  for f in "${ZDOTDIR:-$HOME}/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile"; do
+    [ -f "$f" ] || continue
+    LC_ALL=C grep -qE '^# (>>> kingo shortcuts >>>|<<< kingo shortcuts <<<).?$' "$f" || continue
+    shortcuts_write "$f" ""
+    [ "$SC_DID" = changed ] || continue
+    found=1
+    echo "Took the kingo shortcuts out of $(shortcuts_short "$f") (the file as it was before: $(shortcuts_short "$SC_BACKUP"))."
+  done
+  if [ "$found" = 0 ]; then
+    echo "kingo found no shortcuts of its own in ~/.zshrc, ~/.bashrc or ~/.bash_profile: there is nothing to take out."
+    return 0
+  fi
+  echo "In a new terminal they are gone. This terminal keeps them until you close it."
+}
+
+cmd_shortcuts() {
+  case "${1:-}" in
+    help|-h|--help)
+      echo "kingo shortcuts            short commands for your terminal. It shows them and asks which ones you want:"
+      local x; for x in $SC_NAMES; do printf '  %-6s %s\n' "$x" "$(shortcuts_what "$x")"; done
+      echo "kingo shortcuts kc ky ...  these, without the question"
+      echo "kingo shortcuts remove     take them out again"
+      echo "They go into the file that a new terminal reads: ~/.zshrc for zsh; for bash ~/.bashrc, on a Mac ~/.bash_profile."
+      echo "kingo writes them between two marked lines, changes nothing else in the file, and keeps a copy of it first."
+      return ;;
+    remove)
+      [ $# = 1 ] || die "kingo shortcuts remove takes nothing after it."
+      shortcuts_remove; return ;;
+  esac
+  local rc want="" chosen="" keep="" claude=0 n a i answer taken have m rest what
+  rc=$(shortcuts_rc) || exit 1
+  shortcuts_whole "$rc"
+  if [ $# -gt 0 ]; then
+    for a in "$@"; do
+      case " $SC_NAMES " in *" $a "*) ;; *) die "kingo shortcuts knows these: $SC_NAMES (not '$a'). ./kingo shortcuts help says what they do." ;; esac
+      want="$want $a"
+    done
+  else
+    [ -t 0 ] || die "kingo shortcuts asks which shortcuts you want. Run it in a terminal, or name them:  ./kingo shortcuts kc ky kingo"
+    echo "kingo shortcuts: short commands for your terminal, so that you need not type ./kingo."
+    echo "They go into $(shortcuts_short "$rc"), which every new terminal reads."
+    echo
+    i=1
+    for n in $SC_NAMES; do printf '  %s  %-6s %s\n' "$i" "$n" "$(shortcuts_what "$n")"; i=$((i + 1)); done
+    echo
+    while :; do
+      read -r -p "Which ones? Type their numbers, for example 1 3 5, or press Enter for all: " answer \
+        || die "kingo shortcuts got no answer, and wrote nothing."
+      want=$(shortcuts_pick "$answer") && break
+    done
+  fi
+  for n in $SC_NAMES; do case " $want " in *" $n "*) chosen="$chosen $n" ;; esac; done
+
+  # A name that means something already is written only when the student says yes. One that is in kingo's block
+  # now, they said yes to before.
+  taken=$(shortcuts_taken "$rc")
+  have=" $(shortcuts_have "$rc")"
+  for n in $chosen; do
+    what=""
+    while read -r m rest; do
+      if [ "$m" = "$n" ]; then what=$rest; break; fi
+    done <<<"$taken"
+    case "$have" in *" $n "*) what="" ;; esac
+    if [ -z "$what" ]; then keep="$keep $n"; continue; fi
+    echo "$n already means something in your terminal: $what"
+    if [ -t 0 ]; then
+      read -r -p "Take kingo's $n in its place? Type yes, or press Enter to keep yours: " a || a=""
+      case "$a" in
+        y|Y|yes|Yes|YES) keep="$keep $n" ;;
+        *) echo "Kept yours: kingo leaves $n out." ;;
+      esac
+    else
+      echo "  kingo left $n out. To take kingo's $n in its place, run ./kingo shortcuts in a terminal and answer yes."
+    fi
+  done
+  keep=${keep# }
+  [ -n "$keep" ] || { echo "Nothing was written."; return 0; }
+
+  shortcuts_write "$rc" "$keep"
+  if [ "$SC_DID" = unchanged ]; then
+    echo "$(shortcuts_short "$rc") has these shortcuts already: $keep"
+  else
+    echo "Written to $(shortcuts_short "$rc"):"
+    for n in $keep; do printf '  %-6s %s\n' "$n" "$(shortcuts_what "$n")"; done
+    [ -z "$SC_BACKUP" ] || echo "The file as it was before: $(shortcuts_short "$SC_BACKUP")"
+    [ -z "$SC_FROM" ] || echo "kingo made this file, and it reads ~/$SC_FROM first, as bash did before."
+  fi
+  for n in $keep; do case "$n" in kc|kcl|ky|kyl) claude=1 ;; esac; done
+  [ "$claude" = 0 ] || echo "In kingo-pod they start Claude Code for the course, in ${KINGO_DIR##*/}/claude."
+  echo "They work in every new terminal. To use them in this one now:  source $(shortcuts_short "$rc")"
+  echo "To take them out again:  ./kingo shortcuts remove"
 }
 
 # ── smoke: rigorous verification (exact codes + stability + bindings + hub) ───
@@ -3355,6 +3692,7 @@ case "${1:-help}" in
   mcp)               cmd_mcp ;;
   claude)            shift; cmd_claude "$@" ;;
   yolo)              shift; cmd_claude --dangerously-skip-permissions "$@" ;;
+  shortcuts)         shift; cmd_shortcuts "$@" ;;
   logs)              select_engine; shift; inactive_hint "$@"; compose logs --tail=100 -f "$@" ;;
   restart)           select_engine; ensure_ready; shift; inactive_hint "$@"; compose restart "$@" ;;
   mode)              shift; cmd_mode "${1:-}" ;;
@@ -3401,6 +3739,9 @@ kingo — classroom stack helper (Podman or Docker, no VM)
                       PostgreSQL (asks for your keys the first time)
   kingo yolo          the same, but Claude works without asking you first
                       (the sandbox protects your laptop either way)
+  kingo shortcuts     short commands for your terminal, in any folder: kc =
+                      kingo claude there, ky = kingo yolo there, kingo itself
+                      (asks which ones; 'kingo shortcuts remove' takes them out)
   kingo logs [svc]    follow logs (e.g. kingo logs langflow)
   kingo restart [svc] restart everything or one service
   kingo pull          download all images, one at a time with retries

@@ -818,11 +818,12 @@ part_own() {
   rm -rf "$dir" "$mine"; mkdir -p "$dir" "$HOME/Documents"
 
   say "kingo claude --in: the folders it does not take"
-  for d in / "$HOME" "$HOME/Documents" "$HOME/.config" /mnt/c/Users/someone "$KINGO_DIR" "$KINGO_DIR/shared" "$(dirname "$KINGO_DIR")" "$HOME/no-such-folder"; do
+  # kingo-pod and a folder in it are not refused: they start the course (claude-shortcuts.sh in checks that).
+  for d in / "$HOME" "$HOME/Documents" "$HOME/.config" /mnt/c/Users/someone "$(dirname "$KINGO_DIR")" "$HOME/no-such-folder"; do
     if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$d" 2>&1); then show "$out" 3; fail "kingo claude --in took the folder $d"; fi
     printf '         | %s\n' "$(printf '%s\n' "$out" | tail -n 1 | cut -c1-140)"
   done
-  ok "it refuses /, the home folder, Documents, a hidden folder, a Windows folder, kingo-pod, a folder that holds kingo-pod, a folder that is not there"
+  ok "it refuses /, the home folder, Documents, a hidden folder, a Windows folder, a folder that holds kingo-pod, a folder that is not there"
 
   say "kingo claude --in: what it would start"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$dir") || fail "kingo claude --in did not get as far as the start of Claude Code"

@@ -334,6 +334,14 @@ jobs:
       - name: A folder of one's own (kingo claude --in), the student's own profile, and git in the sandbox
         run: bash .github/scripts/claude-sandbox.sh own
 
+      - name: kingo claude --in from the folder you are in; in kingo-pod it starts the course
+        run: bash .github/scripts/claude-shortcuts.sh in
+
+      - name: kingo shortcuts with zsh and bash, and kc in a new shell
+        run: |
+          command -v zsh >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y zsh; }
+          bash .github/scripts/claude-shortcuts.sh shortcuts
+
       - name: kingo claude --login, with the student's Anthropic login in place of OpenRouter
         run: bash .github/scripts/claude-sandbox.sh login
 
@@ -376,6 +384,11 @@ jobs:
 
       - name: look inside nono with the course profile
         run: bash .github/scripts/claude-look-mac.sh
+
+      - name: kingo claude --in from the folder you are in, and kingo shortcuts with zsh and bash
+        run: |
+          bash .github/scripts/claude-shortcuts.sh in
+          bash .github/scripts/claude-shortcuts.sh shortcuts
 
       - name: Keep the pictures that look made
         if: always()
