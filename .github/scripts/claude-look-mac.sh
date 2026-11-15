@@ -405,7 +405,8 @@ ok "without the rule, the PDF comes too"
 say "a folder of one's own (kingo claude --in), and the student's own profile, on a Mac"
 OWN="$HOME/projects/thesis"; MINE="$KINGO_DIR/my-nono-profile.json"
 rm -rf "$OWN" "$MINE"; mkdir -p "$OWN" "$HOME/Documents"
-for d in / "$HOME" "$HOME/Documents" "$HOME/Library" "$KINGO_DIR" "$(dirname "$KINGO_DIR")"; do
+# kingo-pod itself is not refused: it starts the course (claude-shortcuts.sh in checks that).
+for d in / "$HOME" "$HOME/Documents" "$HOME/Library" "$(dirname "$KINGO_DIR")"; do
   if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$d" 2>&1); then show "$out" 3; fail "kingo claude --in took the folder $d"; fi
 done
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$OWN") || fail "kingo claude --in did not get as far as the start of Claude Code"

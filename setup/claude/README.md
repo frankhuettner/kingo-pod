@@ -53,7 +53,29 @@ Claude's. Delete the file to go back.
 `./kingo claude --in ~/projects/thesis` starts the same Claude Code in that folder: the same sandbox, the same model
 and key, `look`. It writes only in that folder. There is no n8n, no Langflow and no database, and the pod need not
 run. kingo puts no file into your folder. The folder must be inside your home folder; kingo refuses the home folder
-itself, `Documents` as a whole, hidden folders, kingo-pod, and Windows folders (`/mnt/c/...`).
+itself, `Documents` as a whole, hidden folders, a folder that holds kingo-pod, and Windows folders (`/mnt/c/...`).
+
+You can name the folder from where you are: `--in .` is the folder you are in, `--in thesis` the folder `thesis` in
+it. kingo-pod or a folder in it starts Claude Code for the course, as `./kingo claude` does, and kingo says so.
+
+## Shorter commands: `./kingo shortcuts`
+
+`./kingo shortcuts` adds short commands to your terminal. It shows a list: type the numbers you want, or press Enter
+for all of them.
+
+| Shortcut | What it does |
+|---|---|
+| `kc` | `kingo claude` in the folder you are in |
+| `kcl` | the same with `--login`: your own Claude subscription |
+| `ky` | `kingo yolo` in the folder you are in: Claude works without asking |
+| `kyl` | the same with `--login` |
+| `kingo` | `kingo` from any folder, for example `kingo status` |
+
+`kc` is `./kingo claude --in .`: in a folder of your own it starts Claude Code there, and in kingo-pod it starts the
+course. kingo writes the shortcuts into the file that a new terminal reads (`~/.zshrc`; for bash `~/.bashrc`, on a
+Mac `~/.bash_profile`), between two marked lines, and keeps a copy of the file first. They call kingo-pod's `kingo`,
+so `./kingo update` keeps them up to date. A name that means something in your terminal already, kingo writes only
+when you say yes. `./kingo shortcuts remove` takes them out again.
 
 To keep versions of what Claude Code writes, use git in the folder (`git init`); it works inside the sandbox, in the
 course folder `kingo-pod/claude` too. Claude Code can commit. It cannot push: your login for GitHub is outside the

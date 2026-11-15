@@ -441,8 +441,32 @@ difference students choose between.
   five of them off without any error.
 - **`claude_in_folder` decides which folder `--in` takes.** It must keep out
   every folder in which a program of the sandbox could write something that
-  runs outside later: the home folder, hidden folders, kingo-pod and any
-  folder that holds kingo-pod.
+  runs outside later: the home folder, hidden folders and any folder that
+  holds kingo-pod. kingo-pod itself and a folder in it are not given to
+  `--in`: they start the course, as `./kingo claude` does, with one line that
+  says so (Frank, 15 Nov 2026). A relative `--in` is named from the folder
+  kingo was started in (`_kingo_from`, taken before kingo's `cd`): `--in .` is
+  the folder you are in.
+- **`./kingo shortcuts` writes one marked block into the file a new terminal
+  reads, and nothing else** (`$SHELL`: zsh `~/.zshrc`; bash `~/.bashrc`, on a
+  Mac `~/.bash_profile`, which then reads a `~/.profile` that bash read
+  before). A second run replaces the block, `remove` takes it out, a copy of
+  the file comes first, the file is written in place (a link stays a link),
+  and a marker without its partner stops it. The functions only call `kingo`
+  by its full path (`kc` = `claude --in .`), so the logic stays here and comes
+  with `update`. They are defined as `function name {` after `unalias`: an
+  alias of the same name would bend `name() {` while the file is parsed. A
+  name that something else has is found by asking the student's shell with the
+  block off (`KINGO_SHORTCUTS_SKIP=1`), **without the terminal** (a session of
+  its own through perl's `setsid`, stdin `/dev/null`, `+m` as a precaution)
+  and for 10 seconds at most. Without the terminal, a question in a startup
+  file gets no answer at once: zsh's `compinit` asks one when it finds
+  insecure directories, and in the terminal it waited, showed on the screen and
+  missed the alias (CI on Ubuntu, 15 Nov 2026). A shell later than 10 seconds:
+  kingo looks for `alias name=`, `name()` and `function name` in the startup
+  file only. A taken name is written only after a yes, and a name in kingo's
+  block counts as a yes. CI: `.github/scripts/claude-shortcuts.sh`, zsh and
+  bash, Linux and the Mac.
 - **`look` on a Mac needs the `mach-register` rule in the profile** (Chrome's
   helper programs). Without it `look` falls back to `--single-process`, which
   cannot wait for a page's scripts. The CI job `claude-look-mac` runs both.
