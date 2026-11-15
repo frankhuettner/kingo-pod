@@ -11,7 +11,9 @@
 #                               also: the result of a command holds no lines of bash about its startup files
 #   claude-sandbox.sh session   a session of Claude Code in a terminal, as a student has it (pty_session.py)
 #   claude-sandbox.sh leave     the end of a session in a terminal: nono does not ask to change the profile
-#   claude-sandbox.sh look      look page.html inside nono under the lock: kingo gets the browser, pictures come out
+#   claude-sandbox.sh look      look page.html inside nono under the lock: kingo gets the browser, pictures come out;
+#                               testpage fills in a form and opens a page of the internet; its pages cannot reach a
+#                               service on this machine by http or WebSocket
 #   claude-sandbox.sh own       kingo claude --in <folder>, my-nono-profile.json, and git inside the sandbox
 #   claude-sandbox.sh login     kingo claude --login: the profiles, kingo's steps around the login, the sandbox
 #   claude-sandbox.sh fresh     a fresh Ubuntu in a container: the packages that kingo names are enough for the browser
@@ -131,7 +133,8 @@ prepare() {
   local v vars
   vars=" $(printf '%s\n' "$dry" | sed -n 's/^  variables: //p')"
   for v in CLAUDE_CODE_DISABLE_ARTIFACT CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC DISABLE_TELEMETRY DISABLE_ERROR_REPORTING \
-           CLAUDE_CODE_MAX_CONTEXT_TOKENS CLAUDE_CONFIG_DIR CLAUDE_CODE_TMPDIR TMPDIR PATH KINGO_BROWSER \
+           CLAUDE_CODE_MAX_CONTEXT_TOKENS CLAUDE_CONFIG_DIR CLAUDE_CODE_TMPDIR TMPDIR PATH KINGO_BROWSER KINGO_NODE KINGO_PLAYWRIGHT \
+           KINGO_DEV_PORT KINGO_POD_PORTS \
            GIT_CONFIG_NOSYSTEM NONO_NO_SAVE_PROMPT PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE; do
     has "$vars" " $v " || fail "kingo claude does not set the variable $v for the start"
   done
@@ -151,6 +154,7 @@ prepare() {
   ok "nono is the one kingo downloaded: $("$NONO_BIN" --version | head -n 1)"
   has "$dry" "--append-system-prompt When you have written or changed an HTML page, look at it" \
     || fail "kingo claude does not tell Claude Code how to look at a page"
+  has "$dry" "run it with: testpage <script.js>" || fail "kingo claude does not tell Claude Code how to try a page with testpage"
   ok "kingo claude puts look on the PATH, says where the browser is, and tells Claude Code how to look at a page"
 }
 
@@ -162,11 +166,61 @@ kingo_env() {
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" \
     PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
     NONO_NO_SAVE_PROMPT=1 GIT_CONFIG_NOSYSTEM=1 \
-    PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
+    PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" KINGO_NODE="$NODE_BIN" KINGO_PLAYWRIGHT="$PW_DIR" \
+    KINGO_DEV_PORT=5173 KINGO_POD_PORTS="5432 5678 5679 7860 8888 8000 4040 3000 8978 6333 6334" \
       "$@" )
 }
 SANDBOX=(nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" --)   # the line of kingo claude
 BROWSER_BIN=""                      # where kingo put the browser; part_look fills it in
+NODE_BIN="" PW_DIR=""               # where kingo put Node.js and playwright-core, for testpage; part_look fills them in
+
+# testpage_block <where> command ...: a listener on the runner stands for n8n; the pages of testpage_block.js try to reach it
+# by http and by WebSocket (setup/claude/testpage-setup.js closes both). curl reaches it first, or the check proves nothing.
+testpage_block() {
+  local where=$1 port=18765 log="$CFG/tmp/testpage-listener.log" out pid; shift
+  mkdir -p "$CFG/tmp"; : > "$log"
+  /usr/bin/python3 "$HERE/testpage_listener.py" "$port" "$log" & pid=$!
+  sleep 1
+  curl -s -m 5 "http://127.0.0.1:$port/control" > /dev/null || true
+  grep -q '/control' "$log" || { kill "$pid"; fail "the listener on port $port does not answer curl"; }
+  : > "$log"
+  out=$("$@" "$HERE/testpage_block.js" "$port" "$HERE/testpage_shop.html" https://github.com/ 2>&1) || true
+  sleep 2; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true
+  has "$out" BLOCK-DONE || { show "$out" 20; fail "$where, testpage_block.js did not finish"; }
+  ! grep -q '^ARRIVED' "$log" || { show "$(cat "$log")" 12; fail "$where, a page in testpage reached a service on this laptop"; }
+  has "$out" "BLOCK-GOTO testpage opens https pages and files" || { show "$out" 20; fail "$where, page.goto on an http address did not stop with testpage's words"; }
+  ok "$where: no request arrived from the pages ($(grep -c '^TLS' "$log" || true) TLS handshakes, no request in them); page.goto said: $(printf '%s\n' "$out" | sed -n 's/^BLOCK-GOTO //p' | cut -c1-60) ..."
+}
+# testpage_dev <where> command ...: testpage --dev with a stand-in dev server (testpage_devserver.py) on the runner,
+# outside nono, as a student's own terminal runs npm run dev. Its page loads, fetches and opens its WebSocket; a page
+# of the internet must not reach it by http.
+testpage_dev() {
+  local where=$1 port=5173 log="$CFG/tmp/testpage-dev.log" out pid; shift
+  mkdir -p "$CFG/tmp"; : > "$log"
+  /usr/bin/python3 "$HERE/testpage_devserver.py" "$port" "$log" > /dev/null & pid=$!
+  sleep 1
+  out=$("$@" --dev "$port" "$HERE/testpage_dev.js" "$port" https://github.com/ 2>&1) || true
+  sleep 1; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true
+  has "$out" DEV-DONE || { show "$out" 20; show "$(cat "$log")" 8; fail "$where, testpage_dev.js did not finish"; }
+  has "$out" "DEV-TITLE DEV-WS pong" || { show "$out" 20; show "$(cat "$log")" 8; fail "$where, the dev page's WebSocket did not answer"; }
+  has "$out" "DEV-API dev answer" || { show "$out" 20; show "$(cat "$log")" 8; fail "$where, the dev page could not fetch from its server"; }
+  ! grep -q 'from-internet-http' "$log" || { show "$(cat "$log")" 10; fail "$where, a page of the internet reached the dev server by http"; }
+  ok "$where: the dev page loaded, fetched from its server and its WebSocket answered; a page of the internet reached it by http not once"
+  if grep -q 'from-internet-ws' "$log"; then echo "   RESULT  a WebSocket of a page of the internet reached the dev server (expected: testpage cannot see WebSockets)"; fi
+}
+# testpage_dev_inside command ...: may a dev server listen inside nono? Reported, never a failure.
+testpage_dev_inside() {
+  local out
+  out=$("$@" bash -c '"$1" "$2" 5173 "$3" & s=$!; sleep 2; testpage --dev 5173 "$4" 5173 https://github.com/; kill $s 2>/dev/null' _ \
+    "/usr/bin/python3" "$HERE/testpage_devserver.py" "$CFG/tmp/testpage-dev-inside.log" "$HERE/testpage_dev.js")
+  if has "$out" LISTEN-DENIED; then
+    echo "   RESULT  inside nono a program may not listen on the dev port: $(printf '%s\n' "$out" | sed -n 's/^LISTEN-DENIED //p' | head -n 1)"
+  elif has "$out" "DEV-TITLE DEV-WS pong"; then
+    echo "   RESULT  inside nono a dev server may listen on the dev port, and testpage reaches it"
+  else
+    echo "   RESULT  inside nono: unclear"; show "$out" 12
+  fi
+}
 NONO_BIN=""                         # kingo's nono; prepare fills it in
 
 # in_sandbox command ...: run it as kingo claude runs Claude Code; prints its output and nono's.
@@ -437,8 +491,14 @@ part_look() {
   [ -x "$BROWSER_BIN" ] || fail "the browser is not where kingo says it is: $BROWSER_BIN"
   [ ! -e "$CFG/browsers" ] || fail "there is a browser in $CFG, a folder the sandbox can write"
   ok "the browser is there: $BROWSER_BIN"
+  NODE_BIN=$(ls "$HOME"/.local/share/kingo/node/*/node 2>/dev/null | head -n 1)
+  PW_DIR=$(ls -d "$HOME"/.local/share/kingo/playwright/*/ 2>/dev/null | head -n 1); PW_DIR=${PW_DIR%/}
+  [ -x "$NODE_BIN" ] || fail "kingo claude browser did not get Node.js into ~/.local/share/kingo/node"
+  [ -f "$PW_DIR/node_modules/playwright-core/package.json" ] || fail "kingo claude browser did not get playwright-core into ~/.local/share/kingo/playwright"
+  ok "Node.js $("$NODE_BIN" --version) and playwright-core $(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$PW_DIR/node_modules/playwright-core/package.json" | head -n 1), for testpage"
   out=$(cd "$KINGO_DIR" && ./kingo claude browser 2>&1) || fail "a second kingo claude browser failed"
   if has "$out" "Getting a browser"; then fail "a second kingo claude browser downloaded it again"; fi
+  if has "$out" "Getting Node.js" || has "$out" "Getting playwright-core"; then fail "a second kingo claude browser downloaded Node.js or playwright-core again"; fi
   ok "a second kingo claude browser downloads nothing"
 
   cat > "$dir/look-cv.html" <<'HTML'
@@ -473,12 +533,13 @@ HTML
   say "the sandbox cannot change what kingo downloaded"
   out=$(in_sandbox "${LOCK[@]}" sh -c 'for f in "$@"; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done' sh \
     "$dir/look-write-probe" "$BROWSER_BIN" "$(dirname "$BROWSER_BIN")/new-file" "$NONO_BIN" "$(dirname "$NONO_BIN")/new-file" \
-    "$HOME/.local/share/kingo/new-file")
-  show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused) ')" 6
+    "$HOME/.local/share/kingo/new-file" "$NODE_BIN" "$(dirname "$NODE_BIN")/new-file" \
+    "$PW_DIR/node_modules/playwright-core/package.json" "$PW_DIR/new-file")
+  show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused) ')" 10
   has "$out" "WROTE $dir/look-write-probe" || fail "the probe proves nothing: it could not write in the course folder either"
-  [ "$(printf '%s\n' "$out" | grep -c '^refused ')" = 5 ] || fail "a program in the sandbox can write where kingo keeps nono or the browser"
+  [ "$(printf '%s\n' "$out" | grep -c '^refused ')" = 9 ] || fail "a program in the sandbox can write where kingo keeps nono, the browser, Node.js or playwright-core"
   rm -f "$dir/look-write-probe"
-  ok "inside the sandbox, the browser, nono and their folders cannot be written"
+  ok "inside the sandbox, the browser, nono, Node.js, playwright-core and their folders cannot be written"
 
   # A font that the user installed: the browser must draw its letters, not boxes. Reports, and fails only on boxes.
   say "a font that the user installed (~/.local/share/fonts)"
@@ -520,6 +581,36 @@ HTML
   out=$(in_sandbox "${LOCK[@]}" look look-cv.html --pdf)
   [ "$(head -c 4 "$dir/look/look-cv.pdf" 2>/dev/null)" = "%PDF" ] || { show "$out" 12; fail "look --pdf made no PDF"; }
   ok "600 pixels wide; a PDF of $(wc -c < "$dir/look/look-cv.pdf") bytes"
+
+  # testpage: a script as Claude would write it fills in a form and sends it; then a page of the internet, through
+  # nono's proxy
+  say "testpage inside nono, under the lock: a form is filled in and sent, and a page of the internet comes"
+  out=$(in_sandbox "${LOCK[@]}" testpage "$HERE/testpage_check.js" "$HERE/testpage_shop.html" look/testpage-shop.png https://github.com/)
+  show "$(printf '%s\n' "$out" | grep '^TESTPAGE-')" 3
+  has "$out" "TESTPAGE-SAID Thank you, Mina: 1 Coffee" || { show "$out" 20; fail "testpage did not fill in and send the form inside the sandbox"; }
+  /usr/bin/python3 "$HERE/png_check.py" "$dir/look/testpage-shop.png" | sed 's/^/         | /' || fail "testpage made no picture of the page"
+  printf '%s\n' "$out" | grep '^TESTPAGE-TITLE ' | grep -q GitHub || { show "$out" 20; fail "testpage did not get a page of the internet inside the sandbox"; }
+  ok "testpage filled in the form, read the answer, made a picture, and opened github.com"
+
+  # Outside nono and without a proxy, a direct connection to 127.0.0.1 works, as under WSL2 inside nono; inside nono a
+  # page could go through nono's proxy, which lets the laptop's own addresses through when the network is open.
+  say "testpage: a page cannot reach a service on this machine by http or WebSocket"
+  testpage_block "outside nono, without a proxy" kingo_env bash "$KINGO_DIR/setup/claude/bin/testpage"
+  testpage_block "inside nono, under the lock" in_sandbox "${LOCK[@]}" testpage
+
+  # testpage --dev: the student's dev server on this laptop (kingo opens KINGO_DEV_PORT, 5173, in the profile).
+  say "testpage --dev 5173: the dev server's page works, and nothing else opens"
+  grep -q '"open_port": \[5173\]' "$HOME/.config/nono/profiles/kingo-claude-core.json" \
+    || fail "kingo did not open the dev port 5173 in the core profile (open_port)"
+  out=$(in_sandbox "${LOCK[@]}" testpage --dev 5678 "$HERE/testpage_dev.js")
+  has "$out" "is a port of kingo-pod" || { show "$out" 6; fail "testpage --dev 5678 did not refuse n8n's port"; }
+  out=$(in_sandbox "${LOCK[@]}" testpage --dev 5174 "$HERE/testpage_dev.js")
+  has "$out" "the sandbox opens port 5173 for a dev server" || { show "$out" 6; fail "testpage --dev 5174 did not say which port the sandbox opens"; }
+  ok "testpage --dev refuses n8n's port, and names the one port the sandbox opens"
+  testpage_dev "outside nono, without a proxy (as under WSL2)" kingo_env bash "$KINGO_DIR/setup/claude/bin/testpage"
+  testpage_dev "inside nono, under the lock" in_sandbox "${LOCK[@]}" testpage
+  testpage_block "inside nono, under the lock, with --dev 5173" in_sandbox "${LOCK[@]}" testpage --dev 5173
+  testpage_dev_inside in_sandbox "${LOCK[@]}"
 
   say "the real Claude Code runs look with its Bash tool"
   PROBE="look look-cv.html; echo the-command-ended"
@@ -571,8 +662,13 @@ part_fresh() {
     cd /w
     bash /k/setup/claude/bin/look page.html
     python3 /k/.github/scripts/png_check.py look/page-1.png
+    # testpage: Node.js and playwright-core came with ./kingo claude browser
+    out=$(bash /k/setup/claude/bin/testpage /k/.github/scripts/testpage_check.js /k/.github/scripts/testpage_shop.html look/testpage.png 2>&1) \
+      || { echo "$out" | tail -n 8; echo "FRESH: testpage did not run"; exit 1; }
+    case "$out" in *"TESTPAGE-SAID Thank you, Mina: 1 Coffee"*) echo "$out" | grep "^TESTPAGE-" ;; *) echo "$out" | tail -n 8; echo "FRESH: testpage did not fill in the form"; exit 1 ;; esac
+    python3 /k/.github/scripts/png_check.py look/testpage.png
   ' || fail "on a fresh $image the browser does not run with the packages that kingo names"
-  ok "kingo named the missing packages, look said what to do, kingo installed them after a yes, and the browser made a picture"
+  ok "kingo named the missing packages, look said what to do, kingo installed them after a yes, the browser made a picture, and testpage filled in a form"
 }
 
 # ── a folder of one's own, one's own profile, and git ────────────────────────
