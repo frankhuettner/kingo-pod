@@ -1102,7 +1102,8 @@ EOF
   out=$(step none claude logout)
   has "$out" "so the logout does not start" || { show "$out" 30; fail "kingo claude logout ran while a session with --login runs"; }
   [ -s "$cred" ] || fail "the logout removed the login while a session with --login runs"
-  pkill -P "$pid" 2>/dev/null || true; kill "$pid"; wait "$pid" 2>/dev/null || true
+  # The script ends by itself once its sleep is gone, so the kill may find nothing.
+  pkill -P "$pid" 2>/dev/null || true; kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true
   out=$(step none claude --login --in "$fh/projects/thesis")
   has "$(session_of "$out")" "STUB nono run --profile kingo-claude-login " || { show "$out" 30; fail "after the other session ended, kingo does not start one"; }
   sleep 300 & pid=$!
