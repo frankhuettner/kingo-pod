@@ -33,6 +33,8 @@ The sandbox puts the real keys into your requests. Use the variables exactly as 
 - **PostgreSQL:** `psql` reads `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` and `PGDATABASE` from the environment.
   `psql -l` lists the databases. The project data is in `classroom`; the databases `n8n` and `langflow` belong to
   those apps.
+- **OpenRouter API:** `curl -s -H "Authorization: Bearer $OPENROUTER_API_KEY" "$OPENROUTER_BASE_URL/models"`
+  (the student's OpenRouter key, the one of their flows in Langflow: a call of a model costs them money)
 
 ## What you need to know about n8n
 

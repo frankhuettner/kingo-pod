@@ -4,13 +4,14 @@
   // No start uses it alone. The profiles of the course name it next to a way to the model:
   //   kingo-claude               (nono-profile.json)               OpenRouter and the course
   //   kingo-claude-login-course  (nono-profile-login-course.json)  the Anthropic login and the course
-  // Here: the keys for n8n and Langflow, which nono's proxy injects, and PostgreSQL, which psql reaches directly.
+  // Here: the keys for n8n, Langflow and OpenRouter, which nono's proxy injects, and PostgreSQL, which psql reaches
+  // directly.
   // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
   "extends": "kingo-claude-core",
   "meta": {
     "name": "kingo-claude-course",
-    "version": "0.6.0",
-    "description": "Kingo: what the course adds to the sandbox of Claude Code: keys for n8n and Langflow injected by the proxy, and PostgreSQL"
+    "version": "0.7.0",
+    "description": "Kingo: what the course adds to the sandbox of Claude Code: keys for n8n, Langflow and OpenRouter injected by the proxy, and PostgreSQL"
   },
   "environment": {
     // In addition to the variables of the core profile: where psql finds PostgreSQL.
@@ -18,7 +19,7 @@
   },
   "network": {
     // The routes only inject keys. psql does not use the proxy: see the PostgreSQL rule at the end of this file.
-    "credentials": ["n8n", "langflow"],
+    "credentials": ["n8n", "langflow", "openrouter"],
     "custom_credentials": {
       // nono sets N8N_BASE_URL; Claude sends X-N8N-API-KEY: $N8N_API_KEY (a placeholder).
       "n8n": {
@@ -35,6 +36,16 @@
         "env_var": "LANGFLOW_API_KEY",
         "inject_header": "x-api-key",
         "credential_format": "{}"
+      },
+      // nono sets OPENROUTER_BASE_URL; Claude sends Authorization: Bearer $OPENROUTER_API_KEY (a placeholder).
+      // The student's OpenRouter key, the one of their flows in Langflow: Claude can try a model or an embedding
+      // with it. Without --login it is also the key that pays for the model of Claude Code (route "anthropic").
+      "openrouter": {
+        "upstream": "https://openrouter.ai/api/v1",
+        "credential_key": "file://__KEYS_DIR__/openrouter.key",
+        "env_var": "OPENROUTER_API_KEY",
+        "inject_header": "Authorization",
+        "credential_format": "Bearer {}"
       }
     }
   },
