@@ -1087,8 +1087,14 @@ EOF
 
   # One session with --login at a time (nono issues 2087, 2299): a session that runs stops a second start and the
   # logout; a session that ended, or a number that now runs another program, does not.
-  cp /bin/sleep "$fh/nono-session"
-  "$fh/nono-session" 300 & pid=$!
+  # The stand-in is a script, not a copy of sleep: since Ubuntu 25.10 sleep is
+  # one program for all of coreutils that goes by its name, and a copy named
+  # nono-session ends at once. A script's process carries the script's name.
+  # sleep is not its last command, so sh cannot hand over the process to it.
+  printf '#!/bin/sh\nsleep 300\nexit 0\n' > "$fh/nono-session"; chmod +x "$fh/nono-session"
+  "$fh/nono-session" & pid=$!
+  sleep 0.2
+  [ "$(ps -p "$pid" -o comm= 2>/dev/null)" = nono-session ] || fail "the stand-in for a running session does not run as nono-session"
   echo "$pid" > "$fh/.kingo-claude-login.session"
   out=$(step none claude --login --in "$fh/projects/thesis")
   has "$out" "another ./kingo claude --login is running (process $pid)" || { show "$out" 30; fail "a second kingo claude --login started while one runs"; }
@@ -1096,7 +1102,7 @@ EOF
   out=$(step none claude logout)
   has "$out" "so the logout does not start" || { show "$out" 30; fail "kingo claude logout ran while a session with --login runs"; }
   [ -s "$cred" ] || fail "the logout removed the login while a session with --login runs"
-  kill "$pid"; wait "$pid" 2>/dev/null || true
+  pkill -P "$pid" 2>/dev/null || true; kill "$pid"; wait "$pid" 2>/dev/null || true
   out=$(step none claude --login --in "$fh/projects/thesis")
   has "$(session_of "$out")" "STUB nono run --profile kingo-claude-login " || { show "$out" 30; fail "after the other session ended, kingo does not start one"; }
   sleep 300 & pid=$!
