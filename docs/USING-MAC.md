@@ -167,10 +167,9 @@ workflow someone else built and you imported. Never let it hold your only copy
 of something. Nothing outside this one folder is reachable from Langflow or
 n8n.
 
-> **Using Docker Desktop?** Files that *Langflow itself* writes into the
-> folder can end up owned by the system rather than by you — deleting those
-> from Finder or Terminal may then need `sudo rm`. Files **you** put in are
-> never affected. With Podman (the default) this does not happen.
+> **Using Docker Desktop?** Kingo is tested with Podman (the default), not
+> with Docker Desktop. If Langflow or n8n cannot write into this folder there,
+> send the error to your instructor. Files **you** put in are never affected.
 
 ## Claude Code — your coding agent
 

@@ -92,9 +92,10 @@ esac
 # Order (per plan §4): $KINGO_ENGINE override → podman (usable or startable) →
 # docker → podman as last resort (so the error points at podman setup).
 ENGINE=""
-# Also fixes n8n's KINGO_N8N_USERNS for the whole run, here in kingo's own
-# shell, so a compose call inside $( ) or a pipe sees the same value.
-select_engine() { pick_engine; n8n_userns; }
+# Also fixes the user namespaces of n8n and Langflow (KINGO_N8N_USERNS,
+# KINGO_LANGFLOW_USERNS, KINGO_LANGFLOW_USER) for the whole run, here in kingo's
+# own shell, so a compose call inside $( ) or a pipe sees the same values.
+select_engine() { pick_engine; keep_id_userns; }
 pick_engine() {
   if [ -n "${KINGO_ENGINE:-}" ]; then ENGINE="$KINGO_ENGINE"; return; fi
   if command -v podman >/dev/null 2>&1; then
@@ -191,7 +192,7 @@ neutral_auth() {
 # "keep-id:uid=1000,gid=1000" makes the laptop's user uid 1000 in THAT
 # container: n8n stays non-root and what it writes belongs to the student.
 # compose.yml takes the value from KINGO_N8N_USERNS, and kingo sets it here
-# (select_engine calls n8n_userns once per run):
+# (select_engine calls n8n_userns once per run, via keep_id_userns):
 #   - rootless Podman on Linux/WSL: keep-id — unless .env.local or the command
 #     line sets KINGO_N8N_USERNS, an EMPTY value too (KINGO_N8N_USERNS= turns
 #     keep-id off);
@@ -201,8 +202,8 @@ neutral_auth() {
 # No Podman version check: kingo needs `podman compose` (Podman 4.7+, the
 # setup script refuses older ones), and keep-id:uid= exists since 4.3.
 # Podman builds an ID-mapped copy of the n8n image for this, once per image:
-# the first start after an n8n update is slow (n8n_userns_hint says so).
-N8N_KEEP_ID="keep-id:uid=1000,gid=1000"
+# the first start after an n8n update is slow (keep_id_hint says so).
+KEEP_ID="keep-id:uid=1000,gid=1000"            # Langflow's too (below)
 N8N_VOLUME=kingo_n8n-data
 # Rootless means Podman on Linux, run by a user who is not root. Asked of the
 # shell, not of `podman info`: it costs nothing and cannot fail quietly — a
@@ -222,7 +223,7 @@ n8n_userns() { # exports KINGO_N8N_USERNS once per run; compose.yml reads it
   elif [ -n "${KINGO_N8N_USERNS+x}" ]; then
     export KINGO_N8N_USERNS
   else
-    export KINGO_N8N_USERNS="$N8N_KEEP_ID"
+    export KINGO_N8N_USERNS="$KEEP_ID"
   fi
 }
 n8n_keeps_id() { n8n_userns; case "$KINGO_N8N_USERNS" in keep-id*) return 0 ;; *) return 1 ;; esac; }
@@ -270,7 +271,7 @@ n8n_data_owner() {
         warn "could not hand n8n's data ($mp) to you. Podman said: $out
        n8n starts as before: it reads the shared folder but cannot write there. Send this message to your instructor."
       else
-        export KINGO_N8N_USERNS="$N8N_KEEP_ID"
+        export KINGO_N8N_USERNS="$KEEP_ID"
         warn "could not hand n8n's data ($mp) back to Podman's user for n8n. Podman said: $out
        n8n starts with keep-id this time, although KINGO_N8N_USERNS is set without it. Send this message to your instructor."
       fi
@@ -279,26 +280,148 @@ n8n_data_owner() {
   fi
   [ "${KINGO_N8N_DATA_OWNER:-}" = "$want" ] || set_local KINGO_N8N_DATA_OWNER "$want"
 }
-# The ID-mapped image copy makes ONE start slow, the first with each n8n image:
+# ── Langflow without root (Kingo 1.6) ────────────────────────────────────────
+# Up to Kingo 1.5 Langflow ran as root: Langflow 1.11 and older had no
+# /app/data in the image, a fresh volume there belonged to root, and the
+# image's user crash-looped on its secret-key write. Since Langflow 1.12 the
+# image makes /app/data (also its HOME) for its user "user" (uid 1000, gid 0),
+# so Langflow runs as that user now, as n8n runs as "node" (Frank, 2026-11-17:
+# keep-id like n8n). compose.yml takes user and user namespace from
+# KINGO_LANGFLOW_USER and KINGO_LANGFLOW_USERNS, set here once per run:
+#   - rootless Podman on Linux/WSL: the same keep-id as n8n, so what Langflow
+#     writes to the shared folder still belongs to the student. An EMPTY
+#     KINGO_LANGFLOW_USERNS (.env.local or the command line) turns it off, and
+#     Langflow runs as root as in 1.5 — there root is the laptop's user, so
+#     the shared folder stays writable;
+#   - everywhere else: Langflow's own user, no user namespace, whatever
+#     .env.local says.
+# KINGO_LANGFLOW_USER is "root" only then, or for one run whose hand-over of
+# Langflow's data did not work (langflow_data_owner); else empty = the image's
+# user. As for n8n, the first start with each Langflow image is slow under
+# keep-id — and Langflow's image is kingo's own build: every rebuild counts.
+_LANGFLOW_USERNS_SET=""
+langflow_userns() { # exports KINGO_LANGFLOW_USERNS and KINGO_LANGFLOW_USER once per run
+  [ -z "$_LANGFLOW_USERNS_SET" ] || return 0
+  [ -n "$ENGINE" ] || return 0                   # no engine picked yet: decide later
+  _LANGFLOW_USERNS_SET=1
+  export KINGO_LANGFLOW_USER=""
+  if ! rootless_podman_linux; then
+    [ -z "${KINGO_LANGFLOW_USERNS:-}" ] \
+      || warn "ignoring KINGO_LANGFLOW_USERNS='$KINGO_LANGFLOW_USERNS': it is for rootless Podman on Linux only. Remove it from .env.local (or your shell)."
+    export KINGO_LANGFLOW_USERNS=""
+  elif [ -n "${KINGO_LANGFLOW_USERNS+x}" ]; then
+    export KINGO_LANGFLOW_USERNS
+    langflow_keeps_id || export KINGO_LANGFLOW_USER=root
+  else
+    export KINGO_LANGFLOW_USERNS="$KEEP_ID"
+  fi
+}
+langflow_keeps_id() { langflow_userns; case "$KINGO_LANGFLOW_USERNS" in keep-id*) return 0 ;; *) return 1 ;; esac; }
+keep_id_userns() { n8n_userns; langflow_userns; }
+
+# Langflow's own data (the volume langflow-data, also its HOME) must belong to
+# Langflow's user. Root wrote it up to 1.5, so a folder from then holds files
+# Langflow cannot change — on every engine, not only under keep-id. `up` hands
+# them over BEFORE Langflow starts: a one-off container of the Langflow image,
+# as root and in the user namespace Langflow gets, gives what is not uid 1000
+# to uid 1000, which is then Langflow's user on every engine (with keep-id:
+# the laptop's user). Only the owner changes; nothing is copied or deleted. A
+# running Langflow is not stopped: from 1.5 it is root, which writes anything,
+# and compose recreates it with its new user right after.
+# When to look is read off the Langflow container, not off a note: one that
+# ran as Langflow's user left the folder as it found it, so `up` looks only
+# when there is none (after down, reset, an engine switch) or it ran as root
+# (Kingo 1.5 — also after going back to it and forward again —, keep-id off).
+# That costs one short container start after a `down`, nothing on a normal
+# `up`. No volume yet: a fresh install, the image makes the folder Langflow's.
+# Root needs no hand-over (it writes anything), so there is none back.
+# If the one-off cannot run, Langflow starts as root for this run, as in 1.5:
+# a stack that starts beats a Langflow without root.
+LANGFLOW_VOLUME=kingo_langflow-data
+LANGFLOW_CHOWN_PY='
+import os
+n = 0
+for d, dirs, files in os.walk("/app/data"):
+    for p in [d] + [os.path.join(d, f) for f in files] + [os.path.join(d, x) for x in dirs if os.path.islink(os.path.join(d, x))]:
+        if os.lstat(p).st_uid != 1000:
+            os.lchown(p, 1000, -1)
+            n += 1
+print(n)
+'
+langflow_data_owner() {
+  service_active Langflow || return 0
+  langflow_userns
+  local user id out
+  [ "${KINGO_LANGFLOW_USER:-}" != root ] || return 0
+  $ENGINE volume inspect "$LANGFLOW_VOLUME" >/dev/null 2>&1 || return 0
+  if user="$($ENGINE container inspect kingo-langflow --format '{{.Config.User}}' 2>/dev/null)"; then
+    case "$user" in root|root:*|0|0:*) ;; *) return 0 ;; esac
+  fi
+  image_refs; id="$(langflow_image_id)"
+  if [ -z "$id" ]; then
+    export KINGO_LANGFLOW_USER=root KINGO_LANGFLOW_USERNS=""
+    echo "Langflow starts as root this once: its image is not built yet. The next ./kingo up hands Langflow's data to Langflow's own user."
+    return 0
+  fi
+  # shellcheck disable=SC2086  # the --userns pair is meant to split, or vanish
+  if ! out="$($ENGINE run --rm --pull=never --user 0:0 ${KINGO_LANGFLOW_USERNS:+--userns "$KINGO_LANGFLOW_USERNS"} \
+                -v "$LANGFLOW_VOLUME:/app/data:z" --entrypoint /app/.venv/bin/python "$id" -c "$LANGFLOW_CHOWN_PY" 2>&1)"; then
+    out="$(printf '%s\n' "$out" | tail -n 1)"
+    export KINGO_LANGFLOW_USER=root KINGO_LANGFLOW_USERNS=""
+    warn "could not hand Langflow's data ($LANGFLOW_VOLUME) to Langflow's own user. $ENGINE said: $out
+       Langflow starts as root this time, as in Kingo 1.5. Send this message to your instructor."
+    return 0
+  fi
+  out="$(printf '%s\n' "$out" | tail -n 1)"
+  case "$out" in
+    ''|0|*[!0-9]*) ;;
+    *) echo "Langflow's own data now belongs to Langflow's user on this laptop ($out files and folders; nothing is deleted)." ;;
+  esac
+}
+
+# The ID-mapped image copy makes ONE start slow, the first with each image:
 # say so before it, and only then (after a `down` the container is gone but the
 # copy is not, so "no container" proves nothing). The image a start last
-# succeeded with is remembered in .env.local (KINGO_N8N_KEEP_ID_IMAGE).
-n8n_image_id() { # the image compose resolves for n8n (awk reads to the end: no SIGPIPE under pipefail)
+# succeeded with is remembered in .env.local (KINGO_N8N_KEEP_ID_IMAGE,
+# KINGO_LANGFLOW_KEEP_ID_IMAGE).
+_IMAGE_REFS=""
+image_refs() { # every image compose resolves, asked once per run — call it OUTSIDE $( )
+  [ -n "$_IMAGE_REFS" ] || _IMAGE_REFS="$(compose_all config --images 2>/dev/null || true)"
+}
+image_id() { # $1: awk pattern → ID of the image compose resolves for it, '' if not there
   local ref
-  ref="$(compose_all config --images 2>/dev/null | awk '/(^|\/)n8nio\/n8n:/ && !f { print; f=1 }' || true)"
-  [ -n "$ref" ] && podman image inspect "$ref" --format '{{.Id}}' 2>/dev/null || true
+  image_refs
+  # awk reads to the end: no SIGPIPE under pipefail
+  ref="$(printf '%s\n' "$_IMAGE_REFS" | awk -v p="$1" '$0 ~ p && !f { print; f=1 }')"
+  [ -n "$ref" ] && $ENGINE image inspect "$ref" --format '{{.Id}}' 2>/dev/null || true
 }
-n8n_userns_hint() {
-  n8n_keeps_id && service_active n8n || return 0
-  local id; id="$(n8n_image_id)"
-  [ -n "$id" ] && [ "${KINGO_N8N_KEEP_ID_IMAGE:-}" = "$id" ] && return 0
-  echo "Podman now prepares n8n for the shared folder. This happens once per n8n version and can take a few minutes — please wait."
+n8n_image_id() { image_id '(^|/)n8nio/n8n:'; }
+langflow_image_id() { image_id '(^|/)kingo-langflow:'; }
+keep_id_hint() { # before the start
+  local who="" id
+  image_refs
+  if n8n_keeps_id && service_active n8n; then
+    id="$(n8n_image_id)"
+    [ -n "$id" ] && [ "${KINGO_N8N_KEEP_ID_IMAGE:-}" = "$id" ] || who="n8n"
+  fi
+  if langflow_keeps_id && service_active Langflow; then
+    id="$(langflow_image_id)"
+    [ -n "$id" ] && [ "${KINGO_LANGFLOW_KEEP_ID_IMAGE:-}" = "$id" ] || who="${who:+$who and }Langflow"
+  fi
+  [ -z "$who" ] || echo "Podman now prepares $who for the shared folder. This happens once per version and can take a few minutes — please wait."
 }
-n8n_userns_seen() { # after a start that worked
-  n8n_keeps_id && service_active n8n || return 0
-  local id; id="$(n8n_image_id)"
-  [ -n "$id" ] && [ "${KINGO_N8N_KEEP_ID_IMAGE:-}" != "$id" ] || return 0
-  set_local KINGO_N8N_KEEP_ID_IMAGE "$id"
+keep_id_seen() { # after a start that worked
+  local id
+  image_refs
+  if n8n_keeps_id && service_active n8n; then
+    id="$(n8n_image_id)"
+    [ -z "$id" ] || [ "${KINGO_N8N_KEEP_ID_IMAGE:-}" = "$id" ] || set_local KINGO_N8N_KEEP_ID_IMAGE "$id"
+  fi
+  if langflow_keeps_id && service_active Langflow; then
+    id="$(langflow_image_id)"
+    [ -z "$id" ] || [ "${KINGO_LANGFLOW_KEEP_ID_IMAGE:-}" = "$id" ] || set_local KINGO_LANGFLOW_KEEP_ID_IMAGE "$id"
+  fi
+  return 0
 }
 
 # What the shared folder promises, checked: a file written by Langflow or n8n
@@ -307,7 +430,8 @@ n8n_userns_seen() { # after a start that worked
 # Podman on Linux/WSL. Skipped under Docker (on Linux it passes uids through,
 # so it would hold only by coincidence of numbers; Docker Desktop on a Mac is
 # not tested) and under rootful Podman. Warns and fails otherwise; in CI an
-# n8n without keep-id on rootless Podman fails too.
+# n8n or Langflow without keep-id on rootless Podman fails too (a Langflow
+# without it is root there, which still writes as the laptop's user).
 shared_check() {
   local dir="${KINGO_SHARED_DIR:-./shared}" svc ctr f owner me bad=0
   service_active Langflow || service_active n8n || return 0
@@ -322,6 +446,9 @@ shared_check() {
   for svc in Langflow n8n; do
     service_active "$svc" || continue
     ctr="kingo-$(compose_name "$svc")"
+    if [ "$svc" = Langflow ] && [ -n "${CI:-}" ] && rootless_podman_linux && ! langflow_keeps_id; then
+      warn "Langflow runs as root without keep-id (KINGO_LANGFLOW_USERNS='$KINGO_LANGFLOW_USERNS')"; bad=1
+    fi
     if [ "$svc" = n8n ] && rootless_podman_linux && ! n8n_keeps_id; then
       if [ -n "${CI:-}" ]; then
         warn "n8n runs without keep-id (KINGO_N8N_USERNS='$KINGO_N8N_USERNS'), so it cannot write to the shared folder"; bad=1
@@ -345,7 +472,7 @@ shared_check() {
 
 # One wrapper every verb goes through: `podman compose ...` or `docker compose ...`.
 # It sees the CURRENT MODE's services only (COMPOSE_PROFILES, exported above).
-compose() { neutral_auth; n8n_userns; $ENGINE compose "$@"; }
+compose() { neutral_auth; keep_id_userns; $ENGINE compose "$@"; }
 # The same with EVERY service in view. `--profile full` REPLACES the exported
 # COMPOSE_PROFILES (docker-compose does not union the two) — it shows every
 # service only because every profiled service lists `full`, which `kingo
@@ -354,7 +481,7 @@ compose() { neutral_auth; n8n_userns; $ENGINE compose "$@"; }
 # the network and podman then refuses to remove it — exit code 0, silently),
 # bundle and pull (all images), the loopback + drift guards (all ports), CI
 # diagnostics.
-compose_all() { neutral_auth; n8n_userns; $ENGINE compose --profile full "$@"; }
+compose_all() { neutral_auth; keep_id_userns; $ENGINE compose --profile full "$@"; }
 
 # ── The service table: the ONE list every command derives from ───────────────
 # DisplayName|ENV_SUFFIX|host port|health path|expected codes
@@ -728,14 +855,15 @@ cmd_up() {
   stop_off_services
   heal_ghosts_report
   n8n_data_owner
-  n8n_userns_hint
+  keep_id_hint
+  langflow_data_owner
   # `up` builds the local jupyterhub image only if it's missing (first run);
   # use `kingo update` to force a rebuild after changing the Dockerfile.
   compose up -d
   echo "Waiting for all services to become healthy (first run pulls ~10 GB — be patient) ..."
   wait_all 90 || { echo; compose ps; die "not all services came up. See: ./kingo logs"; }
   echo "All services healthy. Running first-run setup ..."
-  n8n_userns_seen
+  keep_id_seen
   init_stack
   echo
   cmd_status

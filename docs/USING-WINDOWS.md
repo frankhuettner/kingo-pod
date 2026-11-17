@@ -181,10 +181,10 @@ workflow someone else built and you imported. Never let it hold your only copy
 of something. Nothing outside this one folder is reachable from Langflow or
 n8n.
 
-> **Using Docker Desktop?** Files that *Langflow itself* writes into the
-> folder end up owned by `root` inside Ubuntu — deleting those needs
-> `sudo rm`. Files **you** put in are never affected. With Podman (the
-> default) this does not happen.
+> **Using Docker Desktop?** Langflow and n8n can write into the folder only
+> if your Ubuntu user has the number 1000 (check with `id -u`). The first
+> user of a new Ubuntu has it. With Podman (the default) it always works.
+> Files **you** put in are never affected.
 
 If `./kingo up` warns that n8n cannot write to the shared folder, n8n still
 works and can still read the folder. Send the warning to your instructor.

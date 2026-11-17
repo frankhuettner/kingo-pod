@@ -125,11 +125,16 @@ services:
     container_name: kingo-langflow
     restart: unless-stopped
     profiles: [full, abp, langflow]
-    # Run as root: the image's default non-root user cannot write the fresh
-    # named volume at /app/data (the engine creates it root-owned because the
-    # path does not exist in the image), which crash-loops langflow on its
-    # secret-key write. Root also survives `kingo reset` recreating volumes.
-    user: root
+    # Langflow runs as its image's user "user" (uid 1000, HOME /app/data), not
+    # as root (Kingo 1.6; up to 1.5 it was root, because Langflow 1.11 and
+    # older had no /app/data and a fresh volume there was root's). kingo sets
+    # both values (langflow_userns): on rootless Podman on Linux/WSL the same
+    # keep-id as n8n, so what Langflow writes to the shared folder belongs to
+    # the laptop's user; elsewhere both stay empty. KINGO_LANGFLOW_USER is
+    # "root" only where keep-id was turned off by hand, or for one start whose
+    # hand-over of Langflow's data failed (langflow_data_owner).
+    user: "${KINGO_LANGFLOW_USER:-}"
+    userns_mode: "${KINGO_LANGFLOW_USERNS:-}"
     environment:
       LANGFLOW_DATABASE_URL: postgresql://${KINGO_USER}:${KINGO_PASSWORD}@postgres:5432/langflow
       # The mail roles' password (the class password), for the Mail Search component: no flow carries it.

@@ -492,6 +492,19 @@ ignores any value, because Docker rejects it. Two consequences:
   own message, and n8n starts with the user its data still has for that run:
   without the setting it reads the folder and cannot write.
 
+**Who owns what Langflow writes (Kingo 1.6).** Langflow runs as its image's
+user (uid 1000) too, no longer as root, with the same `keep-id` on rootless
+Podman (`KINGO_LANGFLOW_USERNS`). Root wrote Langflow's own data (the volume
+`langflow-data`) up to Kingo 1.5, on every engine, so `up` hands those files
+to Langflow's user before Langflow starts, in a short container of the
+Langflow image; it says so when it changed something. It looks after every
+`down` and whenever the last Langflow ran as root, so going back to 1.5 and
+forward again is safe; otherwise it costs nothing. The first `up` with
+`keep-id` is slow for Langflow as for n8n, and again after every Langflow
+image `kingo` builds. If the hand-over fails, `up` warns and Langflow starts
+as root for that run, as in 1.5. Under Docker on Linux Langflow can now write
+to the shared folder only if the laptop's user is uid 1000 (as for n8n).
+
 `./kingo smoke` writes a file from Langflow and from n8n and checks that it
 belongs to the student. In a folder that went back to an older `kingo` (one
 without this) while its n8n data belongs to the laptop's user, n8n cannot
@@ -504,6 +517,9 @@ podman stop kingo-n8n && podman unshare chown -R 1000:1000 "$(podman volume insp
 
 **The off switch:** `KINGO_N8N_USERNS=` (empty) in `.env.local` turns the
 setting off on one laptop; the next `./kingo up` hands n8n's data back.
+`KINGO_LANGFLOW_USERNS=` (empty) does the same for Langflow, which then runs
+as root as in 1.5 (under rootless Podman that root is the laptop's user, so
+the shared folder still works).
 `kingo` also keeps two notes of its own in `.env.local`,
 `KINGO_N8N_DATA_OWNER` and `KINGO_N8N_KEEP_ID_IMAGE`. Do not edit them; a
 deleted line only costs one slower `up`.

@@ -528,16 +528,46 @@ difference students choose between.
   the chown fails, n8n starts with the user its data has for that run (keep-id
   off, or on when it was switched off by hand) and the warning says which;
   the stack must start.
-- **`KINGO_N8N_USERNS` is decided once per run, in `select_engine`**, in
-  kingo's own shell: every compose call (also inside `$( )` or a pipe) must
-  see the same value, or compose recreates n8n.
+- **`KINGO_N8N_USERNS` (and Langflow's two values) are decided once per run,
+  in `select_engine`** (`keep_id_userns`), in kingo's own shell: every compose
+  call (also inside `$( )` or a pipe) must see the same value, or compose
+  recreates the container.
 - **The first start with keep-id builds an ID-mapped copy of the n8n image**
   (once per image; an interrupted first run looked like a hang on 2026-11-16).
-  `n8n_userns_hint` says so before `compose up`, only while
-  `KINGO_N8N_KEEP_ID_IMAGE` in `.env.local` is not the current image.
+  `keep_id_hint` says so before `compose up`, only while
+  `KINGO_N8N_KEEP_ID_IMAGE` in `.env.local` is not the current image (for
+  Langflow `KINGO_LANGFLOW_KEEP_ID_IMAGE`; its image is kingo's own build, so
+  every rebuild is a new one). `compose config --images` is asked once per run
+  (`image_refs`, outside `$( )`).
 - **CI runs the owner move both ways** (podman leg: `KINGO_N8N_USERNS=` up,
   then a normal up, then smoke), on `ubuntu-24.04`, i.e. Podman 4.9.3 like a
   WSL student; `ubuntu-latest` moved to 26.04 / Podman 5.7.
+- **Langflow runs as its image's user `user` (uid 1000, gid 0, HOME
+  `/app/data`) since Kingo 1.6, not as root** (Frank, 2026-11-17: keep-id like
+  n8n). Root was only needed while the image had no `/app/data` (Langflow
+  1.11 and older); since 1.12 the image makes it for uid 1000. compose.yml
+  takes `user` and `userns_mode` from `KINGO_LANGFLOW_USER` and
+  `KINGO_LANGFLOW_USERNS` (`langflow_userns`, same rules as n8n): rootless
+  Podman on Linux gets keep-id, elsewhere both stay empty. `KINGO_LANGFLOW_USERNS=`
+  is the off switch and runs Langflow as root as in 1.5 (there root is the
+  laptop's user, so the shared folder still works); `KINGO_LANGFLOW_USER` is
+  never read from `.env.local`.
+- **Root wrote Langflow's data up to 1.5, on every engine**, so `up` hands it
+  to uid 1000 once before Langflow starts (`langflow_data_owner`): a one-off
+  container of the Langflow image, as root, in Langflow's own user namespace
+  (`--userns` only under keep-id), runs a small Python walk with `lchown` —
+  then 1000 is Langflow's user on every engine, and no `podman unshare` is
+  needed (it does not exist for a Mac or Docker). When to look is read off
+  the container `kingo-langflow`, not off a note in `.env.local`: none (after
+  down, reset, an engine switch) or one that ran as root (Kingo 1.5, also
+  after going back to it and forward again, or keep-id off) → look; one that
+  ran as Langflow's user → not. A note would miss the way back to 1.5 and
+  forward again, which a TA trying `next` takes. No volume: a fresh install,
+  no look. No reverse move: root writes anything. If the one-off cannot run
+  (image not built, an engine error), Langflow starts as root for that run.
+  CI (both legs) makes root own the volume with the stack down and wants one
+  hand-over, then none; the podman leg also switches keep-id off and on, and
+  `kingo langflow pip install` runs as uid 1000.
 - **`N8N_RESTRICT_FILE_ACCESS_TO` lists `/home/node/.n8n-files;/app/shared`**:
   since n8n 2.0 the file nodes reach only the first without it.
 

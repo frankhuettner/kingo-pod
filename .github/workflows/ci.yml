@@ -45,9 +45,9 @@ jobs:
     runs-on: ubuntu-24.04
     # The GitHub default is 360 min — a hang should fail fast with diagnostics
     # instead. Step-level timeouts below are tighter still; this must stay
-    # ABOVE their sum (40+30+25+20+45+15 + setup), or a slow-but-legit run gets
+    # ABOVE their sum (40+30+25+20+20+45+15 + setup), or a slow-but-legit run gets
     # killed as a cancellation, which would skip the diagnostics step.
-    timeout-minutes: 195
+    timeout-minutes: 215
     strategy:
       fail-fast: false
       matrix:
@@ -204,6 +204,43 @@ jobs:
           ./kingo up 2>&1 | tee /tmp/n8n-again.log
           if grep -q "$moved" /tmp/n8n-again.log; then echo "FAIL: moved again although nothing changed"; exit 1; fi
           if grep -q "WARN: could not" /tmp/n8n-*.log; then echo "FAIL: a warning about n8n's data (above)"; exit 1; fi
+          ./kingo smoke
+
+      - name: Langflow runs as its own user and takes over what root wrote in 1.5
+        timeout-minutes: 20
+        # Up to Kingo 1.5 Langflow ran as root, so a folder from then holds files
+        # Langflow's user cannot change. CI installs fresh, so the hand-over
+        # (langflow_data_owner) would never run: with the stack down, make root
+        # own Langflow's data as Langflow sees it, and `up` must hand it over; a
+        # second `up` (its container ran as Langflow's user) must not look. Podman leg: keep-id off runs Langflow
+        # as root (as in 1.5), on again as its own user. Then `kingo langflow`
+        # must still install packages, now as Langflow's user.
+        run: |
+          set -euo pipefail
+          E=${{ matrix.engine }}
+          moved="Langflow's own data now belongs"
+          as_user() { u=$($E exec kingo-langflow id -u); [ "$u" = "$1" ] || { echo "FAIL: Langflow runs as uid $u, expected $1 ($2)"; exit 1; }; }
+          own_data() { $E exec kingo-langflow sh -c 'touch /app/data/.kingo-ci && rm /app/data/.kingo-ci' \
+                         || { echo "FAIL: Langflow cannot write its own data ($1)"; exit 1; }; }
+          as_user 1000 "fresh install"
+          img=$($E inspect kingo-langflow --format '{{.Image}}')
+          ns=(); [ "$E" = podman ] && ns=(--userns keep-id:uid=1000,gid=1000)
+          ./kingo down
+          $E run --rm --user 0:0 "${ns[@]}" -v kingo_langflow-data:/app/data:z --entrypoint sh "$img" \
+            -c 'mkdir -p /app/data/.kingo-ci-root && touch /app/data/.kingo-ci-root/f && chown -R 0:0 /app/data'
+          ./kingo up 2>&1 | tee /tmp/lf-old.log
+          grep -q "$moved" /tmp/lf-old.log || { echo "FAIL: no hand-over of the files root wrote"; exit 1; }
+          as_user 1000 "after the hand-over"; own_data "after the hand-over"
+          ./kingo up 2>&1 | tee /tmp/lf-again.log
+          if grep -q "$moved" /tmp/lf-again.log; then echo "FAIL: handed over again although nothing changed"; exit 1; fi
+          if [ "$E" = podman ]; then
+            KINGO_LANGFLOW_USERNS= ./kingo up 2>&1 | tee /tmp/lf-off.log
+            as_user 0 "keep-id off"; own_data "keep-id off"
+            ./kingo up 2>&1 | tee /tmp/lf-on.log
+            as_user 1000 "keep-id back on"; own_data "keep-id back on"
+          fi
+          if grep -q "WARN: could not" /tmp/lf-*.log; then echo "FAIL: a warning about Langflow's data (above)"; exit 1; fi
+          ./kingo langflow pip install --reinstall --no-deps six
           ./kingo smoke
 
       - name: Boot 3 — mode cycle (abp → n8n → langflow → bi → full)
