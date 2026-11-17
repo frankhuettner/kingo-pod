@@ -1630,7 +1630,8 @@ cmd_claude() {
       echo "Your own additions to the sandbox of the course: copy setup/claude/my-nono-profile.example.json to"
       echo "  $KINGO_DIR/my-nono-profile.json and change it. Claude can read that file and not change it."
       echo "kingo claude --login [--in <folder>] [claude options]  with your Claude subscription in place of OpenRouter:"
-      echo "  Claude Code uses Anthropic's models and your subscription pays. No OpenRouter key is needed."
+      echo "  Claude Code uses Anthropic's models and your subscription pays. For the course, kingo still asks for"
+      echo "  your OpenRouter key, the one of your flows in Langflow: with it, Claude can try a model or an embedding."
       echo "  The first start asks you to log in. nono keeps the login outside the sandbox; Claude Code holds stand-ins."
       echo "  One session with --login at a time: two at once break the login (a bug in nono), so kingo starts no second one."
       echo "kingo claude logout  end that login."
@@ -1703,7 +1704,8 @@ cmd_claude() {
   esac
   [ "$P_POSTGRES" -le 65535 ] || die "KINGO_PORT_POSTGRES must be a port number, not '$P_POSTGRES'. Check .env.local."
 
-  # With --login the model is paid by the student's Claude subscription: no OpenRouter key is asked for or checked.
+  # With --login the model is paid by the student's Claude subscription. The OpenRouter key is then asked for and
+  # checked only for the course: the course profile has a route to OpenRouter (the key of the student's flows).
   if [ "$logout" = 1 ]; then
     :   # no keys, no pod, no browser: only nono and the profiles
   elif [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ] && [ -n "$in_dir" ]; then
@@ -1721,7 +1723,10 @@ cmd_claude() {
     { check "$P_N8N" /healthz && check "$P_LANGFLOW" /health; } \
       || die "n8n and Langflow must be running first: ./kingo up (in mode abp or full)"
 
-    if [ "$login" = 0 ] && [ ! -s "$CLAUDE_KEYS/openrouter.key" ]; then claude_ask_key openrouter "Paste your OpenRouter key"; fi
+    if [ ! -s "$CLAUDE_KEYS/openrouter.key" ]; then
+      [ "$login" = 0 ] || echo "Claude can try the models of your flows with your OpenRouter key, the one in Langflow."
+      claude_ask_key openrouter "Paste your OpenRouter key"
+    fi
     if [ ! -s "$CLAUDE_KEYS/n8n.key" ]; then
       echo "Claude needs an API key for n8n. In n8n, open Settings, then n8n API, then Create an API key."
       claude_ask_key n8n "Paste the n8n API key"
@@ -1730,10 +1735,8 @@ cmd_claude() {
       echo "Claude needs an API key for Langflow. In Langflow, open Settings, then Langflow API Keys, then Add New."
       claude_ask_key langflow "Paste the Langflow API key"
     fi
-    if [ "$login" = 0 ]; then
-      claude_check_key openrouter "$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $(cat "$CLAUDE_KEYS/openrouter.key")")" \
-        "Check it on openrouter.ai (Settings, Keys)."
-    fi
+    claude_check_key openrouter "$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $(cat "$CLAUDE_KEYS/openrouter.key")")" \
+      "Check it on openrouter.ai (Settings, Keys)."
     claude_check_key n8n "$(claude_http "http://127.0.0.1:${P_N8N}/api/v1/workflows?limit=1" "X-N8N-API-KEY: $(cat "$CLAUDE_KEYS/n8n.key")")" \
       "Make a new one in n8n (Settings, n8n API)."
     claude_check_key langflow "$(claude_http "http://127.0.0.1:${P_LANGFLOW}/api/v1/flows/" "x-api-key: $(cat "$CLAUDE_KEYS/langflow.key")")" \

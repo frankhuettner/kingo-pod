@@ -256,9 +256,10 @@ command you type can.
 ### Your Claude subscription (optional)
 
 Do you have a Claude subscription (Pro or Max)? Then Claude Code can use it in
-place of the OpenRouter key: Anthropic's models, paid by your subscription.
+place of OpenRouter: Anthropic's models, paid by your subscription.
 The course does not need this. Everything else stays the same: the sandbox,
-n8n, Langflow and the database.
+n8n, Langflow, the database, and your OpenRouter key, with which Claude can
+try the models of your flows.
 
 ```bash
 cd ~/kingo-pod && ./kingo claude --login

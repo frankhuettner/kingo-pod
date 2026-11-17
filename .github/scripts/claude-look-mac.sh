@@ -508,7 +508,7 @@ if has "$out" "--read "; then show "$out" 30; fail "kingo started a session with
 rm -rf "$FH"
 ok "the login with the browser profile, the session without it and with kingo's variables; logout; a login that nono did not capture is deleted"
 
-say "the sandbox of the login: no way to OpenRouter, the course only with the course, nono's store stays outside"
+say "the sandbox of the login: the model not through OpenRouter, the course (and OpenRouter for the flows' models) only with the course, nono's store stays outside"
 # in_login <profile> <folder> <what nono may read> command ...
 in_login() {
   local profile=$1 where=$2 reads=$3; shift 3
@@ -523,22 +523,22 @@ MARK="mark-$$-$(date +%s)"
 printf 'store-%s\n' "$MARK" > "$STORE/ci-probe.txt"
 : > "$STORE/listed-$MARK"
 printf 'login-folder-%s\n' "$MARK" > "$LCFG/marker.txt"
-PROBE='echo "base=${ANTHROPIC_BASE_URL:-none} token=${ANTHROPIC_AUTH_TOKEN:-none} proxy=${HTTPS_PROXY:+set} ca=${NODE_EXTRA_CA_CERTS:+set} n8n=${N8N_BASE_URL:+set} langflow=${LANGFLOW_BASE_URL:+set} pg=${PGHOST:-none}"; cat "$1" 2>&1; ls "$(dirname "$1")" 2>&1; for f in "$2/probe" "$3/probe" ./probe-here; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done'
+PROBE='echo "base=${ANTHROPIC_BASE_URL:-none} token=${ANTHROPIC_AUTH_TOKEN:-none} proxy=${HTTPS_PROXY:+set} ca=${NODE_EXTRA_CA_CERTS:+set} n8n=${N8N_BASE_URL:+set} langflow=${LANGFLOW_BASE_URL:+set} openrouter=${OPENROUTER_BASE_URL:+set} pg=${PGHOST:-none}"; cat "$1" 2>&1; ls "$(dirname "$1")" 2>&1; for f in "$2/probe" "$3/probe" ./probe-here; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done'
 out=$(in_login kingo-claude-login "$OWN" "$TPL" sh -c "$PROBE" sh "$STORE/ci-probe.txt" "$CFG" "$LCFG")
 show "$(printf '%s\n' "$out" | grep -E '^(base=|WROTE|refused)')" 5
-has "$out" "base=none token=none proxy=set ca=set n8n= langflow= pg=none" || { show "$out" 20; fail "the profile of the login: a way to OpenRouter or something of the course is there, or nono's proxy and certificate are not"; }
+has "$out" "base=none token=none proxy=set ca=set n8n= langflow= openrouter= pg=none" || { show "$out" 20; fail "the profile of the login: a way to OpenRouter or something of the course is there, or nono's proxy and certificate are not"; }
 if has "$out" "store-$MARK" || has "$out" "listed-$MARK"; then fail "the sandbox of the login can read nono's store of the real tokens"; fi
 has "$out" "refused $CFG/probe" || fail "the sandbox of the login can write in the config folder of the OpenRouter way"
 has "$out" "WROTE $LCFG/probe" || fail "the sandbox of the login cannot write in its own config folder"
 has "$out" "WROTE ./probe-here" || fail "the sandbox of the login cannot write in the folder it starts in"
 out=$(in_login kingo-claude-login-course "$DIR" "$KINGO_DIR" sh -c "$PROBE" sh "$STORE/ci-probe.txt" "$CFG" "$LCFG")
 show "$(printf '%s\n' "$out" | grep -E '^(base=|WROTE|refused)')" 5
-has "$out" "base=none token=none proxy=set ca=set n8n=set langflow=set pg=127.0.0.1" || { show "$out" 20; fail "the course profile of the login: a way to OpenRouter is there, or n8n, Langflow or PostgreSQL are not"; }
+has "$out" "base=none token=none proxy=set ca=set n8n=set langflow=set openrouter=set pg=127.0.0.1" || { show "$out" 20; fail "the course profile of the login: the model goes through OpenRouter, or n8n, Langflow, OpenRouter for the flows' models or PostgreSQL are not there"; }
 if has "$out" "store-$MARK" || has "$out" "listed-$MARK"; then fail "the sandbox of the login, with the course, can read nono's store of the real tokens"; fi
 rm -f "$DIR/probe-here"
 out=$(in_sandbox sh -c 'cat "$1" 2>&1; cat "$2" 2>&1; ls "$(dirname "$2")" 2>&1' sh "$LCFG/marker.txt" "$STORE/ci-probe.txt")
 if has "$out" "$MARK"; then fail "the sandbox of the OpenRouter way can read the config folder of the login, or nono's store"; fi
-ok "login: no OpenRouter, nono's proxy and certificate, its own config folder; the course's routes only with the course; the store is closed"
+ok "login: the model not through OpenRouter, nono's proxy and certificate, its own config folder; the course's routes only with the course; the store is closed"
 
 # A new session of Claude Code asks an address on platform.claude.com at its start. That is the host of the token
 # address: nono reads all traffic to it and lets through only what has a route. Without a route, nono answers 502
