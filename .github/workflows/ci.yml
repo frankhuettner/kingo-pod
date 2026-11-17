@@ -40,7 +40,9 @@ jobs:
             '
 
   stack:
-    runs-on: ubuntu-latest
+    # Pinned: students' WSL runs Ubuntu 24.04 (Podman 4.9.3); ubuntu-latest
+    # moved to 26.04 with Podman 5.7 (seen 2026-11-17).
+    runs-on: ubuntu-24.04
     # The GitHub default is 360 min — a hang should fail fast with diagnostics
     # instead. Step-level timeouts below are tighter still; this must stay
     # ABOVE their sum (40+30+25+45+15 + setup), or a slow-but-legit run gets
