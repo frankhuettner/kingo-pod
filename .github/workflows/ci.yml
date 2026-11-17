@@ -95,8 +95,13 @@ jobs:
           # them) into something docker-archive can carry — the instructor's
           # machine needs it for the same reason.
           sudo apt-get install -y podman uidmap skopeo
-          tag=$(curl -fsSL https://api.github.com/repos/docker/compose/releases/latest \
+          # With the run's token: without it the API answered 403 (rate limit of
+          # the runner's address, 2026-11-17), the tag came back empty and the
+          # download 404. An empty tag now fails here, by name.
+          tag=$(curl -fsSL -H "Authorization: Bearer ${{ github.token }}" \
+                  https://api.github.com/repos/docker/compose/releases/latest \
                 | grep -o '"tag_name":[^,]*' | cut -d'"' -f4)
+          [ -n "$tag" ] || { echo "FAIL: no docker compose release tag from the GitHub API"; exit 1; }
           sudo curl -fsSL "https://github.com/docker/compose/releases/download/${tag}/docker-compose-linux-x86_64" \
             -o /usr/local/bin/docker-compose
           sudo chmod +x /usr/local/bin/docker-compose
