@@ -435,6 +435,15 @@ difference students choose between.
   checks `kingo`'s steps with a stand-in for nono (`fake_nono.sh`) and the
   sandbox of the login with the real nono. A real login was tried by hand on a
   Mac (14 Nov 2026).
+- **One session with `--login` at a time** (since 1.4.17 / 1.5.16): two
+  OAuth-capture sandboxes overwrite each other's store and break the login
+  (nono issues 2087 and 2299; the fix, PR 2088, is in no release yet).
+  `claude_login_claim` writes kingo's process number to
+  `~/.kingo-claude-login.session` with noclobber before the login step and
+  before the logout (`exec` keeps the number for nono). `claude_login_busy`
+  counts a number only while it runs nono, bash or kingo (`ps -o comm=`);
+  without `ps` (a sandbox may forbid it) a running number counts. The lock goes
+  when `CLAUDE_NONO_VERSION` reaches a nono with the fix.
 - **The variables for a start are one list (`envs` in `cmd_claude`), which the
   dry run names and the start exports.** Do not go back to variables in front
   of the `exec` line over several lines: a comment line between them once cut
