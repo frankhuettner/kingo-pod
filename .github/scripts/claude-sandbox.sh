@@ -1085,6 +1085,27 @@ EOF
   has "$(session_of "$out")" "STUB nono run --profile kingo-claude-login " || { show "$out" 30; fail "with a login, kingo does not start the session"; }
   ok "a login is there: kingo starts the session and does not ask again"
 
+  # One session with --login at a time (nono issues 2087, 2299): a session that runs stops a second start and the
+  # logout; a session that ended, or a number that now runs another program, does not.
+  cp /bin/sleep "$fh/nono-session"
+  "$fh/nono-session" 300 & pid=$!
+  echo "$pid" > "$fh/.kingo-claude-login.session"
+  out=$(step none claude --login --in "$fh/projects/thesis")
+  has "$out" "another ./kingo claude --login is running (process $pid)" || { show "$out" 30; fail "a second kingo claude --login started while one runs"; }
+  if has "$out" "--read "; then show "$out" 30; fail "kingo started a second session with --login"; fi
+  out=$(step none claude logout)
+  has "$out" "so the logout does not start" || { show "$out" 30; fail "kingo claude logout ran while a session with --login runs"; }
+  [ -s "$cred" ] || fail "the logout removed the login while a session with --login runs"
+  kill "$pid"; wait "$pid" 2>/dev/null || true
+  out=$(step none claude --login --in "$fh/projects/thesis")
+  has "$(session_of "$out")" "STUB nono run --profile kingo-claude-login " || { show "$out" 30; fail "after the other session ended, kingo does not start one"; }
+  sleep 300 & pid=$!
+  echo "$pid" > "$fh/.kingo-claude-login.session"
+  out=$(step none claude --login --in "$fh/projects/thesis")
+  has "$(session_of "$out")" "STUB nono run --profile kingo-claude-login " || { show "$out" 30; fail "a number that runs another program stopped kingo claude --login"; }
+  kill "$pid"; wait "$pid" 2>/dev/null || true
+  ok "one session with --login at a time: a running one stops a second start and the logout, an ended one does not"
+
   out=$(step none claude logout)
   has "$out" "STUB nono run --profile kingo-claude-login --allow-cwd --read-file $tpl/no_unix_sockets.py -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude auth logout" || { show "$out" 30; fail "kingo claude logout does not log out inside the sandbox"; }
   has "$out" "Logged out" || { show "$out" 30; fail "kingo claude logout does not say that it logged out"; }
