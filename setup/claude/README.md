@@ -97,8 +97,8 @@ Anthropic's models, paid by your subscription, and no OpenRouter key. `--login` 
   kingo checks this after the login: a login that is not a stand-in, it deletes.
 - **Where nono keeps it:** in `~/.local/state/nono/oauth-capture`, readable only by you, not encrypted, for up to
   90 days.
-- **One session at a time.** Two sessions with `--login` at once can break the login (a known fault of nono 0.81).
-  Then log out and start again.
+- **One session at a time.** Two sessions with `--login` at once break the login (a fault of nono, issues 2087 and
+  2299), so `kingo` starts no second one, and no logout, while the first runs.
 - **To end the login:** `./kingo claude logout`. Do the same when Claude Code says that you are not logged in, and
   start again.
 - **The model:** Claude Code picks one of Anthropic's models. `/model` inside Claude Code changes it.

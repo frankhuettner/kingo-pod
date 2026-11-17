@@ -1476,6 +1476,33 @@ claude_browser_cmd() { # ./kingo claude browser: get the browser, or say why it 
 # This way has a config folder of its own (~/.kingo-claude-login): in ~/.kingo-claude, kingo deletes every login.
 CLAUDE_LOGIN_CFG="$HOME/.kingo-claude-login"
 
+# One session with --login at a time. Two at once break the login: every nono proxy knows only the stand-ins it made
+# itself, and they overwrite each other's store, so a refresh in one session ends the login of the other (nono issues
+# 2087 and 2299; the fix, PR 2088, is not in nono yet). Frank, 17 Nov 2026: kingo refuses a second one until nono
+# has the fix. The file holds the process number of the session: `exec` keeps kingo's number for nono, so it names
+# the session until its end. A number that no longer runs, or runs something else, is left over and does not count.
+CLAUDE_LOGIN_SESSION="$CLAUDE_LOGIN_CFG.session"
+claude_login_busy() { # prints the process number while another session with --login runs
+  local pid comm
+  pid=$(cat "$CLAUDE_LOGIN_SESSION" 2>/dev/null) || return 1
+  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$pid" != "$$" ] && kill -0 "$pid" 2>/dev/null || return 1
+  # Without ps (a sandbox may forbid it) a number that runs counts: better a refusal than a broken login.
+  comm=$(ps -p "$pid" -o comm= 2>/dev/null) || { echo "$pid"; return 0; }
+  case "$comm" in *nono*|*bash*|*kingo*) echo "$pid" ;; *) return 1 ;; esac
+}
+claude_login_claim() { # $1: what is starting (for the message)
+  local pid i
+  for i in 1 2; do
+    ( set -C; echo "$$" > "$CLAUDE_LOGIN_SESSION" ) 2>/dev/null && return 0
+    if pid=$(claude_login_busy); then
+      die "another ./kingo claude --login is running (process $pid), so $1 does not start: two at once break the login (a bug in nono). Close the other session first, or start this one without --login. (If no other session runs: rm $CLAUDE_LOGIN_SESSION)"
+    fi
+    rm -f "$CLAUDE_LOGIN_SESSION"
+  done
+  die "could not write $CLAUDE_LOGIN_SESSION"
+}
+
 # Is a login there, and is it nono's? Looks only at the form of the two tokens and prints nothing.
 claude_login_state() { # config folder -> 0: both tokens are stand-ins of nono; 1: one is not; 2: no login
   local f="$1/.credentials.json" a r re='^(sk-ant-oat01-)?(nono_)?[0-9a-f]{64}$'
@@ -1605,7 +1632,7 @@ cmd_claude() {
       echo "kingo claude --login [--in <folder>] [claude options]  with your Claude subscription in place of OpenRouter:"
       echo "  Claude Code uses Anthropic's models and your subscription pays. No OpenRouter key is needed."
       echo "  The first start asks you to log in. nono keeps the login outside the sandbox; Claude Code holds stand-ins."
-      echo "  Use one session with --login at a time: two at once can break the login (then: logout, and log in again)."
+      echo "  One session with --login at a time: two at once break the login (a bug in nono), so kingo starts no second one."
       echo "kingo claude logout  end that login."
       return ;;
   esac
@@ -1796,6 +1823,7 @@ cmd_claude() {
       return
     fi
     if [ -s "$cfg/.credentials.json" ]; then
+      claude_login_claim "the logout"
       claude_login_run "$nono" "$tpl" "$profile" -- claude auth logout || true
       rm -f "$cfg/.credentials.json"
       echo "Logged out: ./kingo claude --login will ask for the login again."
@@ -1895,6 +1923,7 @@ cmd_claude() {
   fi
   # --login: the login first, when there is none. A login that is not nono's does not stay.
   if [ "$login" = 1 ]; then
+    claude_login_claim "this one"
     local state=0
     claude_login_state "$cfg" || state=$?
     if [ "$state" = 1 ]; then

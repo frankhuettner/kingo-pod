@@ -290,8 +290,9 @@ Every next time, `./kingo claude --login` starts Claude Code right away.
 
 - **Back to OpenRouter:** start with `./kingo claude`, as before. Both ways
   stay set up, side by side.
-- **One session at a time.** Two sessions with `--login` at once can break the
-  login.
+- **One session at a time.** Two sessions with `--login` at once break the
+  login, so `kingo` does not start a second one. Close the first session, then
+  start the new one.
 - **Claude Code says that you are not logged in?** Run `./kingo claude logout`,
   then start with `--login` again.
 - **End the login:** `./kingo claude logout`.
