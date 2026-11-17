@@ -495,6 +495,52 @@ difference students choose between.
   (`clickthrough_routes.js`, `clickthrough_copy.js`, `clickthrough_ways.js`).
   Scripts are `.cjs`: in a Vite project a `.js` is an ES module.
 
+## The shared folder (Langflow and n8n)
+
+- **`shared/` is `/app/shared` in Langflow AND in n8n**, and a file either
+  writes there belongs to the laptop's user. `kingo smoke` checks it
+  (`shared_check`; a failure warns on a laptop and fails in CI, like mail).
+  A new service that mounts the folder joins that check.
+- **n8n stays the image's user `node`; it is never run as root** (Frank's
+  call, 2026-11-16). Under rootless Podman on Linux/WSL `node` could read the
+  folder but every write was "permission denied" (measured on WSL). The cure
+  is Podman's `keep-id:uid=1000,gid=1000` for that ONE container, set by
+  `kingo` (`n8n_userns`) through `KINGO_N8N_USERNS` and compose's
+  `userns_mode`. Tried and dropped: `chmod -R a+rwX shared` (n8n writes, but
+  the file belongs to a sub-uid and the student cannot edit it).
+- **The value never reaches Docker and never a Mac**, whatever `.env.local`
+  says (`n8n_userns` empties it and warns): Docker rejects it, and on a Mac
+  the machine translates owners already. Empty `userns_mode` is the same as
+  none. On rootless Podman a `KINGO_N8N_USERNS` from `.env.local` or the
+  command line wins, an empty one too (that is the off switch).
+- **Rootless is `podman` + Linux + `id -u` not 0**, never `podman info`: a
+  detection that can fail quietly would switch off keep-id and its check
+  together. No Podman version check: kingo needs `podman compose` (4.7+),
+  keep-id:uid= exists since 4.3.
+- **keep-id changes who `node` is on the laptop, so the volume `n8n-data`
+  must change owner with it** (`n8n_data_owner`, in `up` before n8n starts,
+  modes with n8n only, both directions). Owners are named as `podman
+  unshare` sees them: 0 is the laptop's user, 1000 the sub-uid of the default
+  mapping. `KINGO_N8N_DATA_OWNER` in `.env.local` records the owner after a
+  complete check or move; while it and the folder's own owner agree, the
+  volume is not walked; a move clears it first, so an interrupted move is
+  finished by the next `up`. Podman's errors are shown, never swallowed. If
+  the chown fails, n8n starts with the user its data has for that run (keep-id
+  off, or on when it was switched off by hand) and the warning says which;
+  the stack must start.
+- **`KINGO_N8N_USERNS` is decided once per run, in `select_engine`**, in
+  kingo's own shell: every compose call (also inside `$( )` or a pipe) must
+  see the same value, or compose recreates n8n.
+- **The first start with keep-id builds an ID-mapped copy of the n8n image**
+  (once per image; an interrupted first run looked like a hang on 2026-11-16).
+  `n8n_userns_hint` says so before `compose up`, only while
+  `KINGO_N8N_KEEP_ID_IMAGE` in `.env.local` is not the current image.
+- **CI runs the owner move both ways** (podman leg: `KINGO_N8N_USERNS=` up,
+  then a normal up, then smoke), on `ubuntu-24.04`, i.e. Podman 4.9.3 like a
+  WSL student; `ubuntu-latest` moved to 26.04 / Podman 5.7.
+- **`N8N_RESTRICT_FILE_ACCESS_TO` lists `/home/node/.n8n-files;/app/shared`**:
+  since n8n 2.0 the file nodes reach only the first without it.
+
 ## Layout
 
 - `compose.yml` — the 10-service stack (ports via `KINGO_PORT_*`; profiles =

@@ -127,22 +127,24 @@ use, and which modes fit.
 
 ### Your own files — the `shared` folder
 
-`shared` is a folder inside `kingo-pod` that both you and Langflow can see.
+`shared` is a folder inside `kingo-pod` that you, Langflow and n8n can see.
 Put your own files there: a SQLite database, a CSV, an Excel sheet, a PDF.
 
-It is one folder with two names, because you and Langflow look at it from
-different sides:
+It is one folder with two names, because you and the two apps look at it
+from different sides:
 
 | Looking from | The folder is called |
 |---|---|
 | your laptop (Ubuntu, or File Explorer) | `~/kingo-pod/shared` |
-| inside Langflow | `/app/shared` |
+| inside Langflow and inside n8n | `/app/shared` |
 
 So a database you drop in as `~/kingo-pod/shared/trials.sqlite` is
-`/app/shared/trials.sqlite` when you type it into a Langflow component. It
-works the other way round too: whatever Langflow writes there shows up on your
-laptop. The folder is made for you — if it is not there, run `./kingo update`
-once.
+`/app/shared/trials.sqlite` when you type it into a Langflow component or
+into an n8n node (for example **Read/Write Files from Disk**). It works the
+other way round too: whatever Langflow or n8n writes there shows up on your
+laptop. With Podman (the default) the file is yours: you can open, change
+and delete it. The folder is made for you — if it is not there, run
+`./kingo update` once.
 
 > **Opening a SQLite file in Langflow?** The SQL component wants a database
 > URL, not a path, and an absolute path takes **four** slashes:
@@ -159,7 +161,8 @@ folder is not called `frank` like the one in the picture. You can also paste
 
 ![File Explorer at Linux → Ubuntu → home → frank → kingo-pod, with the shared folder highlighted](img/wsl-shared-1-explorer.png)
 
-Drag files in and out like in any other folder. Langflow sees them at once.
+Drag files in and out like in any other folder. Langflow and n8n see them at
+once.
 
 ![The shared folder open in Explorer, next to an Ubuntu terminal in the same folder](img/wsl-shared-2-folder.png)
 
@@ -172,15 +175,19 @@ cd ~/kingo-pod/shared && explorer.exe .
 Then right-click **shared** in Explorer's sidebar → **Pin to Quick access**,
 and it is one click away from then on.
 
-**Keep private files out of it.** Anything running inside Langflow can read,
-change and delete what is in this folder — including a flow someone else built
-and you imported. Never let it hold your only copy of something. Nothing
-outside this one folder is reachable from Langflow.
+**Keep private files out of it.** Anything running inside Langflow or n8n can
+read, change and delete what is in this folder — including a flow or a
+workflow someone else built and you imported. Never let it hold your only copy
+of something. Nothing outside this one folder is reachable from Langflow or
+n8n.
 
 > **Using Docker Desktop?** Files that *Langflow itself* writes into the
 > folder end up owned by `root` inside Ubuntu — deleting those needs
 > `sudo rm`. Files **you** put in are never affected. With Podman (the
 > default) this does not happen.
+
+If `./kingo up` warns that n8n cannot write to the shared folder, n8n still
+works and can still read the folder. Send the warning to your instructor.
 
 ## Claude Code — your coding agent
 

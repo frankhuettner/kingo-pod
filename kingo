@@ -92,7 +92,10 @@ esac
 # Order (per plan §4): $KINGO_ENGINE override → podman (usable or startable) →
 # docker → podman as last resort (so the error points at podman setup).
 ENGINE=""
-select_engine() {
+# Also fixes n8n's KINGO_N8N_USERNS for the whole run, here in kingo's own
+# shell, so a compose call inside $( ) or a pipe sees the same value.
+select_engine() { pick_engine; n8n_userns; }
+pick_engine() {
   if [ -n "${KINGO_ENGINE:-}" ]; then ENGINE="$KINGO_ENGINE"; return; fi
   if command -v podman >/dev/null 2>&1; then
     if podman info >/dev/null 2>&1; then ENGINE=podman; return; fi
@@ -180,9 +183,169 @@ neutral_auth() {
   export DOCKER_CONFIG="$KINGO_DIR/.kingo-auth"
 }
 
+# ── n8n and the shared folder (rootless Podman on Linux/WSL) ─────────────────
+# ~/kingo-pod/shared is /app/shared in Langflow AND in n8n. n8n runs as the
+# image's user "node" (uid 1000). Under rootless Podman the laptop's user is
+# root inside a container, so "node" is a stranger to the folder: it reads but
+# every write is "permission denied" (measured on WSL, 2026-11-16). Podman's
+# "keep-id:uid=1000,gid=1000" makes the laptop's user uid 1000 in THAT
+# container: n8n stays non-root and what it writes belongs to the student.
+# compose.yml takes the value from KINGO_N8N_USERNS, and kingo sets it here
+# (select_engine calls n8n_userns once per run):
+#   - rootless Podman on Linux/WSL: keep-id — unless .env.local or the command
+#     line sets KINGO_N8N_USERNS, an EMPTY value too (KINGO_N8N_USERNS= turns
+#     keep-id off);
+#   - everywhere else ALWAYS empty, whatever .env.local says: a Mac needs
+#     nothing (the Podman machine translates owners for a mounted folder),
+#     and Docker rejects the value outright.
+# No Podman version check: kingo needs `podman compose` (Podman 4.7+, the
+# setup script refuses older ones), and keep-id:uid= exists since 4.3.
+# Podman builds an ID-mapped copy of the n8n image for this, once per image:
+# the first start after an n8n update is slow (n8n_userns_hint says so).
+N8N_KEEP_ID="keep-id:uid=1000,gid=1000"
+N8N_VOLUME=kingo_n8n-data
+# Rootless means Podman on Linux, run by a user who is not root. Asked of the
+# shell, not of `podman info`: it costs nothing and cannot fail quietly — a
+# detection that failed would switch off keep-id AND the check that tests it.
+rootless_podman_linux() {
+  [ "$ENGINE" = podman ] && [ "$(uname -s)" = Linux ] && [ "$(id -u)" != 0 ]
+}
+_N8N_USERNS_SET=""
+n8n_userns() { # exports KINGO_N8N_USERNS once per run; compose.yml reads it
+  [ -z "$_N8N_USERNS_SET" ] || return 0
+  [ -n "$ENGINE" ] || return 0                   # no engine picked yet: decide later
+  _N8N_USERNS_SET=1
+  if ! rootless_podman_linux; then
+    [ -z "${KINGO_N8N_USERNS:-}" ] \
+      || warn "ignoring KINGO_N8N_USERNS='$KINGO_N8N_USERNS': it is for rootless Podman on Linux only. Remove it from .env.local (or your shell)."
+    export KINGO_N8N_USERNS=""
+  elif [ -n "${KINGO_N8N_USERNS+x}" ]; then
+    export KINGO_N8N_USERNS
+  else
+    export KINGO_N8N_USERNS="$N8N_KEEP_ID"
+  fi
+}
+n8n_keeps_id() { n8n_userns; case "$KINGO_N8N_USERNS" in keep-id*) return 0 ;; *) return 1 ;; esac; }
+
+# n8n's own data (the volume n8n-data) must belong to whoever "node" is on this
+# laptop: with keep-id that is the laptop's user (uid 0 in `podman unshare`),
+# without it Podman's sub-uid for 1000 (uid 1000 in `podman unshare`). A folder
+# that changes sides (an update that brings keep-id, a branch switch back, a
+# KINGO_N8N_USERNS= in .env.local) has the other owner, and n8n could not write
+# its own files. `up` moves the owner over BEFORE n8n starts, in modes with n8n
+# only; nothing is copied or deleted.
+# Cheap when nothing changed: KINGO_N8N_DATA_OWNER in .env.local records the
+# owner after a COMPLETE check or move; while it and the folder's own owner
+# agree with what n8n needs, the volume is not walked. A move clears it first,
+# so an interrupted move is finished by the next `up`.
+# If the move fails, n8n starts with the user its data has, for this run —
+# keep-id off (then it only reads the shared folder) or, when keep-id was
+# switched off by hand, on: a stack that starts beats a shared folder that works.
+n8n_data_owner() {
+  rootless_podman_linux && service_active n8n || return 0
+  local mp want other top me out
+  mp="$(podman volume inspect "$N8N_VOLUME" --format '{{.Mountpoint}}' 2>/dev/null || true)"
+  [ -n "$mp" ] || return 0                       # no volume yet: a fresh install
+  if n8n_keeps_id; then want=0; other=1000; else want=1000; other=0; fi
+  # The folder itself, seen from the laptop: the laptop's user for 0, a sub-uid for 1000.
+  top="$(stat -c %u "$mp" 2>/dev/null || true)"; me="$(id -u)"
+  if [ "${KINGO_N8N_DATA_OWNER:-}" = "$want" ] && [ -n "$top" ]; then
+    if [ "$want" = 0 ] && [ "$top" = "$me" ]; then return 0; fi
+    if [ "$want" = 1000 ] && [ "$top" != "$me" ]; then return 0; fi
+  fi
+  # Podman's own complaint, if any, goes straight to the terminal.
+  if ! out="$(podman unshare find "$mp" ! -uid "$want" -print -quit)"; then
+    warn "could not check who owns n8n's data ($mp) — see Podman's message above. If n8n does not come up, send both lines to your instructor."
+    return 0
+  fi
+  if [ -n "$out" ]; then
+    echo "Handing n8n's own data to n8n's user on this laptop (once, nothing is deleted) ..."
+    set_local KINGO_N8N_DATA_OWNER ""
+    podman stop kingo-n8n >/dev/null 2>&1 || true
+    if ! out="$(podman unshare chown -R "$want:$want" "$mp" 2>&1)"; then
+      podman unshare chown -R "$other:$other" "$mp" >/dev/null 2>&1 || true
+      out="$(printf '%s\n' "$out" | head -n 1)"
+      if [ "$want" = 0 ]; then
+        export KINGO_N8N_USERNS=""
+        warn "could not hand n8n's data ($mp) to you. Podman said: $out
+       n8n starts as before: it reads the shared folder but cannot write there. Send this message to your instructor."
+      else
+        export KINGO_N8N_USERNS="$N8N_KEEP_ID"
+        warn "could not hand n8n's data ($mp) back to Podman's user for n8n. Podman said: $out
+       n8n starts with keep-id this time, although KINGO_N8N_USERNS is set without it. Send this message to your instructor."
+      fi
+      return 0
+    fi
+  fi
+  [ "${KINGO_N8N_DATA_OWNER:-}" = "$want" ] || set_local KINGO_N8N_DATA_OWNER "$want"
+}
+# The ID-mapped image copy makes ONE start slow, the first with each n8n image:
+# say so before it, and only then (after a `down` the container is gone but the
+# copy is not, so "no container" proves nothing). The image a start last
+# succeeded with is remembered in .env.local (KINGO_N8N_KEEP_ID_IMAGE).
+n8n_image_id() { # the image compose resolves for n8n (awk reads to the end: no SIGPIPE under pipefail)
+  local ref
+  ref="$(compose_all config --images 2>/dev/null | awk '/(^|\/)n8nio\/n8n:/ && !f { print; f=1 }' || true)"
+  [ -n "$ref" ] && podman image inspect "$ref" --format '{{.Id}}' 2>/dev/null || true
+}
+n8n_userns_hint() {
+  n8n_keeps_id && service_active n8n || return 0
+  local id; id="$(n8n_image_id)"
+  [ -n "$id" ] && [ "${KINGO_N8N_KEEP_ID_IMAGE:-}" = "$id" ] && return 0
+  echo "Podman now prepares n8n for the shared folder. This happens once per n8n version and can take a few minutes — please wait."
+}
+n8n_userns_seen() { # after a start that worked
+  n8n_keeps_id && service_active n8n || return 0
+  local id; id="$(n8n_image_id)"
+  [ -n "$id" ] && [ "${KINGO_N8N_KEEP_ID_IMAGE:-}" != "$id" ] || return 0
+  set_local KINGO_N8N_KEEP_ID_IMAGE "$id"
+}
+
+# What the shared folder promises, checked: a file written by Langflow or n8n
+# arrives in ~/kingo-pod/shared, belongs to the laptop's user and can be
+# deleted by them. Checked where kingo arranges it: Podman on a Mac, rootless
+# Podman on Linux/WSL. Skipped under Docker (on Linux it passes uids through,
+# so it would hold only by coincidence of numbers; Docker Desktop on a Mac is
+# not tested) and under rootful Podman. Warns and fails otherwise; in CI an
+# n8n without keep-id on rootless Podman fails too.
+shared_check() {
+  local dir="${KINGO_SHARED_DIR:-./shared}" svc ctr f owner me bad=0
+  service_active Langflow || service_active n8n || return 0
+  if [ "$ENGINE" != podman ]; then
+    echo "Shared folder: not checked under $ENGINE."; return 0
+  fi
+  if [ "$(uname -s)" != Darwin ] && ! rootless_podman_linux; then
+    echo "Shared folder: not checked under rootful Podman."; return 0
+  fi
+  me="$(id -u)"
+  echo "Verifying Langflow and n8n write to the shared folder as you ..."
+  for svc in Langflow n8n; do
+    service_active "$svc" || continue
+    ctr="kingo-$(compose_name "$svc")"
+    if [ "$svc" = n8n ] && rootless_podman_linux && ! n8n_keeps_id; then
+      if [ -n "${CI:-}" ]; then
+        warn "n8n runs without keep-id (KINGO_N8N_USERNS='$KINGO_N8N_USERNS'), so it cannot write to the shared folder"; bad=1
+      else
+        echo "  n8n: not checked — KINGO_N8N_USERNS is set by hand without keep-id, so n8n only reads the folder."
+      fi
+      continue
+    fi
+    f=".kingo-smoke-$(compose_name "$svc")-$$"
+    if ! $ENGINE exec "$ctr" sh -c "echo ok > /app/shared/$f" 2>/dev/null; then
+      warn "$svc cannot write to the shared folder ($dir)"; bad=1; continue
+    fi
+    owner="$(stat -c %u "$dir/$f" 2>/dev/null || stat -f %u "$dir/$f" 2>/dev/null || true)"
+    if [ "$owner" != "$me" ]; then
+      warn "a file $svc wrote to the shared folder belongs to uid ${owner:-?}, not to you ($me): $dir/$f"; bad=1
+    fi
+    rm -f "$dir/$f" 2>/dev/null || { warn "you cannot delete a file $svc wrote to the shared folder: $dir/$f"; bad=1; }
+  done
+  return "$bad"
+}
+
 # One wrapper every verb goes through: `podman compose ...` or `docker compose ...`.
 # It sees the CURRENT MODE's services only (COMPOSE_PROFILES, exported above).
-compose() { neutral_auth; $ENGINE compose "$@"; }
+compose() { neutral_auth; n8n_userns; $ENGINE compose "$@"; }
 # The same with EVERY service in view. `--profile full` REPLACES the exported
 # COMPOSE_PROFILES (docker-compose does not union the two) — it shows every
 # service only because every profiled service lists `full`, which `kingo
@@ -191,7 +354,7 @@ compose() { neutral_auth; $ENGINE compose "$@"; }
 # the network and podman then refuses to remove it — exit code 0, silently),
 # bundle and pull (all images), the loopback + drift guards (all ports), CI
 # diagnostics.
-compose_all() { neutral_auth; $ENGINE compose --profile full "$@"; }
+compose_all() { neutral_auth; n8n_userns; $ENGINE compose --profile full "$@"; }
 
 # ── The service table: the ONE list every command derives from ───────────────
 # DisplayName|ENV_SUFFIX|host port|health path|expected codes
@@ -564,12 +727,15 @@ cmd_up() {
   echo "Engine: $ENGINE. Starting the Kingo stack ..."
   stop_off_services
   heal_ghosts_report
+  n8n_data_owner
+  n8n_userns_hint
   # `up` builds the local jupyterhub image only if it's missing (first run);
   # use `kingo update` to force a rebuild after changing the Dockerfile.
   compose up -d
   echo "Waiting for all services to become healthy (first run pulls ~10 GB — be patient) ..."
   wait_all 90 || { echo; compose ps; die "not all services came up. See: ./kingo logs"; }
   echo "All services healthy. Running first-run setup ..."
+  n8n_userns_seen
   init_stack
   echo
   cmd_status
@@ -2336,6 +2502,11 @@ cmd_smoke() {
   if service_active Mail && ! mail_check; then
     [ -z "${CI:-}" ] || die "the mail service failed its check (see above)"
     mail_note=" — except the mail service (see above)"
+  fi
+  # The shared folder: like mail, a failure warns on a laptop and fails in CI.
+  if ! shared_check; then
+    [ -z "${CI:-}" ] || die "the shared folder failed its check (see above)"
+    mail_note="$mail_note — except the shared folder (see above)"
   fi
   # A healthy hub is not enough — it must be able to LAUNCH a Lab.
   if service_active JupyterHub; then

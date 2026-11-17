@@ -45,9 +45,9 @@ jobs:
     runs-on: ubuntu-24.04
     # The GitHub default is 360 min — a hang should fail fast with diagnostics
     # instead. Step-level timeouts below are tighter still; this must stay
-    # ABOVE their sum (40+30+25+45+15 + setup), or a slow-but-legit run gets
+    # ABOVE their sum (40+30+25+20+45+15 + setup), or a slow-but-legit run gets
     # killed as a cancellation, which would skip the diagnostics step.
-    timeout-minutes: 175
+    timeout-minutes: 195
     strategy:
       fail-fast: false
       matrix:
@@ -181,6 +181,30 @@ jobs:
           for i in 1 2 3; do sleep 1; ./kingo backup >/dev/null; done
           n=$(ls -1d backups/*/ | wc -l | tr -d ' ')
           [ "$n" = 3 ] || { echo "FAIL: $n backup folders, expected 3"; ls backups; exit 1; }
+
+      - name: n8n's data changes owner both ways (podman leg)
+        if: matrix.engine == 'podman'
+        timeout-minutes: 20
+        # CI always installs fresh, so the owner move an EXISTING laptop needs
+        # when keep-id comes or goes (n8n_data_owner) would never run. Switch
+        # keep-id off and on again: each `up` must move the volume, n8n must
+        # come up able to write its own data, a third `up` must leave it alone,
+        # and smoke must see n8n write to the shared folder as the runner.
+        run: |
+          set -euo pipefail
+          moved="Handing n8n's own data"
+          own_data() { podman exec kingo-n8n sh -c 'touch /home/node/.n8n/.kingo-ci && rm /home/node/.n8n/.kingo-ci' \
+                         || { echo "FAIL: n8n cannot write its own data ($1)"; exit 1; }; }
+          KINGO_N8N_USERNS= ./kingo up 2>&1 | tee /tmp/n8n-off.log
+          grep -q "$moved" /tmp/n8n-off.log || { echo "FAIL: no owner move with keep-id off"; exit 1; }
+          own_data "keep-id off"
+          ./kingo up 2>&1 | tee /tmp/n8n-on.log
+          grep -q "$moved" /tmp/n8n-on.log || { echo "FAIL: no owner move with keep-id back on"; exit 1; }
+          own_data "keep-id on"
+          ./kingo up 2>&1 | tee /tmp/n8n-again.log
+          if grep -q "$moved" /tmp/n8n-again.log; then echo "FAIL: moved again although nothing changed"; exit 1; fi
+          if grep -q "WARN: could not" /tmp/n8n-*.log; then echo "FAIL: a warning about n8n's data (above)"; exit 1; fi
+          ./kingo smoke
 
       - name: Boot 3 — mode cycle (abp → n8n → langflow → bi → full)
         timeout-minutes: 45

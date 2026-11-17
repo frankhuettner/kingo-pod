@@ -181,6 +181,15 @@ services:
     container_name: kingo-n8n
     restart: unless-stopped
     profiles: [full, abp, n8n]
+    # n8n stays the image's user "node" (uid 1000). Under rootless Podman on
+    # Linux/WSL the laptop's user is root in a container, so "node" is a
+    # stranger to ~/kingo-pod/shared: it reads but cannot write there.
+    # "keep-id:uid=1000,gid=1000" tells Podman to make the laptop's user uid
+    # 1000 in THIS container. Podman only (Docker rejects the value), so it is
+    # empty unless kingo sets it (n8n_userns in kingo: rootless Podman on
+    # Linux only). The volume n8n-data must then belong to the
+    # laptop's user; `kingo up` moves the owner over (n8n_data_owner).
+    userns_mode: "${KINGO_N8N_USERNS:-}"
     environment:
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
@@ -198,12 +207,19 @@ services:
       # task. 512 MB is 3x the largest run measured (2026-09-05).
       N8N_RUNNERS_MAX_OLD_SPACE_SIZE: "512"
       N8N_DIAGNOSTICS_ENABLED: "false"
+      # Since n8n 2.0 the file nodes (Read/Write Files from Disk) reach only
+      # ~/.n8n-files unless this list names more folders (";" between them).
+      # The default folder stays in the list, /app/shared is added.
+      N8N_RESTRICT_FILE_ACCESS_TO: "/home/node/.n8n-files;/app/shared"
       GENERIC_TIMEZONE: ${TZ}
       TZ: ${TZ}
     ports:
       - "127.0.0.1:${KINGO_PORT_N8N:-5678}:5678"
     volumes:
       - n8n-data:/home/node/.n8n
+      # The same folder Langflow has, under the same path: ~/kingo-pod/shared
+      # on the laptop is /app/shared in n8n too.
+      - ${KINGO_SHARED_DIR:-./shared}:/app/shared
     depends_on:
       postgres:
         condition: service_healthy

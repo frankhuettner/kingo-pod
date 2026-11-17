@@ -442,14 +442,14 @@ Live during a run, the same thing is visible as `Found the class images on a
 USB stick …` / `Copy done — you can UNPLUG THE STICK NOW` / `Checksum OK`, and
 `kingo pull` afterwards finishing in seconds instead of minutes.
 
-## The Langflow shared folder
+## The shared folder (Langflow and n8n)
 
-`~/kingo-pod/shared` is mounted into Langflow as `/app/shared` — the way
-students hand a CSV in and take results back out. Two things worth saying in
-class: whatever runs inside Langflow (including an imported flow's Python
-components) can read, change and delete everything in that folder, so no
-private files and no only-copies belong there; and nothing outside the folder
-is reachable from Langflow. It is deliberately NOT a bind over `/app/data`,
+`~/kingo-pod/shared` is mounted into Langflow and into n8n as `/app/shared` —
+the way students hand a CSV in and take results back out. Two things worth
+saying in class: whatever runs inside Langflow or n8n (including an imported
+flow's Python components and an imported workflow's nodes) can read, change
+and delete everything in that folder, so no private files and no only-copies
+belong there; and nothing outside the folder is reachable from either. It is deliberately NOT a bind over `/app/data`,
 which is Langflow's own config dir — flows themselves live in the `langflow`
 PostgreSQL database, so a folder mount is no substitute for exporting a flow.
 
@@ -463,6 +463,50 @@ other private address stays blocked on purpose (a classmate's laptop, the
 Mac's own Wi-Fi IP): to reach a program on the student's own laptop, use
 `host.docker.internal` (Docker) or `host.containers.internal` (Podman)
 instead of its IP. A new service goes into `LANGFLOW_SSRF_ALLOWED_HOSTS` too.
+
+**n8n's file nodes** (*Read/Write Files from Disk*) reach only the folders in
+`N8N_RESTRICT_FILE_ACCESS_TO` (compose.yml): `/app/shared` and n8n's own
+`/home/node/.n8n-files`. Any other path answers "not allowed".
+
+**Who owns what n8n writes.** n8n runs as the image's user `node` (uid 1000),
+not as root. A Mac translates owners for a mounted folder, so nothing is
+needed there. Under rootless Podman on Linux/WSL the laptop's user is root
+inside a container and `node` is a stranger to the folder: it could read but
+not write. `kingo` therefore starts n8n with Podman's
+`keep-id:uid=1000,gid=1000` there (`KINGO_N8N_USERNS`): the laptop's user
+IS uid 1000 in that one container, and files n8n writes belong to the
+student. `kingo` sets the value by itself; the only thing to set by hand is
+the off switch at the end of this section. On a Mac and under Docker `kingo`
+ignores any value, because Docker rejects it. Two consequences:
+
+- **The first `up` with it is slow, once per n8n version**: Podman makes an
+  ID-mapped copy of the n8n image, which takes time and extra disk space
+  (not measured yet; on 2026-11-16 the first run looked like a hang). `kingo`
+  says so before it starts.
+- **n8n's own data changes owner once.** The volume `n8n-data` (settings and
+  binary data; workflows and credentials live in the `n8n` PostgreSQL
+  database) belonged to Podman's sub-uid for 1000 and must belong to the
+  laptop's user. `up` moves the owner over before n8n starts and moves it back
+  if the setting is ever turned off, so switching between versions is safe as
+  long as the NEWER `kingo` runs last. If it cannot, it warns with Podman's
+  own message, and n8n starts with the user its data still has for that run:
+  without the setting it reads the folder and cannot write.
+
+`./kingo smoke` writes a file from Langflow and from n8n and checks that it
+belongs to the student. In a folder that went back to an older `kingo` (one
+without this) while its n8n data belongs to the laptop's user, n8n cannot
+write its own files and does not come up; the cure is the newer `kingo`
+(`./kingo update`), or by hand:
+
+```
+podman stop kingo-n8n && podman unshare chown -R 1000:1000 "$(podman volume inspect kingo_n8n-data --format '{{.Mountpoint}}')" && ./kingo up
+```
+
+**The off switch:** `KINGO_N8N_USERNS=` (empty) in `.env.local` turns the
+setting off on one laptop; the next `./kingo up` hands n8n's data back.
+`kingo` also keeps two notes of its own in `.env.local`,
+`KINGO_N8N_DATA_OWNER` and `KINGO_N8N_KEEP_ID_IMAGE`. Do not edit them; a
+deleted line only costs one slower `up`.
 
 ## CloudBeaver has two logins (students will ask)
 
