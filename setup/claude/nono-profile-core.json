@@ -6,7 +6,7 @@
   //   kingo-claude-login  (nono-profile-login.json)  Anthropic, with your login (./kingo claude --login)
   // and "kingo-claude-course" (nono-profile-course.json) adds n8n, Langflow and PostgreSQL to either.
   // Here: what Claude Code may read, the variables it gets, and the rule for look.
-  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
+  // Written for nono 0.82.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
   "extends": "default",
   "meta": {
     "name": "kingo-claude-core",

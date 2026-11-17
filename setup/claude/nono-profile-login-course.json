@@ -4,7 +4,7 @@
   // `./kingo claude --login` starts Claude Code with this profile. It names two profiles, and nono puts them together:
   //   kingo-claude-login   (nono-profile-login.json)   the Anthropic login, and Claude Code's config folder
   //   kingo-claude-course  (nono-profile-course.json)  n8n, Langflow and PostgreSQL
-  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.81.
+  // Written for nono 0.82.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.81.
   "extends": ["kingo-claude-login", "kingo-claude-course"],
   "meta": {
     "name": "kingo-claude-login-course",

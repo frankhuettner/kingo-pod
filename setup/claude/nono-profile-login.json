@@ -12,9 +12,9 @@
   // what a program in the sandbox could read, is of no use outside this sandbox.
   // For this, nono reads the traffic to these two hosts (its own certificate, which Claude Code is told to trust).
   //
-  // Known in nono 0.81.0: two sandboxes with this login at the same time can break each other's login
+  // Known in nono 0.81.0 and 0.82.0: two sandboxes with this login at the same time can break each other's login
   // (nono issues 2087 and 2299). Then log in again: ./kingo claude logout, and start with --login.
-  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.81.
+  // Written for nono 0.82.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.81.
   "extends": "kingo-claude-core",
   "meta": {
     "name": "kingo-claude-login",

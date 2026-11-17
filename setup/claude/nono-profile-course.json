@@ -5,7 +5,7 @@
   //   kingo-claude               (nono-profile.json)               OpenRouter and the course
   //   kingo-claude-login-course  (nono-profile-login-course.json)  the Anthropic login and the course
   // Here: the keys for n8n and Langflow, which nono's proxy injects, and PostgreSQL, which psql reaches directly.
-  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
+  // Written for nono 0.82.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
   "extends": "kingo-claude-core",
   "meta": {
     "name": "kingo-claude-course",

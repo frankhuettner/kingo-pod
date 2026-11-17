@@ -9,7 +9,7 @@
   // The network stays open: nono's proxy lets every host through. It injects the key for
   // OpenRouter, which nono reads from a file in __KEYS_DIR__: the key is never in an
   // environment variable.
-  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
+  // Written for nono 0.82.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
   "extends": "kingo-claude-core",
   "meta": {
     "name": "kingo-claude-base",

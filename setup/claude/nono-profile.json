@@ -6,7 +6,7 @@
   //   kingo-claude-course  (nono-profile-course.json)  n8n, Langflow and PostgreSQL
   // Both extend "kingo-claude-core" (nono-profile-core.json): what Claude Code may read, the variables,
   // the rule for look. kingo claude adds read access to the kingo-pod folder (--read).
-  // Written for nono 0.81.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
+  // Written for nono 0.82.0, the version that kingo downloads and starts (CLAUDE_NONO_VERSION in kingo); needs 0.80.
   "extends": ["kingo-claude-base", "kingo-claude-course"],
   "meta": {
     "name": "kingo-claude",

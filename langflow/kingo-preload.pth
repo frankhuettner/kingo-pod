@@ -16,7 +16,8 @@
 #
 # Temporary: openai 3.16.1 fixed this upstream (openai-python PR #3898,
 # 2026-09-18; 3.16.0 still deadlocks, 3.16.1 never did in our test), but
-# Langflow 1.12.4 cannot take it — lfx-openai 0.1.5 pins openai <3. DELETE
+# Langflow cannot take it yet — 1.12.4 (lfx-openai 0.1.5) and 1.13.2 (lfx-openai
+# 0.2.0, which locks openai 2.48.0) both pin openai <3. DELETE
 # this file once a Langflow bump brings openai >= 3.16.1, and with it three
 # things in the Dockerfile: its COPY line, its `cp` line and the guard's
 # preload assert (left alone, that assert fails every build). Same bug, same

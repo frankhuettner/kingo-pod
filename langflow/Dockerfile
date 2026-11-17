@@ -2,7 +2,7 @@
 # class uses inside Langflow components (requirements.txt). The image ships
 # uv, which `./kingo langflow ...` uses to manage packages.
 # Same local-build pattern as jupyterhub/ — pull/bundle/load know both.
-FROM langflowai/langflow:1.12.4
+FROM langflowai/langflow:1.13.2
 COPY requirements.txt /tmp/kingo-requirements.txt
 COPY excludes.txt /tmp/kingo-excludes.txt
 COPY vertexai-stub.py /tmp/vertexai-stub.py

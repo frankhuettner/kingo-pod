@@ -70,7 +70,7 @@ kept short; the full incident write-ups are in this file's history
   threads, and two of them lazily importing openai deadlocked the first run
   after every start. A `.pth`, not a wrapped CMD, because it also covers
   whatever process Langflow forks or spawns; the guard asserts it ran.
-  Temporary: openai 3.16.1 fixed the race, Langflow 1.12.4 pins openai <3 —
+  Temporary: openai 3.16.1 fixed the race, Langflow 1.13.2 still pins openai <3 —
   delete the preload once the image has openai >= 3.16.1, and the guard's
   assert for it with it (else every build fails). The image is Python 3.14
   with no compiler: a dependency without a cp314 wheel fails the build

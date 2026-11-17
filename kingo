@@ -1212,12 +1212,12 @@ claude_pod_ports() { printf '%s' "$(host_ports | tr '\n' ' ')5679"; }
 # downloads the version below from nono's releases on GitHub, checks it against the checksum, and starts that one.
 # A newer nono comes with a kingo update, after the CI has run with it. Only when the download does not work, kingo
 # takes a nono that is installed on the laptop, if that one is new enough (CLAUDE_NONO_MIN).
-CLAUDE_NONO_VERSION=0.81.0
+CLAUDE_NONO_VERSION=0.82.0
 CLAUDE_NONO_SUMS="
-aarch64-apple-darwin:728b1deefbf6390c9b74fc982efbded1e1c4b37b99dcdefa2e07266dfef4d9e9
-x86_64-apple-darwin:f795aa88faaf75975ffc600eb870e7c9f2b52ba2035df5087ec972a0252afd40
-aarch64-unknown-linux-gnu:a4d87ddb0917ef96224bcc41a2587318d7d0e92441e7ff454696e5980c9f7924
-x86_64-unknown-linux-gnu:7ecc33ff9c349bdfa84b4496e7a7555f67bcc33f1e125c7df9efb653c6c4e569
+aarch64-apple-darwin:a11760b1d5e947152d1fdc6497b2aba2e4185061a56390b2f1137c83cef3b5a4
+x86_64-apple-darwin:e3bfed8b5eb7e6332ffc9fc5e88ef72338ea7a9bc8a7f0700479aab395bcf635
+aarch64-unknown-linux-gnu:de16b663f1941b4ff8500f75f34d10a497ef1d1934281573888fb9e808dab53e
+x86_64-unknown-linux-gnu:81d7a5616622dcf68ca0ed2b7e6b3af08c1216fb0c42dc6d7ecfbd2bbf2d3f50
 "
 CLAUDE_NONO_MIN=80   # nono 0.80: the profile's Seatbelt rule for PostgreSQL takes effect on a Mac; platform_overrides (0.68), the D-Bus fix (0.55)
 

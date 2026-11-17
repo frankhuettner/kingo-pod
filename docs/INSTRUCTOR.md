@@ -189,8 +189,8 @@ line of their Dockerfile:
 | JupyterLab | `quay.io/jupyter/scipy-notebook:2026-08-17` | `compose.yml` |
 | JupyterHub | `quay.io/jupyterhub/jupyterhub:5` | `jupyterhub/Dockerfile` |
 | Jupyter MCP | `datalayer/jupyter-mcp-server:1.4.5` | `compose.yml` |
-| Langflow | `langflowai/langflow:1.12.4` | `langflow/Dockerfile` |
-| n8n | `n8nio/n8n:2.41.6` | `compose.yml` |
+| Langflow | `langflowai/langflow:1.13.2` | `langflow/Dockerfile` |
+| n8n | `n8nio/n8n:2.47.7` | `compose.yml` |
 | Metabase | `metabase/metabase:v0.60.25` | `compose.yml` |
 | CloudBeaver | `dbeaver/cloudbeaver:26.1.5` | `compose.yml` |
 | Mail | `docker.io/library/alpine:3.24` (isync 1.5.1, notmuch 0.40, goimapnotify 2.5.4) | `mail/Dockerfile` |
@@ -418,7 +418,7 @@ at startup since 1.5.0-rc.4 (`langflow/kingo-preload.pth`), so only the
 earlier `next` candidates show it. If the same message names another
 package after a Langflow bump, that SDK races the same way: add it to the
 import line in that file. The file is temporary: openai 3.16.1 fixed the race
-upstream, but Langflow 1.12.4 pins openai below 3 — at each Langflow bump,
+upstream, but Langflow 1.13.2 still pins openai below 3 — at each Langflow bump,
 check the image's openai (`podman exec kingo-langflow /app/.venv/bin/python
 -c "import openai; print(openai.__version__)"`), and from 3.16.1 on, delete
 the file and, in `langflow/Dockerfile`, its COPY and `cp` lines and the
