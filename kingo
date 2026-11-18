@@ -1206,6 +1206,82 @@ claude_backup_flows() {
   done <<<"$all"
 }
 
+# ── kingo claude: the course's part of the course folder ──────────────────────
+# AGENTS.md has two parts. The course's part, everything above the heading "# Your team's rules", is kingo's: every
+# start writes it from setup/claude/AGENTS.md, so that what kingo knows reaches every course folder, also one that
+# exists (Frank, 18 Nov 2026). From the heading on, the file is the team's, and kingo never changes that part. The
+# facts in info-for-ai/, which AGENTS.md loads, are kingo's too. Before kingo writes over a file that is not as kingo
+# would write it, it keeps a copy, in backups/course-files/<time>/ (the newest CLAUDE_BACKUP_KEEP stay). A file
+# without the heading stays as it is: kingo cannot tell which part is the team's.
+CLAUDE_COURSE_SAVED=""   # the folder of this start's copies, once there is one
+
+# claude_team_line <file>: the number of the line with the heading "# Your team's rules", or nothing. Any apostrophe
+# (also ’, from a page in a browser), any case, and spaces or a CR (Notepad) at the end.
+claude_team_line() {
+  LC_ALL=C grep -n -m 1 -i -E "^#[[:space:]]+your team.{1,3}s rules[[:space:]]*\$" "$1" 2>/dev/null | cut -d: -f1 || true
+}
+
+# claude_course_save <file> <its name in the copy>: keep a copy of the file as it is now. Fails when it cannot.
+claude_course_save() {
+  [ -n "$CLAUDE_COURSE_SAVED" ] || CLAUDE_COURSE_SAVED="$KINGO_DIR/backups/course-files/$(date +%Y-%m-%d-%H%M%S)"
+  mkdir -p "$(dirname "$CLAUDE_COURSE_SAVED/$2")" 2>/dev/null && cp -p "$1" "$CLAUDE_COURSE_SAVED/$2" 2>/dev/null
+}
+
+# claude_course_files <template folder> <course folder>
+claude_course_files() {
+  local tpl=$1 dir=$2 t n f name tmp had=0 wrote="" root="$KINGO_DIR/backups/course-files" all k d
+  t=$(claude_team_line "$tpl/AGENTS.md")
+  [ -n "$t" ] || die "setup/claude/AGENTS.md has no heading \"# Your team's rules\". Run ./kingo update."
+  if [ ! -f "$dir/AGENTS.md" ]; then
+    cp "$tpl/AGENTS.md" "$dir/AGENTS.md"
+  else
+    had=1
+    n=$(claude_team_line "$dir/AGENTS.md")
+    if [ -z "$n" ]; then
+      warn "AGENTS.md in your course folder has no heading \"# Your team's rules\", so kingo left the file as it is: it cannot tell which part is your team's. Put the heading back above your team's rules; the next start then writes the course's part above it."
+    else
+      tmp=$(mktemp "$dir/.AGENTS.md.XXXXXX")
+      { head -n "$((t - 1))" "$tpl/AGENTS.md"; tail -n +"$n" "$dir/AGENTS.md"; } > "$tmp"
+      if cmp -s "$tmp" "$dir/AGENTS.md"; then
+        :
+      elif claude_course_save "$dir/AGENTS.md" AGENTS.md; then
+        cat "$tmp" > "$dir/AGENTS.md"
+        wrote="$wrote, AGENTS.md above \"# Your team's rules\""
+      else
+        warn "kingo could not keep a copy of AGENTS.md in backups/course-files/, so it left the file as it is."
+      fi
+      rm -f "$tmp"
+    fi
+  fi
+  mkdir -p "$dir/info-for-ai"
+  for f in "$tpl"/info-for-ai/*.md; do
+    [ -f "$f" ] || continue
+    name="info-for-ai/${f##*/}"
+    if [ ! -f "$dir/$name" ]; then
+      cp "$f" "$dir/$name"
+      [ "$had" = 0 ] || wrote="$wrote, $name"
+    elif cmp -s "$f" "$dir/$name"; then
+      :
+    elif claude_course_save "$dir/$name" "$name"; then
+      cp "$f" "$dir/$name"
+      wrote="$wrote, $name"
+    else
+      warn "kingo could not keep a copy of $name in backups/course-files/, so it left the file as it is."
+    fi
+  done
+  [ -n "$wrote" ] || return 0
+  echo "kingo wrote the course's part of your course folder anew: ${wrote#, }. Your team's rules stay as they are."
+  [ -z "$CLAUDE_COURSE_SAVED" ] || echo "The files as they were before: backups/course-files/${CLAUDE_COURSE_SAVED##*/}/"
+  # Keep the newest copies — only ours, by name.
+  all="$(ls -1 "$root" 2>/dev/null | LC_ALL=C grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}$' | LC_ALL=C sort || true)"
+  k=$(printf '%s\n' "$all" | grep -c . || true)
+  while IFS= read -r d; do
+    [ "$k" -gt "$CLAUDE_BACKUP_KEEP" ] || break
+    rm -rf "${root:?}/$d"
+    k=$((k - 1))
+  done <<<"$all"
+}
+
 # ── kingo claude: a browser, so that Claude can look at the pages it writes ───
 # `look page.html` (setup/claude/bin/look) makes pictures of an HTML file, and Claude reads them. The browser is
 # Chrome's own build without a window, chrome-headless-shell from "Chrome for Testing", one fixed version. kingo
@@ -1238,9 +1314,9 @@ linux-arm64:261af2af250dfd7e9f25cf151d1b2713a0adf8f10a9ad116c4947f68627affe8
 "
 CLAUDE_PLAYWRIGHT_VERSION=1.65.1
 CLAUDE_PLAYWRIGHT_SUM=6f5a60be62a4fddfbe7d10c448d8fbd54547da3358f2f8a04211440471ee863e
-# What Claude Code is told at every start, in addition to AGENTS.md: that file is the student's after the first
-# start, so a line added to its template would not reach the course folders that exist. The script is a .cjs: in a
-# Vite project ("type": "module") a .js is an ES module, in which require is missing.
+# What Claude Code is told at every start, in addition to AGENTS.md, and in a folder of one's own (--in), where no
+# AGENTS.md of kingo's is. The script is a .cjs: in a Vite project ("type": "module") a .js is an ES module, in which
+# require is missing.
 CLAUDE_PAGE_HINT='When you have written or changed an HTML page, look at it before you say it is done. Run: look <file.html> (add --width 600 for a phone, --pdf for the page as it prints). It makes pictures of the whole page in the folder look/. Read them with the Read tool and check the layout. To click through a page as a person would (fill in a form, press a button, read what the page shows then), write a short Node.js script that uses require("playwright-core"), name it .cjs, and run it with: clickthrough <script.cjs> (clickthrough --help shows an example). The name says what it does: look takes a picture of a page, clickthrough clicks through it, and to read the internet you have your web tools. There chromium.launch() starts the same browser; open a file with require("url").pathToFileURL(path).href. Pages on the internet work too, by https.'
 CLAUDE_LOOK_HINT="$CLAUDE_PAGE_HINT"' In clickthrough, http addresses and WebSockets are closed, so that no page can reach the services on this laptop (to try an n8n webhook, use curl with $N8N_BASE_URL/webhook/... and the header X-N8N-API-KEY). For a dev server on this laptop (Vite and the like), run: clickthrough --dev <port> <script.cjs>; the sandbox opens one port for it, $KINGO_DEV_PORT. Ask the student to start the dev server in their own terminal (npm run dev).'
 # With --in, after CLAUDE_IN_HINT: no n8n there, and the user is never asked to run what Claude could not run here.
@@ -1614,6 +1690,8 @@ cmd_claude() {
       echo "  Claude writes only in $KINGO_DIR/claude/, reads this folder, and works on n8n, Langflow and PostgreSQL."
       echo "  The first start asks for your OpenRouter key and an n8n API key; keys are kept in $CLAUDE_KEYS/."
       echo "  A key that a service refuses is deleted, and the next start asks again."
+      echo "  Every start writes the course's part of AGENTS.md, above \"# Your team's rules\", and the facts in info-for-ai/"
+      echo "  anew, and keeps the files as they were in $KINGO_DIR/backups/course-files/. Your team's rules stay."
       echo "  Every start saves a copy of each n8n workflow and Langflow flow in $KINGO_DIR/backups/flows/ (the newest $CLAUDE_BACKUP_KEEP stay)."
       echo "  The first start gets nono $CLAUDE_NONO_VERSION, the sandbox: kingo starts its own, not one that is installed."
       echo "  ./kingo claude nono gets it again, and says which nono kingo claude starts."
@@ -1749,13 +1827,14 @@ cmd_claude() {
     fi
   fi
 
-  # The course folder gets the templates once; after that it is the student's.
+  # The course folder gets CLAUDE.md and the settings once; after that they are the student's. The course's part of
+  # AGENTS.md and the facts in info-for-ai/ are kingo's: every start writes them (claude_course_files).
   # A folder given with --in gets no file from kingo.
   esc=$(printf '%s' "$KINGO_DIR" | sed 's/[&|\\]/\\&/g')
   if [ -z "$in_dir" ] && [ "$logout" = 0 ]; then
     mkdir -p "$dir/.claude"
     [ -f "$dir/CLAUDE.md" ] || cp "$tpl/CLAUDE.md" "$dir/CLAUDE.md"
-    [ -f "$dir/AGENTS.md" ] || cp "$tpl/AGENTS.md" "$dir/AGENTS.md"
+    claude_course_files "$tpl" "$dir"
     [ -f "$dir/.claude/settings.json" ] || sed "s|__KINGO_DIR__|$esc|g" "$tpl/settings.json" > "$dir/.claude/settings.json"
   fi
   # The profiles follow this folder: ports from .env.local, changes from kingo update. Seven files; the top of

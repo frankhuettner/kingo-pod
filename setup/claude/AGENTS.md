@@ -6,6 +6,10 @@ the course's rules page `ws2_rules.html` (in the homework's `ws2_hw2.zip`), whic
 If that part still shows three steps instead of rules, the team has not added them yet: work without them, and do
 not make up rules of your own.
 
+kingo writes this first part, everything above "# Your team's rules", anew at every start of `./kingo claude`, and
+the facts in `info-for-ai/` too: a change there does not stay. What the team wants you to remember goes into its part
+below the heading. The files as they were before are in `backups/course-files/` of the kingo-pod folder.
+
 ## Where you run
 
 - Started with `./kingo claude`, you run in a sandbox (nono). You can write only in this folder. You can read the
@@ -58,6 +62,15 @@ The sandbox puts the real keys into your requests. Use the variables exactly as 
    file: on a Mac `open <path>`, on Windows `explorer.exe "$(wslpath -w <path>)"`. You cannot open it yourself: the
    sandbox blocks it.
 
+## Facts about this setup
+
+The folder `info-for-ai/` holds facts about this kingo-pod, its Langflow and its n8n: what you cannot know from
+elsewhere, checked on this setup. If their text is not in front of you yet, read the files.
+
+- This kingo-pod and the student: @info-for-ai/kingo-pod.md
+- Langflow: @info-for-ai/langflow.md
+- n8n: @info-for-ai/n8n.md
+
 # Your team's rules
 
 Put your team's rules here, so that your coding agent knows them:
@@ -65,6 +78,6 @@ Put your team's rules here, so that your coding agent knows them:
 1. Open the page `ws2_rules.html` from the homework's `ws2_hw2.zip`.
 2. Fill in your team's spec at the end of the page.
 3. Click **Copy for your coding agent**. Paste the text here, under the heading "Your team's rules", in place of these
-   three steps. Leave everything above the heading as it is.
+   three steps. Everything above the heading is kingo's: kingo writes it anew at every start.
 
 Your coding agent reads this file at the start of every session.
