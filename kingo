@@ -2358,9 +2358,14 @@ EOF
   # PostgreSQL for psql, for the course only (the base profile would not let these variables through either).
   [ -n "$in_dir" ] || envs+=(PGHOST=127.0.0.1 "PGPORT=$P_POSTGRES" "PGUSER=$KINGO_USER" "PGPASSWORD=$KINGO_PASSWORD" PGDATABASE=classroom)
 
+  # nono says nothing itself (Frank, 18 Nov 2026, on its report after /exit: "beides"): its banner before the start, and
+  # after the end its list of what the sandbox refused, with "Fix flags" and a way to open the keychain, which a
+  # student must not follow. KINGO_CLAUDE_LOUD=1 brings both back, to find out what the sandbox refused.
+  local quiet=(--silent)
+  [ "${KINGO_CLAUDE_LOUD:-}" != 1 ] || quiet=()
   if [ "${KINGO_CLAUDE_DRY_RUN:-}" = 1 ]; then
     echo "dry run — would start in $dir:"
-    echo "  nono run --profile $profile --allow-cwd --read $reads${more_nono[@]+ ${more_nono[*]}} -- $*"
+    echo "  nono run${quiet[@]+ ${quiet[*]}} --profile $profile --allow-cwd --read $reads${more_nono[@]+ ${more_nono[*]}} -- $*"
     echo "  variables: $(printf '%s ' "${envs[@]%%=*}")"
     echo "  ports: KINGO_DEV_PORT=$dev_port KINGO_POD_PORTS=$(claude_pod_ports)"
     return
@@ -2386,6 +2391,10 @@ EOF
     if grep -qi microsoft /proc/version 2>/dev/null && command -v wslpath >/dev/null 2>&1; then
       echo "In Windows, this folder is: $(wslpath -w "$dir" 2>/dev/null || true)"
     fi
+  elif [ -n "$more_w" ]; then   # the course: nono's banner said this, and nono is silent now
+    echo "Claude Code works in $dir: it can read kingo-pod, and write there and in the folders of --write above, and nowhere else on this laptop."
+  else
+    echo "Claude Code works in $dir: it can read kingo-pod, and write there and nowhere else on this laptop."
   fi
   # WSL sets XDG_RUNTIME_DIR=/run/user/<uid>/ even when systemd made no login session; then the folder does not exist,
   # nono's terminal proxy cannot write its config there, and the start dies with "Failed to create PTY proxy" (the TA,
@@ -2394,7 +2403,7 @@ EOF
     unset XDG_RUNTIME_DIR
   fi
   export "${envs[@]}"
-  exec "$nono" run --profile "$profile" --allow-cwd --read "$reads" ${more_nono[@]+"${more_nono[@]}"} -- "$@"
+  exec "$nono" run ${quiet[@]+"${quiet[@]}"} --profile "$profile" --allow-cwd --read "$reads" ${more_nono[@]+"${more_nono[@]}"} -- "$@"
 }
 
 # ── shortcuts: kc, ky and kingo as commands of the student's own terminal ─────

@@ -37,7 +37,7 @@ in_sandbox() {
     CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 \
     PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" KINGO_BROWSER_MODE="$MODE" \
     KINGO_NODE="$NODE_BIN_FOR_CLICKTHROUGH" KINGO_PLAYWRIGHT="$PW_DIR" KINGO_DEV_PORT=5173 \
-      "$NONO_BIN" run --profile "$PROFILE" --allow-cwd --read "$KINGO_DIR" -- "$@" ) 2>&1 || true
+      "$NONO_BIN" run --silent --profile "$PROFILE" --allow-cwd --read "$KINGO_DIR" -- "$@" ) 2>&1 || true
 }
 # clickthrough_block <where> command ...: a listener on the runner stands for n8n; the pages of clickthrough_block.js try to reach it
 # by http and by WebSocket (setup/claude/clickthrough-setup.js closes both). curl reaches it first, or the check proves nothing.
@@ -262,6 +262,38 @@ has "$out" "WROTE $DIR/look-write-probe" || { show "$out" 20; fail "the probe pr
 rm -f "$DIR/look-write-probe"
 ok "inside the sandbox, the browser, nono, Node.js, playwright-core and their folders cannot be written"
 
+# On a Mac, nono lists after the end what the sandbox refused, with "Fix flags" and a way to open the keychain (Frank's
+# terminal, 18 Nov 2026). kingo claude starts nono with --silent: neither that report nor the banner shows.
+say "nono is silent as kingo claude starts it: no banner, and no report with Fix flags at the end"
+mkdir -p "$HOME/.claude" && echo outside > "$HOME/.claude/silent-probe.txt"   # as on a student's Mac: a folder the sandbox keeps closed
+probe='cat "$HOME/.claude/silent-probe.txt"; cat "$HOME/.CFUserTextEncoding"; ls "$HOME/.claude"; echo probe-$((6*7))'
+out=$(in_sandbox sh -c "$probe")
+has "$out" probe-42 || { show "$out" 20; fail "the probe did not run in the sandbox"; }
+if has "$out" "Capabilities" || has "$out" "Fix flags" || has "$out" "Sandbox denial"; then show "$out" 30; fail "nono, started as kingo claude starts it, still shows its banner or its report"; fi
+loud=$( ( cd "$DIR" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 \
+    "$NONO_BIN" run --profile "$PROFILE" --allow-cwd --read "$KINGO_DIR" -- sh -c "$probe" ) 2>&1 || true)
+has "$loud" probe-42 && has "$loud" "Capabilities" || { show "$loud" 30; fail "without --silent, nono shows no banner: the check of --silent proves nothing"; }
+if has "$loud" "Sandbox denial"; then echo "         | without --silent, nono reports what it refused: $(printf '%s\n' "$loud" | grep -c '(read)') paths"; else echo "         | without --silent, nono printed no report of refusals for this probe; it printed:"; show "$loud" 14; fi
+if has "$out" "outside"; then fail "the sandbox let the probe read a file in ~/.claude"; fi
+ok "with --silent, nono shows neither its banner nor a report; without it, the banner is there"
+# nono writes its report of refusals only in a terminal (the run above has none, and shows none). script gives it
+# one; perl ends a run that waits for a key. Only a report in spite of --silent fails: a runner without a terminal
+# for script proves nothing, and says so.
+in_terminal() {
+  ( cd "$DIR" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 \
+      perl -e 'alarm 90; exec @ARGV' script -q /dev/null "$NONO_BIN" run "$@" --profile "$PROFILE" --allow-cwd --read "$KINGO_DIR" -- sh -c "$probe" ) < /dev/null 2>&1 || true
+}
+loud=$(in_terminal)
+out=$(in_terminal --silent)
+if has "$out" "Capabilities" || has "$out" "Fix flags" || has "$out" "Sandbox denial"; then show "$out" 30; fail "in a terminal, nono with --silent still shows its banner or its report"; fi
+if has "$loud" "Sandbox denial" && has "$out" probe-42; then
+  echo "         | in a terminal, without --silent: $(printf '%s\n' "$loud" | grep -m 1 'Sandbox denial' | tr -d '\r')"
+  if has "$loud" "Fix flags"; then echo "         | and it names Fix flags; with --silent, neither shows"; fi
+  ok "in a terminal, nono reports what it refused, and with --silent it does not"
+else
+  echo "         | not shown on this runner: in a terminal, nono printed (without --silent, then with):"; show "$loud" 12; show "$out" 6
+fi
+
 # clickthrough: a script as Claude would write it fills in a form and sends it; then a page of the internet. On a Mac,
 # Chrome does not take HTTPS_PROXY: clickthrough-setup.js gives it nono's proxy, or the page would not come.
 say "clickthrough inside nono: a form is filled in and sent, and a page of the internet comes"
@@ -410,12 +442,12 @@ for d in / "$HOME" "$HOME/Documents" "$HOME/Library" "$(dirname "$KINGO_DIR")"; 
   if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$d" 2>&1); then show "$out" 3; fail "kingo claude --in took the folder $d"; fi
 done
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$OWN") || fail "kingo claude --in did not get as far as the start of Claude Code"
-has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- claude --settings $HOME/.kingo-claude/settings-in.json --permission-mode default --append-system-prompt You were started with" \
+has "$dry" "nono run --silent --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- claude --settings $HOME/.kingo-claude/settings-in.json --permission-mode default --append-system-prompt You were started with" \
   || { show "$dry" 3; fail "kingo claude --in would not start Claude Code with the base profile and its own settings"; }
 [ -z "$(ls -A "$OWN")" ] || fail "kingo put a file into the folder"
 out=$( ( cd "$OWN" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 GIT_CONFIG_NOSYSTEM=1 \
     PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
-    "$NONO_BIN" run --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" -- \
+    "$NONO_BIN" run --silent --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" -- \
     sh -c 'echo "n8n=${N8N_BASE_URL:-none} model=${ANTHROPIC_BASE_URL:+set}"; : >> here.txt && echo WROTE-HERE; cat "$1/VERSION" 2>&1; ( : >> "$1/setup/claude/x" ) 2>/dev/null && echo WROTE-KINGO; cp "$1/setup/claude/README.md" page.md && look "$2" | head -n 1; git init -q . && git add -A && git -c user.name=ci -c user.email=ci@example.com commit -q -m one && echo "commits=$(git log --oneline | wc -l | tr -d " ")"' \
     sh "$KINGO_DIR" "$DIR/look-cv.html" ) 2>&1 || true )
 has "$out" "n8n=none model=set" || { show "$out" 20; fail "the base profile has something of the course in it, or lost the way to the model"; }
@@ -428,7 +460,7 @@ ok "in a folder of one's own: it writes there, reads setup/claude and not the re
 NOTES="$HOME/projects/notes"; OUT2="$HOME/projects/out"
 rm -rf "$NOTES" "$OUT2"; mkdir -p "$NOTES" "$OUT2"; printf 'notes-probe\n' > "$NOTES/note.txt"
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$OWN" --read "$NOTES" --write "$OUT2") || fail "kingo claude --in --read --write did not get as far as the start of Claude Code"
-has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude --read $NOTES --allow $OUT2 -- claude --settings $HOME/.kingo-claude/settings-in.json --add-dir=$NOTES --add-dir=$OUT2 --permission-mode default" \
+has "$dry" "nono run --silent --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude --read $NOTES --allow $OUT2 -- claude --settings $HOME/.kingo-claude/settings-in.json --add-dir=$NOTES --add-dir=$OUT2 --permission-mode default" \
   || { show "$dry" 3; fail "kingo claude --in --read --write does not give the two folders to nono and to Claude Code"; }
 if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --read "$HOME/Library" 2>&1); then show "$out" 3; fail "kingo claude --read took ~/Library"; fi
 # On a Mac, a name in other capitals is the same folder (APFS, as on the students' Macs): ~/library is ~/Library.
@@ -454,7 +486,7 @@ dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$UP/setup")
 has "$dry" "This folder is in kingo-pod: Claude Code starts for the course" || { show "$dry" 3; fail "kingo claude --in <kingo-pod in capitals>/setup does not start the course"; }
 ok "names in other capitals: kingo-pod, a folder that holds it, ~/library, ~/LIBRARY/LaunchAgents and ~/DOCUMENTS are refused; kingo-pod/setup starts the course"
 out=$( ( cd "$OWN" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 \
-    "$NONO_BIN" run --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" --read "$NOTES" --allow "$OUT2" -- \
+    "$NONO_BIN" run --silent --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" --read "$NOTES" --allow "$OUT2" -- \
     sh -c 'cat "$1/note.txt"; ( : >> "$1/x.txt" ) 2>/dev/null && echo WROTE-READ; ( : >> "$2/y.txt" ) 2>/dev/null && echo WROTE-WRITE' sh "$NOTES" "$OUT2" ) 2>&1 || true )
 has "$out" notes-probe || { show "$out" 12; fail "with --read, the sandbox cannot read the folder"; }
 if has "$out" WROTE-READ; then fail "with --read, the sandbox can write in the folder"; fi
@@ -464,7 +496,7 @@ ok "--read and --write: kingo gives both folders to nono and Claude Code; the sa
 # --key on a Mac: the profile of the key, which nono must take
 KP="$HOME/.config/nono/profiles/kingo-claude-key-base-thesis.json"
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$OWN" --key thesis) || fail "kingo claude --in --key did not get as far as the start of Claude Code"
-has "$dry" "nono run --profile kingo-claude-key-base-thesis --allow-cwd --read $KINGO_DIR/setup/claude -- claude --settings $HOME/.kingo-claude/settings-in.json" \
+has "$dry" "nono run --silent --profile kingo-claude-key-base-thesis --allow-cwd --read $KINGO_DIR/setup/claude -- claude --settings $HOME/.kingo-claude/settings-in.json" \
   || { show "$dry" 3; fail "kingo claude --in --key does not start nono with the profile of the key"; }
 "$NONO_BIN" profile validate "$KP" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of --key"; }
 ok "--key on a Mac: kingo starts nono with the profile of the key, and nono takes it"
@@ -473,7 +505,7 @@ out=$(in_sandbox sh -c 'if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo
 has "$out" refused || { show "$out" 12; fail "with the course profile alone, the sandbox can already write in shared"; }
 cp "$KINGO_DIR/setup/claude/my-nono-profile.example.json" "$MINE"
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo claude did not start with the example of my-nono-profile.json"
-has "$dry" "nono run --profile kingo-claude-mine --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "kingo does not start nono with the student's profile"; }
+has "$dry" "nono run --silent --profile kingo-claude-mine --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "kingo does not start nono with the student's profile"; }
 PROFILE=kingo-claude-mine
 out=$(in_sandbox sh -c 'for f in "$@"; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done; echo "n8n=${N8N_BASE_URL:+set}"' sh \
   "$KINGO_DIR/shared/own-probe.txt" "$KINGO_DIR/own-probe.txt" "$MINE")
@@ -494,11 +526,11 @@ TPL="$KINGO_DIR/setup/claude"; LCFG="$HOME/.kingo-claude-login"; STORE="$HOME/.l
 mkdir -p "$LCFG/tmp" "$LCFG.lock" "$STORE"
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login) || fail "kingo claude --login did not get as far as the start of Claude Code"
 show "$dry" 3
-has "$dry" "nono run --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- claude --add-dir=$KINGO_DIR --settings $TPL/settings-login.json --permission-mode default" \
+has "$dry" "nono run --silent --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- claude --add-dir=$KINGO_DIR --settings $TPL/settings-login.json --permission-mode default" \
   || fail "kingo claude --login would not start Claude Code with the course profile of the login and the settings of the login"
 if has "$dry" " CLAUDE_CODE_MAX_CONTEXT_TOKENS "; then fail "kingo claude --login tells Claude Code the context size of the course's model"; fi
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login --in "$OWN") || fail "kingo claude --login --in did not get as far as the start of Claude Code"
-has "$dry" "nono run --profile kingo-claude-login --allow-cwd --read $TPL -- claude --settings $HOME/.kingo-claude-login/settings-in.json --permission-mode default --append-system-prompt You were started with" \
+has "$dry" "nono run --silent --profile kingo-claude-login --allow-cwd --read $TPL -- claude --settings $HOME/.kingo-claude-login/settings-in.json --permission-mode default --append-system-prompt You were started with" \
   || { show "$dry" 3; fail "kingo claude --login --in would not start Claude Code with the profile of the login and its own settings"; }
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude logout) || fail "kingo claude logout did not get as far as the logout"
 has "$dry" "nono run --profile kingo-claude-login --allow-cwd -- claude auth logout" || { show "$dry" 3; fail "kingo claude logout would not log out inside the sandbox of the login"; }
@@ -533,7 +565,7 @@ has "$out" "STUB nono run --profile kingo-claude-login-open --allow-cwd --allow-
   || { show "$out" 30; fail "on a Mac, kingo does not run the login with the profile that may open the browser"; }
 has "$out" "Logged in." || { show "$out" 30; fail "kingo does not take a login that nono kept outside the sandbox"; }
 sess=$(printf '%s\n' "$out" | awk '/^STUB nono run .*--read /{f=1} f')
-has "$sess" "STUB nono run --profile kingo-claude-login --allow-cwd --read $TPL -- claude --settings $FH/.kingo-claude-login/settings-in.json" \
+has "$sess" "STUB nono run --silent --profile kingo-claude-login --allow-cwd --read $TPL -- claude --settings $FH/.kingo-claude-login/settings-in.json" \
   || { show "$out" 30; fail "after the login, kingo does not start the session with the profile of the login"; }
 if has "$sess" "allow-launch-services"; then fail "the session after the login may open pages in the browser"; fi
 for p in "CLAUDE_CODE_DISABLE_ARTIFACT=1" "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1" "DISABLE_TELEMETRY=1" "DISABLE_ERROR_REPORTING=1" \
@@ -560,7 +592,7 @@ in_login() {
     CLAUDE_CONFIG_DIR="$LCFG" CLAUDE_CODE_TMPDIR="$LCFG/tmp" TMPDIR="$LCFG/tmp" NONO_NO_SAVE_PROMPT=1 GIT_CONFIG_NOSYSTEM=1 \
     PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
     PATH="$TPL/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
-      "$NONO_BIN" run --profile "$profile" --allow-cwd --read "$reads" -- "$@" ) 2>&1 || true
+      "$NONO_BIN" run --silent --profile "$profile" --allow-cwd --read "$reads" -- "$@" ) 2>&1 || true
 }
 MARK="mark-$$-$(date +%s)"
 # ci-probe.txt: can its text be read? A second file, which no command below names: can the folder be listed?

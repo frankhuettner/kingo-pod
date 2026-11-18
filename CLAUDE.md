@@ -433,6 +433,12 @@ difference students choose between.
   dry run names and the start exports.** Do not go back to variables in front
   of the `exec` line over several lines: a comment line between them once cut
   five of them off without any error.
+- **A session starts nono with `--silent`** (Frank, 18 Nov 2026): on a Mac,
+  nono's report after the end names "Fix flags" and a way to open the
+  keychain, which a student must not follow. So kingo itself says before the
+  start where Claude Code may write. `KINGO_CLAUDE_LOUD=1` brings nono's output
+  back. The login and the logout run nono as before. The CI copies the line,
+  with `--silent`, and checks on Linux and on a Mac that nothing of nono shows.
 - **`claude_folder_rules` decides which folder `--in`, `--read` and `--write`
   take: one set of rules for all three.** It must keep out every folder in
   which a program of the sandbox could write something that runs outside
