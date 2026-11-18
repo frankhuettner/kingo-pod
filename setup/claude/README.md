@@ -61,6 +61,11 @@ and Windows). So kingo gives Claude Code, with its instructions, the line for a 
 start's own (`--login`, the folder, the folders of `--read` and `--write`), with one `--read` more. `AGENTS.md` and
 the text for `--in` tell Claude Code to give the student that line in place of `/add-dir`.
 
+kingo starts nono with `--silent`: nono shows neither its banner before the start nor, after the end, its list of
+what the sandbox refused. On a Mac that list ends with "Fix flags" and a way to open the keychain; they would open
+the sandbox to your own `~/.claude` and to your passwords, so add none of them. To see what the sandbox refused, start
+once with nono's output: `KINGO_CLAUDE_LOUD=1 ./kingo claude`.
+
 ## A folder of your own, without the course
 
 `./kingo claude --in ~/projects/thesis` starts the same Claude Code in that folder: the same sandbox, the same model

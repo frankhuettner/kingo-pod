@@ -49,7 +49,7 @@ part_in() {
   out=$(k "$h" "$h/projects/thesis" claude --in .) || { show "$out" 4; fail "kingo claude --in . did not take the folder it was started in"; }
   HOME_SHOWN=$h brief "$out"
   has "$out" "dry run — would start in $h/projects/thesis:" || { show "$out" 6; fail "kingo claude --in . would not start in the folder it was started in"; }
-  has "$out" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- " \
+  has "$out" "nono run --silent --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- " \
     || { show "$out" 6; fail "kingo claude --in . would not start with the base profile, which reads only setup/claude"; }
   out=$(k "$h" "$h/projects/thesis" yolo --in .) || { show "$out" 4; fail "kingo yolo --in . did not take the folder it was started in"; }
   has "$out" "dry run — would start in $h/projects/thesis:" || { show "$out" 6; fail "kingo yolo --in . would not start in the folder it was started in"; }
@@ -74,7 +74,7 @@ part_in() {
     has "$out" "This folder is in kingo-pod: Claude Code starts for the course, in $(basename "$KINGO_DIR")/claude." \
       || { show "$out" 6; fail "kingo claude --in . in $d does not say that it starts the course"; }
     has "$out" "dry run — would start in $KINGO_DIR/claude:" || { show "$out" 6; fail "kingo claude --in . in $d would not start in kingo-pod/claude"; }
-    has "$out" "nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- " || { show "$out" 6; fail "kingo claude --in . in $d would not start with the course profile"; }
+    has "$out" "nono run --silent --profile kingo-claude --allow-cwd --read $KINGO_DIR -- " || { show "$out" 6; fail "kingo claude --in . in $d would not start with the course profile"; }
     has "$out" "claude --add-dir=$KINGO_DIR " || { show "$out" 6; fail "kingo claude --in . in $d would not start Claude Code as ./kingo claude does"; }
     if has "$out" "is kingo-pod or a folder in it"; then fail "kingo claude --in . in $d still refuses kingo-pod"; fi
   done
@@ -82,7 +82,7 @@ part_in() {
   out=$(k "$h" "$h/projects" claude --in "$KINGO_DIR/shared") || { show "$out" 4; fail "kingo claude --in kingo-pod/shared did not start the course"; }
   has "$out" "dry run — would start in $KINGO_DIR/claude:" || { show "$out" 6; fail "kingo claude --in kingo-pod/shared, by its full path, would not start the course"; }
   out=$(k "$h" "$KINGO_DIR" claude --login --in .) || { show "$out" 4; fail "kingo claude --login --in . in kingo-pod did not start the course"; }
-  has "$out" "nono run --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- " \
+  has "$out" "nono run --silent --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- " \
     || { show "$out" 6; fail "kingo claude --login --in . in kingo-pod would not start the course with the login"; }
   out=$(k "$h" "$KINGO_DIR/shared" yolo --in .) || { show "$out" 4; fail "kingo yolo --in . in kingo-pod/shared did not start the course"; }
   has "$out" "--dangerously-skip-permissions" || fail "kingo yolo --in . in kingo-pod would start the course with requests for permission"

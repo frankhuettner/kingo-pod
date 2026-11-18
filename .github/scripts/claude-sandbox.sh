@@ -143,9 +143,9 @@ prepare() {
     || fail "kingo claude does not hand the variables that the dry run names to nono"
   ok "kingo claude sets its variables for the start: NONO_NO_SAVE_PROMPT, GIT_CONFIG_NOSYSTEM, those against telemetry, the PATH for look, PostgreSQL"
   # nono: the one that kingo downloaded (./kingo claude nono, in the workflow), and no other
-  grep -q '^  exec "\$nono" run --profile "\$profile" --allow-cwd --read "\$reads" \${more_nono\[@\]+"\${more_nono\[@\]}"} -- "\$@"$' "$KINGO_DIR/kingo" \
+  grep -q '^  exec "\$nono" run \${quiet\[@\]+"\${quiet\[@\]}"} --profile "\$profile" --allow-cwd --read "\$reads" \${more_nono\[@\]+"\${more_nono\[@\]}"} -- "\$@"$' "$KINGO_DIR/kingo" \
     || fail "kingo claude does not start its own nono with the line this script copies"
-  has "$dry" "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- " \
+  has "$dry" "  nono run --silent --profile kingo-claude --allow-cwd --read $KINGO_DIR -- " \
     || fail "for the course, kingo claude would not start nono with the course profile and read access to kingo-pod"
   NONO_BIN=$(ls "$HOME"/.local/share/kingo/nono/*/nono 2>/dev/null | head -n 1 || true)
   [ -x "$NONO_BIN" ] || fail "kingo's nono is not in ~/.local/share/kingo/nono (the workflow runs ./kingo claude nono first)"
@@ -182,7 +182,7 @@ kingo_env() {
     KINGO_DEV_PORT=5173 KINGO_POD_PORTS="5432 5678 5679 7860 8888 8000 4040 3000 8978 6333 6334" \
       "$@" )
 }
-SANDBOX=(nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" --)   # the line of kingo claude
+SANDBOX=(nono run --silent --profile kingo-claude --allow-cwd --read "$KINGO_DIR" --)   # the line of kingo claude
 BROWSER_BIN=""                      # where kingo put the browser; part_look fills it in
 NODE_BIN="" PW_DIR=""               # where kingo put Node.js and playwright-core, for clickthrough; part_look fills them in
 
@@ -434,6 +434,16 @@ part_sandbox() {
   say "the sandbox runs a program, lets it read kingo-pod and keeps other files away"
   out=$(in_sandbox sh -c 'echo inside-$((6*7))')
   has "$out" inside-42 || { show "$out" 30; fail "nono did not run a program with the course profile"; }
+  # nono itself says nothing (--silent): no banner, and no report with "Fix flags" at the end. Without --silent it does,
+  # or this check would prove nothing. An error of nono still shows.
+  if has "$out" "Capabilities" || has "$out" "Fix flags" || has "$out" "Sandbox denial"; then show "$out" 30; fail "nono, started as kingo claude starts it, still shows its banner or its report"; fi
+  out=$(kingo_env timeout 180 nono run --profile kingo-claude --allow-cwd --read "$KINGO_DIR" -- sh -c 'echo loud-$((6*7))' 2>&1 || true)
+  has "$out" loud-42 && has "$out" "Capabilities" || { show "$out" 30; fail "without --silent, nono shows no banner: the check of --silent proves nothing"; }
+  out=$(kingo_env timeout 60 nono run --silent --profile kingo-claude-no-such-profile --allow-cwd --read "$KINGO_DIR" -- true 2>&1 || true)
+  [ -n "$out" ] || fail "with --silent, nono says nothing about a profile that is not there"
+  out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 KINGO_CLAUDE_LOUD=1 ./kingo claude 2>&1) || { show "$out" 6; fail "kingo claude with KINGO_CLAUDE_LOUD=1 did not get as far as the start"; }
+  has "$out" "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- " || { show "$out" 6; fail "KINGO_CLAUDE_LOUD=1 does not take --silent away"; }
+  ok "nono is silent as kingo claude starts it (no banner, no report), says so when a profile is missing, and KINGO_CLAUDE_LOUD=1 brings its output back"
   out=$(in_sandbox cat "$KINGO_DIR/VERSION")
   has "$out" "$(cat "$KINGO_DIR/VERSION")" || { show "$out" 12; fail "kingo-pod cannot be read in the sandbox"; }
   out=$(in_sandbox cat "$OUTSIDE/secret.txt")
@@ -905,7 +915,7 @@ part_fresh() {
 # versions of what Claude Code writes.
 part_own() {
   local out dry d dir="$HOME/projects/thesis" log="$CFG/tmp/model-own.jsonl" mine="$KINGO_DIR/my-nono-profile.json"
-  local base=(nono run --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" --)
+  local base=(nono run --silent --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" --)
   # in_folder command ...: run it as kingo claude --in runs Claude Code, in the folder
   in_folder() {
     ( cd "$dir" &&
@@ -944,7 +954,7 @@ part_own() {
   say "kingo claude --in: what it would start"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$dir") || fail "kingo claude --in did not get as far as the start of Claude Code"
   show "$dry" 2
-  has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- /usr/bin/python3 -I $KINGO_DIR/setup/claude/no_unix_sockets.py claude --settings $HOME/.kingo-claude/settings-in.json --permission-mode default --append-system-prompt You were started with" \
+  has "$dry" "nono run --silent --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- /usr/bin/python3 -I $KINGO_DIR/setup/claude/no_unix_sockets.py claude --settings $HOME/.kingo-claude/settings-in.json --permission-mode default --append-system-prompt You were started with" \
     || fail "kingo claude --in would not start Claude Code with the base profile, under the lock, with its own settings"
   [ -z "$(ls -A "$dir")" ] || fail "kingo put a file into the folder: $(ls -A "$dir")"
   # The settings are kingo's template with one line more: Claude Code's memory in memory-of-ai/ of the folder.
@@ -987,13 +997,13 @@ part_own() {
   has "$dry" "--read $KINGO_DIR --read $notes -- " || { show "$dry" 3; fail "in --read=~/projects/notes, kingo does not put the home folder in for ~"; }
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --read "$notes" --write "$KINGO_DIR/shared") || fail "kingo claude --read --write did not get as far as the start of Claude Code"
   show "$dry" 4
-  has "$dry" "nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR --read $notes --allow $KINGO_DIR/shared -- " || fail "kingo does not give nono the two folders"
+  has "$dry" "nono run --silent --profile kingo-claude --allow-cwd --read $KINGO_DIR --read $notes --allow $KINGO_DIR/shared -- " || fail "kingo does not give nono the two folders"
   has "$dry" "claude --add-dir=$KINGO_DIR --add-dir=$notes --add-dir=$KINGO_DIR/shared --permission-mode default" || fail "kingo does not give Claude Code the two folders"
   has "$dry" "Claude Code may also read this folder, and not change it: $notes" || fail "kingo does not name the folder to read"
   has "$dry" "You may also read these, and not change them: $notes. You may also read and change these: $KINGO_DIR/shared." \
     || fail "kingo does not tell Claude Code about the two folders"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --read "$notes") || fail "kc <folder> --read did not get as far as the start of Claude Code"
-  has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude --read $notes -- " || { show "$dry" 3; fail "kc <folder> --read does not give nono the folder"; }
+  has "$dry" "nono run --silent --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude --read $notes -- " || { show "$dry" 3; fail "kc <folder> --read does not give nono the folder"; }
   has "$dry" "claude --settings $HOME/.kingo-claude/settings-in.json --add-dir=$notes --permission-mode default --append-system-prompt You were started with" \
     || { show "$dry" 3; fail "kc <folder> --read does not give Claude Code the folder"; }
   has "$dry" "/add-dir and a yes to a request for permission do not open a folder outside the sandbox" || fail "the text for --in does not say that /add-dir does not open the sandbox"
@@ -1038,9 +1048,9 @@ part_own() {
   refuses "needs a folder" --in ""
   refuses "needs a folder, not --login" --in "$dir" --read --login
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude "--in=$dir") || fail "kingo claude --in=<folder> did not get as far as the start of Claude Code"
-  has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- " || { show "$dry" 3; fail "kingo claude --in=<folder> did not start in the folder"; }
+  has "$dry" "nono run --silent --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- " || { show "$dry" 3; fail "kingo claude --in=<folder> did not start in the folder"; }
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc --read "$notes" "$dir") || fail "kc --read <folder> <folder> did not get as far as the start of Claude Code"
-  has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude --read $notes -- " || { show "$dry" 3; fail "kc --read <folder> <folder> did not start in the folder"; }
+  has "$dry" "nono run --silent --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude --read $notes -- " || { show "$dry" 3; fail "kc --read <folder> <folder> did not start in the folder"; }
   ok "commands, links to keys, shared as a link, Library and LaunchAgents, kingo-pod in a folder of one's own, --in \"\", --in=, an option for a folder, and kc --read <folder> <folder>"
 
   # The line for a new start that Claude Code gets: this start's own, with one --read more (the review: a fixed
@@ -1057,7 +1067,7 @@ part_own() {
 
   say "kingo claude --read and --write, in the sandbox"
   base_before=("${base[@]}")
-  base=(nono run --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" --read "$notes" --allow "$out2" --)
+  base=(nono run --silent --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" --read "$notes" --allow "$out2" --)
   out=$(in_folder "${LOCK[@]}" sh -c 'cat "$1/note.txt"; ( : >> "$1/x.txt" ) 2>/dev/null && echo WROTE-READ; ( : >> "$2/y.txt" ) 2>/dev/null && echo WROTE-WRITE; cat "$3" 2>&1' sh "$notes" "$out2" "$OUTSIDE/secret.txt")
   base=("${base_before[@]}")
   show "$out" 4
@@ -1076,10 +1086,10 @@ part_own() {
   ok "a profile that does not extend the course profile: kingo does not start"
   cp "$KINGO_DIR/setup/claude/my-nono-profile.example.json" "$mine"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo claude did not start with the example of my-nono-profile.json"
-  has "$dry" "nono run --profile kingo-claude-mine --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "kingo does not start nono with the student's profile"; }
+  has "$dry" "nono run --silent --profile kingo-claude-mine --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "kingo does not start nono with the student's profile"; }
   nono profile validate "$HOME/.config/nono/profiles/kingo-claude-mine.json" > "$CFG/tmp/validate.log" 2>&1 \
     || { show "$(cat "$CFG/tmp/validate.log")" 8; fail "nono does not take the example of my-nono-profile.json"; }
-  out=$(kingo_env timeout 180 nono run --profile kingo-claude-mine --allow-cwd --read "$KINGO_DIR" -- "${LOCK[@]}" \
+  out=$(kingo_env timeout 180 nono run --silent --profile kingo-claude-mine --allow-cwd --read "$KINGO_DIR" -- "${LOCK[@]}" \
     sh -c 'for f in "$@"; do if ( : >> "$f" ) 2>/dev/null; then echo "WROTE $f"; else echo "refused $f"; fi; done; echo "pg=$PGHOST n8n=${N8N_BASE_URL:+set}"' sh \
     "$KINGO_DIR/shared/own-probe.txt" "$KINGO_DIR/own-probe.txt" "$mine" "$OUTSIDE/own-probe.txt" 2>&1 || true)
   show "$(printf '%s\n' "$out" | grep -E '^(WROTE|refused|pg=)')" 6
@@ -1179,7 +1189,7 @@ json.dump(data, open(sys.argv[1], "w", encoding="utf-8"), indent=2)
 PYTHON
   PROBE='echo "key-in-sandbox=$ANTHROPIC_API_KEY token-in-sandbox=${ANTHROPIC_AUTH_TOKEN:-none}"; echo the-command-ended'
   model_start "$log2"
-  out=$(kingo_env timeout 180 nono run --profile kingo-claude-mine --allow-cwd --read "$KINGO_DIR" -- "${LOCK[@]}" \
+  out=$(kingo_env timeout 180 nono run --silent --profile kingo-claude-mine --allow-cwd --read "$KINGO_DIR" -- "${LOCK[@]}" \
     claude --add-dir "$KINGO_DIR" --dangerously-skip-permissions -p "Run the probe." < /dev/null 2>&1 || true)
   model_stop "$log2"
   mv "$settings.before" "$settings"; rm -f "$mine" "$other"
@@ -1210,13 +1220,13 @@ PYTHON
   refuses "Take one of the two" --login --key thesis
   ok "--key refuses an empty name, capitals, a path, a name that starts or ends with -, a long name, no name, and --login"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --key thesis) || fail "kingo claude --key did not get as far as the start of Claude Code"
-  has "$dry" "nono run --profile kingo-claude-key-course-thesis --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "kingo claude --key does not start nono with the profile of the key"; }
+  has "$dry" "nono run --silent --profile kingo-claude-key-course-thesis --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "kingo claude --key does not start nono with the profile of the key"; }
   has "$dry" "Claude Code's model is paid with your OpenRouter key \"thesis\": $kf" || fail "kingo claude --key does not say which key pays"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key thesis) || fail "kc <folder> --key did not get as far as the start of Claude Code"
-  has "$dry" "nono run --profile kingo-claude-key-base-thesis --allow-cwd --read $KINGO_DIR/setup/claude -- " || { show "$dry" 3; fail "kc <folder> --key does not start nono with the profile of the key"; }
+  has "$dry" "nono run --silent --profile kingo-claude-key-base-thesis --allow-cwd --read $KINGO_DIR/setup/claude -- " || { show "$dry" 3; fail "kc <folder> --key does not start nono with the profile of the key"; }
   cp "$KINGO_DIR/setup/claude/my-nono-profile.example.json" "$mine"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --key thesis) || fail "kingo claude --key did not start with the example of my-nono-profile.json"
-  has "$dry" "nono run --profile kingo-claude-key-mine-thesis --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "with my-nono-profile.json, kingo claude --key does not start nono with the profile of the key"; }
+  has "$dry" "nono run --silent --profile kingo-claude-key-mine-thesis --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "with my-nono-profile.json, kingo claude --key does not start nono with the profile of the key"; }
   # Each profile of the key is the profile of its start, but for the file of the model's route: as nono itself sees
   # them (the manifest), every other route stays (n8n, Langflow, the flows' OpenRouter), and the model's route is the
   # base profile's in every field but the file. So the copy of the route in kingo cannot fall behind unseen.
@@ -1251,7 +1261,7 @@ PYTHON
   ok "three profiles of the key, one for each start: each is its parent but for the file of the model's route; nono takes them"
   # kc takes --key before the folder too, and the line for a new start keeps the key
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc --key thesis "$dir") || fail "kc --key thesis <folder> did not get as far as the start of Claude Code"
-  has "$dry" "nono run --profile kingo-claude-key-base-thesis --allow-cwd --read $KINGO_DIR/setup/claude -- " || { show "$dry" 3; fail "kc --key thesis <folder> did not start in the folder with the key"; }
+  has "$dry" "nono run --silent --profile kingo-claude-key-base-thesis --allow-cwd --read $KINGO_DIR/setup/claude -- " || { show "$dry" 3; fail "kc --key thesis <folder> did not start in the folder with the key"; }
   has "$dry" "starts you again with this line, which keeps what this start has: kc $dir --key thesis --read <that folder> (without the short commands, in kingo-pod: ./kingo claude --in $dir --key thesis --read <that folder>)" \
     || { show "$dry" 3; fail "the line for a new start does not keep --key"; }
   ok "kc --key thesis <folder> starts in the folder, and the line for a new start keeps the key"
@@ -1285,7 +1295,7 @@ SH
   mv "$HOME/.config/kingo/openrouter.key" "$CFG/tmp/openrouter.key.away"
   PROBE='echo "token-in-sandbox=$ANTHROPIC_AUTH_TOKEN"; echo the-command-ended'
   base_before=("${base[@]}")
-  base=(nono run --profile kingo-claude-key-base-thesis --allow-cwd --read "$KINGO_DIR/setup/claude" --)
+  base=(nono run --silent --profile kingo-claude-key-base-thesis --allow-cwd --read "$KINGO_DIR/setup/claude" --)
   model_start "$log3"
   out=$(in_folder "${LOCK[@]}" claude --settings "$KINGO_DIR/setup/claude/settings-in.json" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
   model_stop "$log3"
@@ -1322,7 +1332,7 @@ part_login() {
       PGHOST=127.0.0.1 PGPORT=5432 PGUSER=student PGPASSWORD=placeholder PGDATABASE=classroom \
       NONO_NO_SAVE_PROMPT=1 GIT_CONFIG_NOSYSTEM=1 \
       PATH="$KINGO_DIR/setup/claude/bin:$PATH" KINGO_BROWSER="$BROWSER_BIN" \
-        timeout 180 nono run --profile "$profile" --allow-cwd --read "$reads" -- "${LOCK[@]}" "$@" ) 2>&1 || true
+        timeout 180 nono run --silent --profile "$profile" --allow-cwd --read "$reads" -- "${LOCK[@]}" "$@" ) 2>&1 || true
   }
 
   say "what kingo claude would start"
@@ -1332,16 +1342,16 @@ part_login() {
   say "kingo claude --login: what it would start"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login) || fail "kingo claude --login did not get as far as the start of Claude Code"
   show "$dry" 3
-  has "$dry" "nono run --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --add-dir=$KINGO_DIR --settings $tpl/settings-login.json --permission-mode default" \
+  has "$dry" "nono run --silent --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --add-dir=$KINGO_DIR --settings $tpl/settings-login.json --permission-mode default" \
     || fail "kingo claude --login would not start Claude Code with the course profile of the login, under the lock, with the settings of the login"
   vars=" $(printf '%s\n' "$dry" | sed -n 's/^  variables: //p')"
   has "$vars" " PGHOST " || fail "kingo claude --login does not set the variables for PostgreSQL"
   if has "$vars" " CLAUDE_CODE_MAX_CONTEXT_TOKENS "; then fail "kingo claude --login tells Claude Code the context size of the course's model"; fi
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login --in "$dir") || fail "kingo claude --login --in did not get as far as the start of Claude Code"
-  has "$dry" "nono run --profile kingo-claude-login --allow-cwd --read $tpl -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --settings $HOME/.kingo-claude-login/settings-in.json --permission-mode default --append-system-prompt You were started with" \
+  has "$dry" "nono run --silent --profile kingo-claude-login --allow-cwd --read $tpl -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --settings $HOME/.kingo-claude-login/settings-in.json --permission-mode default --append-system-prompt You were started with" \
     || { show "$dry" 3; fail "kingo claude --login --in would not start Claude Code with the profile of the login and its own settings"; }
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo yolo --in "$dir" --login) || fail "kingo yolo --in --login did not get as far as the start of Claude Code"
-  has "$dry" "nono run --profile kingo-claude-login --allow-cwd --read $tpl -- " || { show "$dry" 3; fail "kingo does not find --login after --in"; }
+  has "$dry" "nono run --silent --profile kingo-claude-login --allow-cwd --read $tpl -- " || { show "$dry" 3; fail "kingo does not find --login after --in"; }
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude logout) || fail "kingo claude logout did not get as far as the logout"
   has "$dry" "nono run --profile kingo-claude-login --allow-cwd -- claude auth logout" || { show "$dry" 3; fail "kingo claude logout would not log out inside the sandbox of the login"; }
   ok "the course with the login, a folder of one's own with the login, and the logout"
@@ -1350,7 +1360,7 @@ part_login() {
   cp "$tpl/my-nono-profile.example.json" "$mine"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login) || fail "kingo claude --login did not start with the example of my-nono-profile.json"
   # under a name of its own: a kc and a kcl at the same time must not take each other's copy (the review of 18 Nov 2026)
-  has "$dry" "nono run --profile kingo-claude-login-mine --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "with --login, kingo does not start nono with the student's profile"; }
+  has "$dry" "nono run --silent --profile kingo-claude-login-mine --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "with --login, kingo does not start nono with the student's profile"; }
   grep -q '^  "extends": "kingo-claude-login-course",$' "$prof/kingo-claude-login-mine.json" \
     || fail "with --login, the student's profile does not extend the course profile of the login"
   nono profile validate "$prof/kingo-claude-login-mine.json" > "$CFG/tmp/validate.log" 2>&1 \
@@ -1408,7 +1418,7 @@ EOF
     || { show "$out" 30; fail "without a login, kingo does not run the login inside the sandbox, under the lock"; }
   has "$out" "Logged in." || { show "$out" 30; fail "kingo does not take a login that nono kept outside the sandbox"; }
   sess=$(session_of "$out")
-  has "$sess" "STUB nono run --profile kingo-claude-login --allow-cwd --read $tpl -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --settings $fh/.kingo-claude-login/settings-in.json" \
+  has "$sess" "STUB nono run --silent --profile kingo-claude-login --allow-cwd --read $tpl -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --settings $fh/.kingo-claude-login/settings-in.json" \
     || { show "$out" 30; fail "after the login, kingo does not start the session"; }
   for p in "CLAUDE_CODE_DISABLE_ARTIFACT=1" "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1" "DISABLE_TELEMETRY=1" "DISABLE_ERROR_REPORTING=1" \
            "CLAUDE_CODE_MAX_CONTEXT_TOKENS=unset" "CLAUDE_CONFIG_DIR=$fh/.kingo-claude-login" "TMPDIR=$fh/.kingo-claude-login/tmp" \
@@ -1419,7 +1429,7 @@ EOF
 
   out=$(step none claude --login --in "$fh/projects/thesis")
   if has "$out" "auth login"; then show "$out" 30; fail "kingo asks for the login again although one is there"; fi
-  has "$(session_of "$out")" "STUB nono run --profile kingo-claude-login " || { show "$out" 30; fail "with a login, kingo does not start the session"; }
+  has "$(session_of "$out")" "STUB nono run --silent --profile kingo-claude-login " || { show "$out" 30; fail "with a login, kingo does not start the session"; }
   ok "a login is there: kingo starts the session and does not ask again"
 
   # One session with --login at a time (nono issues 2087, 2299): a session that runs stops a second start and the
@@ -1442,11 +1452,11 @@ EOF
   # The script ends by itself once its sleep is gone, so the kill may find nothing.
   pkill -P "$pid" 2>/dev/null || true; kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true
   out=$(step none claude --login --in "$fh/projects/thesis")
-  has "$(session_of "$out")" "STUB nono run --profile kingo-claude-login " || { show "$out" 30; fail "after the other session ended, kingo does not start one"; }
+  has "$(session_of "$out")" "STUB nono run --silent --profile kingo-claude-login " || { show "$out" 30; fail "after the other session ended, kingo does not start one"; }
   sleep 300 & pid=$!
   echo "$pid" > "$fh/.kingo-claude-login.session"
   out=$(step none claude --login --in "$fh/projects/thesis")
-  has "$(session_of "$out")" "STUB nono run --profile kingo-claude-login " || { show "$out" 30; fail "a number that runs another program stopped kingo claude --login"; }
+  has "$(session_of "$out")" "STUB nono run --silent --profile kingo-claude-login " || { show "$out" 30; fail "a number that runs another program stopped kingo claude --login"; }
   kill "$pid"; wait "$pid" 2>/dev/null || true
   ok "one session with --login at a time: a running one stops a second start and the logout, an ended one does not"
 
