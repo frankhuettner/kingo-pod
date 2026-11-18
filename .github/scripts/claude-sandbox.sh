@@ -1196,6 +1196,113 @@ PYTHON
   has "$(results "$log2")" "token-in-sandbox=none" || { show "$(results "$log2")" 6; fail "the token of the base profile's route is still set inside the sandbox"; }
   show "$(results "$log2")" 2
   ok "the other provider gets its own key in x-api-key and the model of the settings; inside the sandbox the key is a stand-in"
+
+  # --key <name>: Claude Code's model paid with another OpenRouter key (Frank, 18 Nov 2026). kingo writes a profile
+  # kingo-claude-key-<course|base|mine>-<name>, which extends the profile of the start and gives the route of the
+  # model again, with that key's file. Here the route goes to the stand-in, which says which key came.
+  say "kingo claude --key: another OpenRouter key for the model"
+  local pd="$HOME/.config/nono/profiles" kp kf="$HOME/.config/kingo/openrouter-thesis.key" log3="$CFG/tmp/model-key.jsonl" n
+  for n in "" "Big" "../x" "-x" "thesis-" "a_b"; do
+    refuses "takes a name of small letters, digits and -" --key "$n"
+  done
+  refuses "a name of at most 32 letters" --key "$(printf '%033d' 0 | tr 0 a)"
+  refuses "needs a name for the key" --key
+  refuses "Take one of the two" --login --key thesis
+  ok "--key refuses an empty name, capitals, a path, a name that starts or ends with -, a long name, no name, and --login"
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --key thesis) || fail "kingo claude --key did not get as far as the start of Claude Code"
+  has "$dry" "nono run --profile kingo-claude-key-course-thesis --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "kingo claude --key does not start nono with the profile of the key"; }
+  has "$dry" "Claude Code's model is paid with your OpenRouter key \"thesis\": $kf" || fail "kingo claude --key does not say which key pays"
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key thesis) || fail "kc <folder> --key did not get as far as the start of Claude Code"
+  has "$dry" "nono run --profile kingo-claude-key-base-thesis --allow-cwd --read $KINGO_DIR/setup/claude -- " || { show "$dry" 3; fail "kc <folder> --key does not start nono with the profile of the key"; }
+  cp "$KINGO_DIR/setup/claude/my-nono-profile.example.json" "$mine"
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --key thesis) || fail "kingo claude --key did not start with the example of my-nono-profile.json"
+  has "$dry" "nono run --profile kingo-claude-key-mine-thesis --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "with my-nono-profile.json, kingo claude --key does not start nono with the profile of the key"; }
+  # Each profile of the key is the profile of its start, but for the file of the model's route: as nono itself sees
+  # them (the manifest), every other route stays (n8n, Langflow, the flows' OpenRouter), and the model's route is the
+  # base profile's in every field but the file. So the copy of the route in kingo cannot fall behind unseen.
+  for n in course:kingo-claude base:kingo-claude-base mine:kingo-claude-mine; do
+    kp="$pd/kingo-claude-key-${n%%:*}-thesis.json"
+    [ -s "$kp" ] || fail "kingo did not write the profile of the key at $kp"
+    nono profile validate "$kp" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of the key that extends ${n#*:}"; }
+    /usr/bin/python3 - "${n#*:}" "kingo-claude-key-${n%%:*}-thesis" "$kf" <<'PYTHON' || fail "the profile of the key that extends ${n#*:} is not its parent but for the key's file"
+import json, subprocess, sys
+parent, child, keyfile = sys.argv[1:]
+def routes(profile):
+    out = subprocess.run(["nono", "profile", "show", "--format", "manifest", profile], capture_output=True, text=True, check=True).stdout
+    return {c["name"]: c for c in json.loads(out)["credentials"]}
+a, b = routes(parent), routes(child)
+want = dict(a.pop("anthropic", {}), source="file://" + keyfile)
+model = b.pop("anthropic", {})
+print("         | %s: %s; the model: %s" % (child, ", ".join("%s %s" % (k, "kept" if a.get(k) == b.get(k) else "CHANGED") for k in sorted(set(a) | set(b))) or "no other route",
+      "the parent's route with the key's file" if model == want else "%s, not %s" % (model, want)))
+sys.exit(0 if a == b and model == want else 1)
+PYTHON
+  done
+  # A my-nono-profile.json that names another provider for the model, on one line or without quotes: --key is refused,
+  # and before any key is asked for (the review of 18 Nov 2026: a test of whole lines missed both)
+  printf '{ "extends": "kingo-claude", "meta": { "name": "kingo-claude-mine", "version": "1" }, "network": { "custom_credentials": { "anthropic": { "upstream": "https://api.example.com", "credential_key": "file://__KEYS_DIR__/x.key", "env_var": "ANTHROPIC_API_KEY", "inject_header": "x-api-key", "credential_format": "{}" } } } }\n' > "$mine"
+  refuses "names another provider for the model (\"anthropic\"), and --key" --key thesis
+  refuses "names another provider for the model (\"anthropic\"), and --login" --login
+  sed 's/"anthropic":/anthropic:/' "$mine" > "$mine.json5" && mv "$mine.json5" "$mine"
+  refuses "names another provider for the model (\"anthropic\"), and --key" --key thesis
+  rm -f "$mine"
+  # written whole: kingo writes a profile of the key under another name and then moves it (mv), so no part of one is left
+  if ls "$pd" | grep -q '^kingo-claude-key-.*\.json\.'; then fail "kingo left a part of a profile of the key in $pd"; fi
+  ok "three profiles of the key, one for each start: each is its parent but for the file of the model's route; nono takes them"
+  # kc takes --key before the folder too, and the line for a new start keeps the key
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc --key thesis "$dir") || fail "kc --key thesis <folder> did not get as far as the start of Claude Code"
+  has "$dry" "nono run --profile kingo-claude-key-base-thesis --allow-cwd --read $KINGO_DIR/setup/claude -- " || { show "$dry" 3; fail "kc --key thesis <folder> did not start in the folder with the key"; }
+  has "$dry" "starts you again with this line, which keeps what this start has: kc $dir --key thesis --read <that folder> (without the short commands, in kingo-pod: ./kingo claude --in $dir --key thesis --read <that folder>)" \
+    || { show "$dry" 3; fail "the line for a new start does not keep --key"; }
+  ok "kc --key thesis <folder> starts in the folder, and the line for a new start keeps the key"
+
+  # The key itself, as a start finds it: kingo asks for it in a terminal only, and checks it at OpenRouter. A key that
+  # OpenRouter refuses is deleted, that one and no other. Here a curl that answers OpenRouter's check with 401.
+  local fake="$CFG/tmp/fake-curl" before
+  mkdir -p "$fake"
+  cat > "$fake/curl" <<'SH'
+#!/bin/sh
+case "$*" in *openrouter.ai/api/v1/key*) cat > /dev/null; printf 401; exit 0 ;; esac
+exec /usr/bin/curl "$@"
+SH
+  chmod +x "$fake/curl"
+  rm -f "$kf"
+  if out=$(cd "$KINGO_DIR" && PATH="$fake:$PATH" ./kingo claude --in "$dir" --key thesis < /dev/null 2>&1); then show "$out" 3; fail "kingo claude --key started without the key and without a terminal to ask for it"; fi
+  has "$out" "needs the OpenRouter key \"thesis\". Run it in a terminal" || { show "$out" 3; fail "without a terminal, kingo claude --key does not say that it must ask for the key"; }
+  ( umask 077; printf 'refused-key' > "$kf" )
+  before=$(cat "$HOME/.config/kingo/openrouter.key")
+  if out=$(cd "$KINGO_DIR" && PATH="$fake:$PATH" ./kingo claude --in "$dir" --key thesis < /dev/null 2>&1); then show "$out" 3; fail "kingo claude --key started with a key that OpenRouter refused"; fi
+  has "$out" "OpenRouter did not accept the key \"thesis\", and kingo deleted it" || { show "$out" 3; fail "kingo claude --key does not say that OpenRouter refused the key"; }
+  [ ! -e "$kf" ] || fail "kingo kept the key that OpenRouter refused"
+  [ "$(cat "$HOME/.config/kingo/openrouter.key")" = "$before" ] || fail "for a refused key of --key, kingo changed the key without a name"
+  if has "$out" "Paste your OpenRouter key"; then fail "with --in and --key, kingo asked for the key without a name"; fi
+  ok "the key of --key: asked for in a terminal only; refused by OpenRouter, it is deleted, and no other key"
+
+  # A start in a folder of one's own with --key needs that key only: here the key without a name is gone.
+  ( umask 077; printf 'thesis-key' > "$kf" )
+  kp="$pd/kingo-claude-key-base-thesis.json"
+  sed -i "s|https://openrouter.ai/api|http://127.0.0.1:$MODEL_PORT|" "$kp"
+  mv "$HOME/.config/kingo/openrouter.key" "$CFG/tmp/openrouter.key.away"
+  PROBE='echo "token-in-sandbox=$ANTHROPIC_AUTH_TOKEN"; echo the-command-ended'
+  base_before=("${base[@]}")
+  base=(nono run --profile kingo-claude-key-base-thesis --allow-cwd --read "$KINGO_DIR/setup/claude" --)
+  model_start "$log3"
+  out=$(in_folder "${LOCK[@]}" claude --settings "$KINGO_DIR/setup/claude/settings-in.json" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
+  model_stop "$log3"
+  base=("${base_before[@]}")
+  mv "$CFG/tmp/openrouter.key.away" "$HOME/.config/kingo/openrouter.key"
+  has "$out" KINGO-PROBE-DONE || { show "$out" 40; fail "Claude Code did not finish the turn with the profile of --key, without the key without a name"; }
+  /usr/bin/python3 - "$log3" <<'PYTHON' || fail "the requests to the model did not carry the key of --key"
+import json, sys
+posts = [e for e in map(json.loads, open(sys.argv[1])) if e.get("method") == "POST" and e.get("kind") not in ("count", "unknown")]
+seen = sorted({(e.get("key_header"), e.get("key")) for e in posts})
+for header, key in seen:
+    print("         | header %s, key %s" % (header, key))
+sys.exit(0 if seen == [("authorization", "Bearer thesis-key")] else 1)
+PYTHON
+  if has "$(results "$log3")" "thesis-key"; then fail "the key of --key is readable inside the sandbox"; fi
+  rm -f "$kf"
+  ok "the model gets the key of --key, also without the key without a name; inside the sandbox it is a stand-in"
 }
 
 # kingo claude --login: Claude Code with the student's Anthropic login in place of OpenRouter. No login can be made

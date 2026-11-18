@@ -1111,7 +1111,9 @@ claude_nono_cmd() { # ./kingo claude nono: get kingo's nono, and say which one k
 }
 
 claude_http() { # url header -> HTTP code (000: nothing answered)
-  curl -s -o /dev/null -m 10 -w '%{http_code}' -H "$2" "$1" 2>/dev/null || echo 000
+  # The header goes to curl on stdin, as it is (-H @-): a key in it stays out of the process list, and no parser of
+  # curl's config reads it (the review of 18 Nov 2026: with -K -, a key with a backslash in it came out changed).
+  printf '%s\n' "$2" | curl -s -o /dev/null -m 10 -w '%{http_code}' -H @- "$1" 2>/dev/null || echo 000
 }
 
 claude_save_key() { # name key
@@ -1119,12 +1121,31 @@ claude_save_key() { # name key
   ( umask 077; printf '%s' "$2" > "$CLAUDE_KEYS/$1.key" )
 }
 
-claude_ask_key() { # name prompt
+claude_ask_key() { # name prompt [what to do then]
   local k
   [ -t 0 ] || die "kingo claude needs your $1 key. Run it in a terminal, so that it can ask for the key."
   read -r -s -p "$2 (it is not shown): " k; echo
-  [ -n "$k" ] || die "no key given — run ./kingo claude again"
+  [ -n "$k" ] || die "no key given — ${3:-run ./kingo claude again}"
   claude_save_key "$1" "$k"
+}
+
+# kingo claude --key <name>: the OpenRouter key of that name. The first start with a name asks for it; kingo keeps it
+# with the other keys, outside the sandbox. A key that OpenRouter refuses is deleted, and the next start asks again.
+claude_named_key() { # name
+  local f="$CLAUDE_KEYS/openrouter-$1.key" code
+  if [ ! -s "$f" ]; then
+    [ -t 0 ] || die "kingo claude --key $1 needs the OpenRouter key \"$1\". Run it in a terminal, so that it can ask for the key."
+    echo "A key with a new name: $1. kingo keeps it in $f, outside the sandbox."
+    claude_ask_key "openrouter-$1" "Paste the OpenRouter key \"$1\"" "start again with --key $1: kingo asks for the key"
+  fi
+  # Not claude_check_key: its words are for the key without a name, and a start without --key never asks for this one.
+  code=$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $(cat "$f")")
+  case "$code" in
+    200) ;;
+    401|403) rm -f "$f"
+             die "OpenRouter did not accept the key \"$1\", and kingo deleted it. Check it on openrouter.ai (Settings, Keys). Then start again with --key $1: kingo asks for the key." ;;
+    *) warn "could not check the OpenRouter key \"$1\" (HTTP $code) — starting anyway" ;;
+  esac
 }
 
 claude_make_langflow_key() { # Langflow runs with auto-login: a token, then a key named "claude"
@@ -1164,7 +1185,7 @@ claude_backup_name() { # name id -> a file name that every file system takes
 }
 
 claude_backup_get() { # key-file header-name url file -> 0 if the file was written; the key stays out of the process list
-  printf 'header = "%s: %s"\n' "$2" "$(cat "$1")" | curl -sf -m 30 -K - -o "$4" "$3" 2>/dev/null && [ -s "$4" ] && return 0
+  printf '%s: %s\n' "$2" "$(cat "$1")" | curl -sf -m 30 -H @- -o "$4" "$3" 2>/dev/null && [ -s "$4" ] && return 0
   rm -f "$4"
   return 1
 }
@@ -1907,6 +1928,11 @@ cmd_claude() {
       echo "  The rules are those of --in. Of kingo-pod, they take only shared/ (in Langflow: /app/shared); in the course,"
       echo "  --read takes it all, as the course reads it anyway."
       echo "  /add-dir in Claude Code does not open the sandbox: only a start with --read or --write does."
+      echo "kingo claude --key <name>  Claude Code's model is paid with another OpenRouter key of yours, for this start:"
+      echo "  kc ~/projects/thesis --key thesis. The first start with a name asks for the key and keeps it in"
+      echo "  $CLAUDE_KEYS/openrouter-<name>.key, outside the sandbox. On openrouter.ai, each key has its own limit and costs."
+      echo "  Names: small letters, digits and - (not at the start or the end). Another key for a name: delete its file."
+      echo "  Not with --login."
       echo "Your own additions to the sandbox of the course: copy setup/claude/my-nono-profile.example.json to"
       echo "  $KINGO_DIR/my-nono-profile.json and change it. Claude can read that file and not change it."
       echo "kingo claude --login [--in <folder>] [claude options]  with your Claude subscription in place of OpenRouter:"
@@ -1923,13 +1949,17 @@ cmd_claude() {
     [ $# = 1 ] || die "kingo claude logout takes nothing after it."
     logout=1; set -- --login
   fi
-  # --in <folder>, --login, and --read/--write <folder> (more folders for this one start), anywhere before Claude
-  # Code's own options (./kingo yolo --in ... puts an option first)
-  local in_dir="" login=0 a keep=() take=0 more="" more_read=() more_write=()
+  # --in <folder>, --login, --read/--write <folder> (more folders for this one start) and --key <name> (another
+  # OpenRouter key for the model), anywhere before Claude Code's own options (./kingo yolo --in ... puts an option first)
+  local in_dir="" login=0 a keep=() take=0 more="" more_read=() more_write=() key_name="" key_given=0
   for a in "$@"; do
     if [ "$take" = 1 ]; then in_dir=$a; take=2; continue; fi
     if [ -n "$more" ]; then
-      if [ "$more" = read ]; then more_read+=("$a"); else more_write+=("$a"); fi
+      case "$more" in
+        read)  more_read+=("$a") ;;
+        write) more_write+=("$a") ;;
+        key)   key_name=$a ;;
+      esac
       more=""; continue
     fi
     case "$a" in
@@ -1940,15 +1970,40 @@ cmd_claude() {
       --write)   more=write; continue ;;
       --read=*)  more_read+=("${a#--read=}"); continue ;;
       --write=*) more_write+=("${a#--write=}"); continue ;;
+      --key)     more=key; key_given=1; continue ;;
+      --key=*)   key_name=${a#--key=}; key_given=1; continue ;;
     esac
     keep+=("$a")
   done
   [ "$take" != 1 ] || die "kingo claude --in needs a folder, for example:  ./kingo claude --in ~/projects/thesis"
-  [ -z "$more" ] || die "kingo claude --$more needs a folder, for example:  ./kingo claude --$more ~/projects/notes"
+  case "$more" in
+    "") ;;
+    key) die "kingo claude --key needs a name for the key, for example:  kc ~/projects/thesis --key thesis" ;;
+    *)   die "kingo claude --$more needs a folder, for example:  ./kingo claude --$more ~/projects/notes" ;;
+  esac
+  if [ "$key_given" = 1 ]; then
+    case "$key_name" in
+      # the letters one by one: a range such as a-z takes capitals too in some locales (bash 3.2 on a Mac)
+      # and no - at the end: nono takes no profile name that ends in - (the review of 18 Nov 2026)
+      ""|-*|*-|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*)
+        die "kingo claude --key takes a name of small letters, digits and - (not at the start or the end), for example:  --key thesis" ;;
+    esac
+    [ "${#key_name}" -le 32 ] || die "kingo claude --key takes a name of at most 32 letters, not $key_name"
+    [ "$login" = 0 ] || die "--key names an OpenRouter key, and --login uses your Claude subscription. Take one of the two."
+  fi
   if [ "$take" = 2 ]; then
     in_dir=$(claude_in_folder "$in_dir") || exit 1
     # kingo-pod or a folder in it: the course, as without --in
     [ -n "$in_dir" ] || echo "This folder is in kingo-pod: Claude Code starts for the course, in ${KINGO_DIR##*/}/claude."
+  fi
+  # A my-nono-profile.json that names another provider for the model ("anthropic") goes neither with --login nor
+  # with --key. Said here, before any key is asked for, and found in any form, also on one line or without quotes
+  # (the review of 18 Nov 2026: a test of whole lines missed both, and --key then paid OpenRouter in its place).
+  # grep without -q: it reads all of sed's lines, so that no early end of grep fails the pipe (pipefail).
+  if [ -z "$in_dir" ] && [ "$logout" = 0 ] && [ -f "$KINGO_DIR/my-nono-profile.json" ] \
+     && sed 's|//.*||' "$KINGO_DIR/my-nono-profile.json" | grep -E '(^|[^[:alnum:]_-])"?anthropic"?[[:space:]]*:' > /dev/null; then
+    [ "$login" = 0 ] || die "my-nono-profile.json names another provider for the model (\"anthropic\"), and --login uses your Claude subscription. Take one of the two: start without --login, or rename the file."
+    [ -z "$key_name" ] || die "my-nono-profile.json names another provider for the model (\"anthropic\"), and --key an OpenRouter key. Take one of the two: start without --key, or rename the file."
   fi
   set -- ${keep[@]+"${keep[@]}"}
   # The more folders: for nono (more_nono), for Claude Code (more_add), and one sentence for Claude Code (more_hint).
@@ -1981,6 +2036,7 @@ cmd_claude() {
   if [ -n "$in_dir" ]; then
     again_kc="$again_kc $(printf '%q' "$in_dir")"; again_kingo="$again_kingo --in $(printf '%q' "$in_dir")"
   fi
+  if [ -n "$key_name" ]; then again_kc="$again_kc --key $key_name"; again_kingo="$again_kingo --key $key_name"; fi
   local again_hint="To give you one more folder, the user types /exit and starts you again with this line, which keeps what this start has: $again_kc$more_again --read <that folder> (without the short commands, in kingo-pod: $again_kingo$more_again --read <that folder>), or with --write in place of --read to change files there. It is the one command you may ask the user to type in their own terminal."
   local dir="$KINGO_DIR/claude" tpl="$KINGO_DIR/setup/claude" cfg="$HOME/.kingo-claude"
   [ -z "$in_dir" ] || dir=$in_dir
@@ -2031,12 +2087,14 @@ cmd_claude() {
   if [ "$logout" = 1 ]; then
     :   # no keys, no pod, no browser: only nono and the profiles
   elif [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ] && [ -n "$in_dir" ]; then
-    # A folder of your own: only the key for the model, and the browser for look.
-    if [ "$login" = 0 ]; then
+    # A folder of your own: only the key for the model, and the browser for look. With --key, the key of that name
+    # pays the model, and the base profile has no other route: the key without a name is neither asked nor checked.
+    if [ "$login" = 0 ] && [ -z "$key_name" ]; then
       [ -s "$CLAUDE_KEYS/openrouter.key" ] || claude_ask_key openrouter "Paste your OpenRouter key"
       claude_check_key openrouter "$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $(cat "$CLAUDE_KEYS/openrouter.key")")" \
         "Check it on openrouter.ai (Settings, Keys)."
     fi
+    [ -z "$key_name" ] || claude_named_key "$key_name"
     if [ "${KINGO_CLAUDE_NO_BROWSER:-}" != 1 ] && claude_browser_get; then
       claude_browser_check_packages "$(claude_browser_path)" || true
       claude_clickthrough_get || true
@@ -2059,6 +2117,7 @@ cmd_claude() {
     fi
     claude_check_key openrouter "$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $(cat "$CLAUDE_KEYS/openrouter.key")")" \
       "Check it on openrouter.ai (Settings, Keys)."
+    [ -z "$key_name" ] || claude_named_key "$key_name"
     claude_check_key n8n "$(claude_http "http://127.0.0.1:${P_N8N}/api/v1/workflows?limit=1" "X-N8N-API-KEY: $(cat "$CLAUDE_KEYS/n8n.key")")" \
       "Make a new one in n8n (Settings, n8n API)."
     claude_check_key langflow "$(claude_http "http://127.0.0.1:${P_LANGFLOW}/api/v1/flows/" "x-api-key: $(cat "$CLAUDE_KEYS/langflow.key")")" \
@@ -2116,9 +2175,6 @@ cmd_claude() {
   elif [ -f "$mine" ]; then
     grep -Eq '^[[:space:]]*"extends"[[:space:]]*:[[:space:]]*"kingo-claude"[[:space:]]*,?[[:space:]]*$' "$mine" \
       || die "my-nono-profile.json needs the line  \"extends\": \"kingo-claude\",  so that it adds to the sandbox of the course and takes nothing of it away. See setup/claude/my-nono-profile.example.json."
-    if [ "$login" = 1 ] && grep -Eq '^[[:space:]]*"anthropic"[[:space:]]*:' "$mine"; then
-      die "my-nono-profile.json names another provider for the model (\"anthropic\"), and --login uses your Claude subscription. Take one of the two: start without --login, or rename the file."
-    fi
     # With --login the copy has a name of its own (kingo-claude-login-mine): a kc and a kcl at the same time must not
     # take each other's (the review of 18 Nov 2026).
     sed -e "s|__KINGO_DIR__|$esc|g" -e "s|__KEYS_DIR__|$kesc|g" \
@@ -2133,6 +2189,52 @@ cmd_claude() {
     echo "The sandbox follows your own profile too: $mine"
   else
     rm -f "$prof/kingo-claude-mine.json" "$prof/kingo-claude-login-mine.json"
+  fi
+  # --key <name>: the model is paid with another OpenRouter key of the student's (Frank, 18 Nov 2026: "ist claude code
+  # api key immer gleich, oder lässt sich das per project überschreiben? könnten wir dazu einen kingo helfer bauen?").
+  # A profile that extends the one chosen above and gives the route of the model again, with the key file of that
+  # name; nono takes it in place of the route of the base profile, as it does for my-nono-profile.json. The route is
+  # the base profile's (nono-profile-base.json), but for the file; the CI checks that the two agree. The course's
+  # route for the models of the flows keeps the key of the flows.
+  # One file for each name and each profile it extends, written whole (mv): two starts at once (step 13 of hw3)
+  # must not take each other's, nor find half of one. So no start deletes one, either.
+  if [ -n "$key_name" ] && [ "$logout" = 0 ]; then
+    local key_file="$CLAUDE_KEYS/openrouter-$key_name.key" key_json key_prof
+    case "$profile" in
+      kingo-claude)      key_prof="kingo-claude-key-course-$key_name" ;;
+      kingo-claude-base) key_prof="kingo-claude-key-base-$key_name" ;;
+      kingo-claude-mine) key_prof="kingo-claude-key-mine-$key_name" ;;
+      *) die "kingo claude --key does not go with the profile $profile." ;;   # --login is refused above
+    esac
+    key_json=$(printf '%s' "$key_file" | sed 's/[\\"]/\\&/g')
+    cat > "$prof/$key_prof.json.$$" <<EOF
+{
+  "extends": "$profile",
+  "meta": {
+    "name": "$key_prof",
+    "version": "1",
+    "description": "kingo claude --key $key_name: the model is paid with another OpenRouter key"
+  },
+  "network": {
+    "custom_credentials": {
+      "anthropic": {
+        "upstream": "https://openrouter.ai/api",
+        "credential_key": "file://$key_json",
+        "env_var": "ANTHROPIC_AUTH_TOKEN",
+        "inject_header": "Authorization",
+        "credential_format": "Bearer {}"
+      }
+    }
+  }
+}
+EOF
+    mv -f "$prof/$key_prof.json.$$" "$prof/$key_prof.json"
+    if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ] && ! "$nono" profile validate "$prof/$key_prof.json" >/dev/null 2>&1; then
+      "$nono" profile validate "$prof/$key_prof.json" 2>&1 | tail -n 8 >&2 || true
+      die "nono does not take the profile for --key (the lines above say why). Claude Code was not started."
+    fi
+    profile=$key_prof
+    echo "Claude Code's model is paid with your OpenRouter key \"$key_name\": $key_file"
   fi
   # nono grants only folders that exist: also those of the browser, Node.js and playwright-core, when a download failed.
   mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude" \
@@ -2538,7 +2640,7 @@ shortcuts_remove() {
 
 # cmd_shortcut <kc|kcl|ky|kyl> [folder] [claude options]: what the shortcuts run. Alone, or with an option first
 # (kc --resume), the course; with a folder first (kc ., kc ~/projects/x), that folder, as --in does. A folder is a
-# first word that does not start with "-". kingo's own options may come before it (kc --read ~/notes ~/projects/x):
+# first word that does not start with "-". kingo's own options may come before it (kc --key thesis ~/projects/thesis):
 # without that, the folder went to Claude Code as its first prompt (the review of 18 Nov 2026).
 cmd_shortcut() {
   local name=$1 pre=() lead=()
@@ -2550,8 +2652,8 @@ cmd_shortcut() {
   esac
   while [ $# -gt 0 ]; do
     case "$1" in
-      --read|--write) [ $# -ge 2 ] || break; lead+=("$1" "$2"); shift 2 ;;
-      --read=*|--write=*|--login) lead+=("$1"); shift ;;
+      --read|--write|--key) [ $# -ge 2 ] || break; lead+=("$1" "$2"); shift 2 ;;
+      --read=*|--write=*|--key=*|--login) lead+=("$1"); shift ;;
       *) break ;;
     esac
   done

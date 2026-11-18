@@ -84,6 +84,20 @@ The same rules hold for `--read` and `--write`, but `--read` may take a folder w
 You can name the folder from where you are: `--in .` is the folder you are in, `--in thesis` the folder `thesis` in
 it. kingo-pod or a folder in it starts Claude Code for the course, as `./kingo claude` does, and kingo says so.
 
+## Another OpenRouter key for one project
+
+`./kingo claude --key <name>` (with the short commands: `kc ~/projects/thesis --key thesis`) pays Claude Code's model
+with another OpenRouter key of yours, for this start, in the course and with `--in`. The first start with a name asks
+for the key and keeps it with the other keys, in `~/.config/kingo/openrouter-<name>.key`, outside the sandbox; a key
+that OpenRouter refuses is deleted, and the next start asks again. For another key under a name, delete its file.
+
+On openrouter.ai, each key has its own credit limit and its own costs: a project can have a budget of its own. kingo
+starts nono with one more profile, `kingo-claude-key-<course|base|mine>-<name>`, which extends the profile of this
+start and gives the route of the model again, with that key file; nono takes it in place of the base profile's route.
+With `--in`, only the key of that name is asked for and checked. In the course, the route for the models of your flows
+keeps the key of your flows. Names are small letters, digits and `-` (not at the start or the end). Not with
+`--login`, and not with a `my-nono-profile.json` that names another provider for the model.
+
 ## Shorter commands: `./kingo shortcuts`
 
 `./kingo shortcuts` adds short commands to your terminal. It shows a list: type the numbers you want, or press Enter

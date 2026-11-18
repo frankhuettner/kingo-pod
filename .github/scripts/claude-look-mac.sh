@@ -461,6 +461,13 @@ if has "$out" WROTE-READ; then fail "with --read, the sandbox can write in the f
 has "$out" WROTE-WRITE || { show "$out" 12; fail "with --write (nono --allow), the sandbox cannot write in the folder"; }
 rm -rf "$NOTES" "$OUT2"
 ok "--read and --write: kingo gives both folders to nono and Claude Code; the sandbox reads the one and writes the other"
+# --key on a Mac: the profile of the key, which nono must take
+KP="$HOME/.config/nono/profiles/kingo-claude-key-base-thesis.json"
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$OWN" --key thesis) || fail "kingo claude --in --key did not get as far as the start of Claude Code"
+has "$dry" "nono run --profile kingo-claude-key-base-thesis --allow-cwd --read $KINGO_DIR/setup/claude -- claude --settings $HOME/.kingo-claude/settings-in.json" \
+  || { show "$dry" 3; fail "kingo claude --in --key does not start nono with the profile of the key"; }
+"$NONO_BIN" profile validate "$KP" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of --key"; }
+ok "--key on a Mac: kingo starts nono with the profile of the key, and nono takes it"
 
 out=$(in_sandbox sh -c 'if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
 has "$out" refused || { show "$out" 12; fail "with the course profile alone, the sandbox can already write in shared"; }
