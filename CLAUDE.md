@@ -469,6 +469,23 @@ difference students choose between.
   `--key`; without it, it goes on to Claude Code (`kcl --model opus`). The
   provider's address and the model's ID go into JSON and into `sed`: both are
   checked letter by letter first (`claude_key_provider`, `claude_key_model_ok`).
+- **`./kingo claude key add|list|remove` manages those keys without a start
+  (Frank, 19 Nov 2026: "dann kann man key verwaltung und project laden
+  trennen").** It needs no pod and starts no Claude Code. `add` keeps what the
+  first start with `--key` keeps, and two things that a start does not take:
+  `--context <tokens>` (a line `context=` in `key-<name>.conf`; it goes to
+  Claude Code as `CLAUDE_CODE_MAX_CONTEXT_TOKENS` in place of the 200000) and
+  `--ca <file>` (copied to `key-<name>.crt`; `tls_ca` in the route of the
+  key's profile, because nono's proxy makes the connection, not Claude Code).
+  Keep four things. A key that is there is never lost before its successor is
+  accepted: `add --first` (the key without a name) and `add <name>` for a name
+  with a key check the new key first, where the provider can be asked. `list`
+  never shows a key. `remove` deletes only what belongs to the whole name: the
+  settings of a folder are matched by the digits after the name, so that the
+  name `a` never takes those of `a-b`. And an address loses `/v1` or
+  `/v1/messages` at its end (`claude_key_provider`): Claude Code adds
+  `/v1/messages` itself. The CI types the keys through a terminal of its own
+  (`.github/scripts/with_terminal.py`), since kingo asks in a terminal only.
 - **`claude_folder_rules` decides which folder `--in`, `--read` and `--write`
   take: one set of rules for all three.** It must keep out every folder in
   which a program of the sandbox could write something that runs outside

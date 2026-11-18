@@ -1,6 +1,9 @@
 """CI: a stand-in for the model. It speaks enough of the Messages API for Claude Code to finish one turn.
 
-    python3 fake_model.py PORT LOG 'a command for the Bash tool'
+    python3 fake_model.py PORT LOG 'a command for the Bash tool' [CERTIFICATE KEY]
+
+With a certificate and its key (two PEM files), it answers over https with that certificate: a provider that signs
+with a certificate of its own.
 
 A request that offers the Bash tool and holds no result yet is answered with a call of that tool. The request that
 brings the result back is answered with the last words, DONE. Any other request gets a short text. Every request goes
@@ -119,4 +122,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    if len(sys.argv) > 5:
+        import ssl
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(sys.argv[4], sys.argv[5])
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+    server.serve_forever()

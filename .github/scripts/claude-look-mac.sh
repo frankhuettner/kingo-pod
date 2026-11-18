@@ -507,6 +507,24 @@ has "$dry" "The model: claude-sonnet-5-5 (kept with \"api\"; --model changes it)
 "$NONO_BIN" profile validate "$(dirname "$KP")/kingo-claude-key-base-api.json" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of --key --provider anthropic"; }
 rm -f "$HOME/.config/kingo/key-api.conf"
 ok "--key --provider on a Mac: kingo keeps the model with the name, and nono takes the profile for Anthropic's API"
+# kingo claude key on a Mac (bash 3.2, the tools of BSD): add keeps the address without /v1, the context and the
+# certificate; nono takes the profile with the certificate; list shows the name; remove takes it away again.
+KD="$HOME/.config/kingo"
+openssl req -x509 -newkey rsa:2048 -nodes -keyout "$CFG/tmp/root.key" -out "$CFG/tmp/root.crt" -subj "/CN=kingo CI root" -days 2 > "$CFG/tmp/openssl.log" 2>&1 \
+  || { show "$(cat "$CFG/tmp/openssl.log")" 8; fail "openssl did not make a certificate"; }
+out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude key add spark --provider https://llm.example.com/v1 --model spark/model --context 131072 --ca "$CFG/tmp/root.crt" 2>&1) \
+  || { show "$out" 6; fail "kingo claude key add did not take a provider by its address, with a context and a certificate"; }
+[ "$(cat "$KD/key-spark.conf")" = "$(printf 'provider=https://llm.example.com\nmodel=spark/model\ncontext=131072')" ] || { show "$(cat "$KD/key-spark.conf")" 4; fail "kingo claude key add did not keep the address without /v1, the model and the context"; }
+[ "$(stat -f %Lp "$KD/key-spark.crt")" = 600 ] && cmp -s "$CFG/tmp/root.crt" "$KD/key-spark.crt" || fail "kingo claude key add did not keep the certificate as it was given, for the owner only"
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$OWN" --key spark) || fail "kingo claude --in --key spark did not get as far as the start of Claude Code"
+has "$dry" "context: CLAUDE_CODE_MAX_CONTEXT_TOKENS=131072" || { show "$dry" 6; fail "the context of the key does not go to Claude Code"; }
+grep -q "\"tls_ca\": \"$KD/key-spark.crt\"" "$(dirname "$KP")/kingo-claude-key-base-spark.json" || fail "the profile of the key does not give nono the certificate"
+"$NONO_BIN" profile validate "$(dirname "$KP")/kingo-claude-key-base-spark.json" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of a key with a certificate"; }
+out=$(cd "$KINGO_DIR" && ./kingo claude key list 2>&1) || { show "$out" 6; fail "kingo claude key list failed"; }
+has "$out" "spark      https://llm.example.com, model spark/model, 131072 tokens of context, with your certificate" || { show "$out" 8; fail "kingo claude key list does not say what kingo keeps for the name"; }
+out=$(cd "$KINGO_DIR" && ./kingo claude key remove spark 2>&1) || { show "$out" 6; fail "kingo claude key remove failed"; }
+if ls "$KD"/key-spark.* "$(dirname "$KP")"/kingo-claude-key-*-spark.json "$HOME"/.kingo-claude/settings-in-key-spark-[0-9]*.json > /dev/null 2>&1; then fail "kingo claude key remove left something of the name"; fi
+ok "kingo claude key on a Mac: add keeps the address without /v1, the context and the certificate; nono takes the profile; list shows the name; remove takes it all away"
 
 out=$(in_sandbox sh -c 'if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
 has "$out" refused || { show "$out" 12; fail "with the course profile alone, the sandbox can already write in shared"; }
