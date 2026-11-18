@@ -7,7 +7,7 @@ set -euo pipefail
 
 KINGO_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" && pwd)"
 # The folder kingo was started from, before the cd: kingo claude --in takes a folder named from there (--in . is the
-# folder you are in, which kc of ./kingo shortcuts passes). $PWD as the student's shell keeps it, so that ../x goes
+# folder you are in, which kc . of ./kingo shortcuts passes). $PWD as the student's shell keeps it, so that ../x goes
 # where cd ../x goes in their terminal. Not a KINGO_ name: those come from the environment (_cli_overrides below).
 _kingo_from=$PWD
 [ -d "$_kingo_from" ] || _kingo_from=""
@@ -843,6 +843,8 @@ cmd_update() {
       fi
     fi
   fi
+  # Shortcuts that an older kingo wrote follow this one (shortcuts_refresh). Never fatal, like every step here.
+  shortcuts_refresh || true
   # A new version can bring a new Langflow or n8n, which converts its database
   # on its first start, for good. Dump both first, while the data is still in
   # the format of $_v_before. Never fatal, like every step here: a backup that
@@ -1704,7 +1706,7 @@ cmd_claude() {
       echo "  Claude writes only in that folder. No n8n, no Langflow, no database; the pod need not run."
       echo "  The folder is inside your home folder, and not a Windows folder (/mnt/c/...)."
       echo "  Name it from where you are: --in . is the folder you are in. kingo-pod or a folder in it starts the course."
-      echo "  ./kingo shortcuts makes kc for kingo claude --in . (and ky for kingo yolo --in .)."
+      echo "  ./kingo shortcuts makes kc: kc alone is kingo claude, kc . the folder you are in, kc <folder> that folder (ky: kingo yolo)."
       echo "Your own additions to the sandbox of the course: copy setup/claude/my-nono-profile.example.json to"
       echo "  $KINGO_DIR/my-nono-profile.json and change it. Claude can read that file and not change it."
       echo "kingo claude --login [--in <folder>] [claude options]  with your Claude subscription in place of OpenRouter:"
@@ -2037,7 +2039,10 @@ cmd_claude() {
 # shell there, and bash then reads only the first of ~/.bash_profile, ~/.bash_login and ~/.profile). They are one
 # block between two marker lines: a second run replaces it, remove takes it out, nothing else in the file changes, and
 # a copy of the file comes first. The functions call this script by its full path, so what they do comes with
-# ./kingo update; kc and the others pass --in ., the folder you are in (claude_in_folder; in kingo-pod the course).
+# ./kingo update: kc, kcl, ky and kyl call "kingo kc" and so on (cmd_shortcut). Alone, or with an option first, they
+# start the course; with a folder first, that folder, as --in does (Frank, 18 Nov 2026: "kc started kingo claude im
+# kingopod/claude ordner, kc . im ordner wo man ist; kc pfad in einem anderen ordner"). A block of an older kingo,
+# whose functions passed --in . themselves, ./kingo update writes anew (shortcuts_refresh).
 # The block defines them with "function name {", which an alias of the same name cannot bend, and unaliases its names
 # first. KINGO_SHORTCUTS_SKIP=1 switches the block off: that is how kingo asks the shell which names something else has.
 SC_NAMES="kc kcl ky kyl kingo"
@@ -2046,18 +2051,15 @@ SC_END="# <<< kingo shortcuts <<<"
 
 shortcuts_args() { # name: what its function passes to kingo, before the student's own arguments
   case "$1" in
-    kc)  echo "claude --in ." ;;
-    kcl) echo "claude --login --in ." ;;
-    ky)  echo "yolo --in ." ;;
-    kyl) echo "yolo --login --in ." ;;
-    *)   echo "" ;;
+    kc|kcl|ky|kyl) echo "$1" ;;
+    *)             echo "" ;;
   esac
 }
 shortcuts_what() { # name: one line for the student
   case "$1" in
-    kc)    echo "kingo claude in the folder you are in" ;;
+    kc)    echo "kingo claude: the course; kc . the folder you are in; kc ~/projects/x that folder" ;;
     kcl)   echo "the same with --login: your own Claude subscription" ;;
-    ky)    echo "kingo yolo in the folder you are in: Claude works without asking" ;;
+    ky)    echo "the same as kc, with kingo yolo: Claude works without asking" ;;
     kyl)   echo "the same with --login" ;;
     kingo) echo "kingo from any folder, for example: kingo status" ;;
   esac
@@ -2272,6 +2274,50 @@ shortcuts_remove() {
   echo "In a new terminal they are gone. This terminal keeps them until you close it."
 }
 
+# cmd_shortcut <kc|kcl|ky|kyl> [folder] [claude options]: what the shortcuts run. Alone, or with an option first
+# (kc --resume), the course; with a folder first (kc ., kc ~/projects/x), that folder, as --in does. A folder is a
+# first word that does not start with "-".
+cmd_shortcut() {
+  local name=$1 pre=()
+  shift
+  case "$name" in
+    kcl) pre=(--login) ;;
+    ky)  pre=(--dangerously-skip-permissions) ;;
+    kyl) pre=(--dangerously-skip-permissions --login) ;;
+  esac
+  if [ $# -gt 0 ] && [ -n "$1" ] && [ "${1#-}" = "$1" ]; then
+    pre+=(--in "$1")
+    shift
+  fi
+  cmd_claude ${pre[@]+"${pre[@]}"} "$@"
+}
+
+# shortcuts_refresh: each startup file with a block of kingo shortcuts gets its block anew, with the same names, for
+# this kingo-pod (Frank, 18 Nov 2026: "selbst neu schreiben"). ./kingo update runs it, so that a block of an older
+# kingo, whose functions passed --in . themselves, follows the new kc. A copy of the file comes first, as always.
+# Never fatal: what cannot be written is said, and the update goes on.
+shortcuts_refresh() {
+  local f names out n first
+  for f in "${ZDOTDIR:-$HOME}/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile"; do
+    [ -f "$f" ] || continue
+    names=$(shortcuts_have "$f"); names=${names% }
+    [ -n "$names" ] || continue
+    if out=$( (shortcuts_write "$f" "$names" && printf '%s %s' "$SC_DID" "$SC_BACKUP") 2>&1 ); then
+      case "$out" in
+        changed*)
+          echo "Your shortcuts in $(shortcuts_short "$f") are written anew for this kingo-pod: $names."
+          first=""
+          for n in $names; do case "$n" in kc|kcl|ky|kyl) [ -n "$first" ] || first=$n ;; esac; done
+          [ -z "$first" ] || echo "  Alone, $first starts Claude Code for the course; $first . in the folder you are in; $first ~/projects/x in that folder."
+          echo "  They work in every new terminal. The file as it was before: $(shortcuts_short "${out#changed }")" ;;
+      esac
+    else
+      warn "kingo could not write your shortcuts in $(shortcuts_short "$f") anew: ${out#ERROR: } Run ./kingo shortcuts again."
+    fi
+  done
+  return 0
+}
+
 cmd_shortcuts() {
   case "${1:-}" in
     help|-h|--help)
@@ -2279,12 +2325,16 @@ cmd_shortcuts() {
       local x; for x in $SC_NAMES; do printf '  %-6s %s\n' "$x" "$(shortcuts_what "$x")"; done
       echo "kingo shortcuts kc ky ...  these, without the question"
       echo "kingo shortcuts remove     take them out again"
+      echo "kingo shortcuts refresh    write them anew for this kingo-pod, with the same names (./kingo update does it)"
       echo "They go into the file that a new terminal reads: ~/.zshrc for zsh; for bash ~/.bashrc, on a Mac ~/.bash_profile."
       echo "kingo writes them between two marked lines, changes nothing else in the file, and keeps a copy of it first."
       return ;;
     remove)
       [ $# = 1 ] || die "kingo shortcuts remove takes nothing after it."
       shortcuts_remove; return ;;
+    refresh)
+      [ $# = 1 ] || die "kingo shortcuts refresh takes nothing after it."
+      shortcuts_refresh; return ;;
   esac
   local rc want="" chosen="" keep="" claude=0 n a i answer taken have m rest what
   rc=$(shortcuts_rc) || exit 1
@@ -2344,8 +2394,8 @@ cmd_shortcuts() {
     [ -z "$SC_BACKUP" ] || echo "The file as it was before: $(shortcuts_short "$SC_BACKUP")"
     [ -z "$SC_FROM" ] || echo "kingo made this file, and it reads ~/$SC_FROM first, as bash did before."
   fi
-  for n in $keep; do case "$n" in kc|kcl|ky|kyl) claude=1 ;; esac; done
-  [ "$claude" = 0 ] || echo "In kingo-pod they start Claude Code for the course, in ${KINGO_DIR##*/}/claude."
+  for n in $keep; do case "$n" in kc|kcl|ky|kyl) [ "$claude" != 0 ] || claude=$n ;; esac; done
+  [ "$claude" = 0 ] || echo "Alone, $claude starts Claude Code for the course; $claude . in the folder you are in; $claude ~/projects/x in that folder."
   echo "They work in every new terminal. To use them in this one now:  source $(shortcuts_short "$rc")"
   echo "To take them out again:  ./kingo shortcuts remove"
 }
@@ -3803,6 +3853,7 @@ case "${1:-help}" in
   claude)            shift; cmd_claude "$@" ;;
   yolo)              shift; cmd_claude --dangerously-skip-permissions "$@" ;;
   shortcuts)         shift; cmd_shortcuts "$@" ;;
+  kc|kcl|ky|kyl)     cmd_shortcut "$@" ;;   # what the shortcuts call; not in the help
   logs)              select_engine; shift; inactive_hint "$@"; compose logs --tail=100 -f "$@" ;;
   restart)           select_engine; ensure_ready; shift; inactive_hint "$@"; compose restart "$@" ;;
   mode)              shift; cmd_mode "${1:-}" ;;
@@ -3850,7 +3901,8 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo yolo          the same, but Claude works without asking you first
                       (the sandbox protects your laptop either way)
   kingo shortcuts     short commands for your terminal, in any folder: kc =
-                      kingo claude there, ky = kingo yolo there, kingo itself
+                      kingo claude, kc . = the folder you are in, kc <folder> =
+                      that folder; ky the same with kingo yolo; kingo itself
                       (asks which ones; 'kingo shortcuts remove' takes them out)
   kingo logs [svc]    follow logs (e.g. kingo logs langflow)
   kingo restart [svc] restart everything or one service
