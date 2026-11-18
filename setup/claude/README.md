@@ -94,7 +94,8 @@ it. kingo-pod or a folder in it starts Claude Code for the course, as `./kingo c
 `./kingo claude --key <name>` (with the short commands: `kc ~/projects/thesis --key thesis`) pays Claude Code's model
 with another OpenRouter key of yours, for this start, in the course and with `--in`. The first start with a name asks
 for the key and keeps it with the other keys, in `~/.config/kingo/openrouter-<name>.key`, outside the sandbox; a key
-that OpenRouter refuses is deleted, and the next start asks again. For another key under a name, delete its file.
+that OpenRouter refuses is deleted, and the next start asks again. For another key under a name,
+`./kingo claude key add <name>` asks for it.
 
 On openrouter.ai, each key has its own credit limit and its own costs: a project can have a budget of its own. kingo
 starts nono with one more profile, `kingo-claude-key-<course|base|mine>-<name>`, which extends the profile of this
@@ -131,7 +132,12 @@ kc ~/projects/work --key work --provider https://llm.example.com/anthropic --mod
 kingo keeps the provider and the model with the name, in `~/.config/kingo/key-<name>.conf`, and the key in
 `~/.config/kingo/key-<name>.key`, outside the sandbox. So the next start needs only `--key <name>`, and kingo says at
 every start where the model comes from and which model it is. `--model` again changes the model. A name stays with
-its provider once it has a key: for another provider, take another name, or delete the key's file.
+its provider once it has a key: for another provider, take another name, or delete the name first
+(`./kingo claude key remove <name>`).
+
+An address that ends in `/v1` or `/v1/messages` loses that ending, and kingo says so: Claude Code adds
+`/v1/messages` to the address itself. `https://host/v1` is the base URL of the other format, OpenAI's, whose
+programs add `/chat/completions` to it; many providers offer both under one name.
 
 What kingo checks: an OpenRouter key and an Anthropic API key at their provider, at every start; a key that is refused
 is deleted, and the next start asks again. For Ollama, that Ollama answers. A key for an address is not checked: kingo
@@ -150,6 +156,43 @@ Anthropic then answers with an error that names `anthropic-workspace-id`.
 Not tested with a real key in the CI: there, a stand-in takes the provider's place and says which key came in which
 header and which model was asked for. Under Windows, Ollama must run in Ubuntu, where kingo runs: an Ollama that runs
 in Windows does not answer on `127.0.0.1` there.
+
+## Your keys without a start: `./kingo claude key`
+
+`./kingo claude key` adds, lists and removes the keys for Claude Code's model. It starts no Claude Code and needs no
+pod, so the keys and the start of a project are two things:
+
+```
+./kingo claude key add thesis --provider anthropic --model sonnet
+./kingo claude key list
+kc ~/projects/thesis --key thesis
+./kingo claude key remove thesis
+```
+
+- **`key add <name>`** does what the first start with `--key <name>` does: it asks for the key, checks it where the
+  provider can (OpenRouter, Anthropic), and keeps it with its provider and its model. It takes `--provider` and
+  `--model` as a start does, and two things that only it takes, below. For a name that is there, it changes what the
+  line says and asks whether another key shall take the place of its key; Enter keeps the key. The old key stays
+  until the provider has accepted the new one.
+- **`--context <tokens>`** says how many tokens the model holds. kingo tells Claude Code 200000 for every provider
+  but Anthropic's API, and Claude Code compacts a long session there. A model that holds less would get more than it
+  takes first: say its number, for example `--context 131072`. Not for `anthropic`: Claude Code knows its models.
+- **`--ca <file>`** gives the certificate of a provider that signs with its own, for an address with `https://`: a
+  server at work or in a lab, whose certificate your laptop does not know. kingo copies the file (PEM, the
+  certificate alone) to `~/.config/kingo/key-<name>.crt`, and nono trusts it for this one route, in addition to the
+  certificates of the system (`tls_ca` in the profile). It is nono that makes the connection, not Claude Code.
+- **`key add --first`** puts another OpenRouter key in the place of your first one, the key without a name that
+  every start without `--key` uses. The first key stays until OpenRouter has accepted the new one. Your flows in
+  Langflow keep the key that they have.
+- **`key list`** shows your names, each with its provider, its model, and what else kingo keeps for it. It never
+  shows a key.
+- **`key remove <name>`** deletes the key of that name from this laptop, with its provider, its model, its
+  certificate, and the settings and profiles that kingo wrote for it. At the provider, the key is as it was.
+
+A start with `--key <name>` does not take `--context` or `--ca`: they belong to the key, and kingo says so.
+
+Not tested with a real provider in the CI: there, kingo's lines are checked as they are, and one turn of the real
+Claude Code goes to a stand-in for a provider that signs with a certificate of its own.
 
 ## Shorter commands: `./kingo shortcuts`
 

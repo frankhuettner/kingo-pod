@@ -1143,7 +1143,7 @@ claude_ask_key() { # name prompt [what to do then]
 # kingo keeps the provider and the model with the name, in key-<name>.conf next to the keys, so that a later start
 # needs only --key <name>. An OpenRouter key without --model has no such file: it is as it was before 1.4.26.
 claude_key_provider() { # what came after --provider -> openrouter | anthropic | ollama | an address without a / at its end
-  local p=$1 rest host port=""
+  local p=$1 rest host port="" cut=""
   case "$p" in
     openrouter|anthropic|ollama) printf '%s' "$p"; return ;;
     http://*|https://*) ;;
@@ -1156,6 +1156,17 @@ claude_key_provider() { # what came after --provider -> openrouter | anthropic |
   esac
   [ "${#p}" -le 200 ] || die "kingo claude --provider takes an address of at most 200 letters."
   while [ "${p%/}" != "$p" ]; do p=${p%/}; done
+  # /v1 or /v1/messages at the end: the base URL of the other format (OpenAI's, https://host/v1), or the whole path
+  # of this one. Claude Code adds /v1/messages to the address itself (Anthropic's page "Connect Claude Code to an LLM
+  # gateway", read on 19 Nov 2026: the request goes to ANTHROPIC_BASE_URL plus /v1/messages), so with the ending the
+  # request would go to /v1/v1/messages. kingo leaves the ending out and says so (Frank, 19 Nov 2026). A server
+  # must stand before it (?*), so that a server with the name v1 stays one.
+  case "$p" in
+    *://?*/v1/messages) p=${p%/v1/messages}; cut=/v1/messages ;;
+    *://?*/v1)          p=${p%/v1}; cut=/v1 ;;
+  esac
+  while [ "${p%/}" != "$p" ]; do p=${p%/}; done
+  [ -z "$cut" ] || echo "kingo left out $cut at the end of the address: Claude Code adds /v1/messages itself." >&2
   case "$p" in http://?*|https://?*) ;; *) die "kingo claude --provider: $1 names no server." ;; esac
   rest=${p#*://}; host=${rest%%/*}
   case "$host" in *:*) port=${host#*:}; host=${host%%:*} ;; esac
@@ -1202,6 +1213,36 @@ claude_key_who() { # provider -> how kingo names it in a sentence
     ollama)     printf 'Ollama on this laptop' ;;
     *)          printf '%s' "$1" ;;
   esac
+}
+
+claude_key_name_ok() { # a name for a key: small letters, digits and -, not at the start or the end, at most 32
+  # the letters one by one: a range such as a-z takes capitals too in some locales (bash 3.2 on a Mac)
+  case "$1" in ""|-*|*-|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*) return 1 ;; esac
+  [ "${#1}" -le 32 ]
+}
+
+claude_key_context_ok() { # how many tokens the model holds, as it goes to Claude Code: digits, 1000 to 10000000
+  case "$1" in ""|0*|*[!0123456789]*) return 1 ;; esac
+  [ "${#1}" -le 8 ] && [ "$1" -ge 1000 ] && [ "$1" -le 10000000 ]
+}
+
+claude_key_conf_write() { # name provider model context -> key-<name>.conf, written whole; no context, no line for it
+  local f="$CLAUDE_KEYS/key-$1.conf"
+  mkdir -p "$CLAUDE_KEYS" && chmod 700 "$CLAUDE_KEYS"
+  ( umask 077
+    { printf 'provider=%s\nmodel=%s\n' "$2" "$3"; [ -z "$4" ] || printf 'context=%s\n' "$4"; } > "$f.$$" )
+  mv -f "$f.$$" "$f"
+}
+
+claude_key_have_provider() { # name -> the provider that kingo keeps for it ("": none, or one that kingo cannot read)
+  local p
+  p=$(claude_key_conf_get "$1" provider)
+  if [ -n "$p" ]; then
+    p=$(claude_key_provider "$p" 2>/dev/null) || p=""
+  elif [ -s "$CLAUDE_KEYS/openrouter-$1.key" ]; then
+    p=openrouter   # a key of before 1.4.26, or one without --model
+  fi
+  printf '%s' "$p"
 }
 
 # The settings of Claude Code for the key of a name, as a filter: the settings of a folder of one's own come in, and
@@ -1276,7 +1317,7 @@ anthropic-version: 2023-06-01")
                  die "Anthropic did not accept the key \"$1\", and kingo deleted it. Check it on platform.claude.com (API keys). Then start again with --key $1: kingo asks for the key." ;;
         # A key that is not made for one workspace needs the workspace in every request, which Claude Code does not
         # send: Anthropic answers 400 (Authentication, "Select a workspace").
-        400) warn "Anthropic did not take the check of the key \"$1\" (HTTP 400). If Claude Code shows an error about anthropic-workspace-id: make a key for one workspace on platform.claude.com (API keys), delete $f, and start again." ;;
+        400) warn "Anthropic did not take the check of the key \"$1\" (HTTP 400). If Claude Code shows an error about anthropic-workspace-id: make a key for one workspace on platform.claude.com (API keys), and put it in the place of this one:  ./kingo claude key add $1" ;;
         *) warn "could not check the Anthropic API key \"$1\" (HTTP $code) — starting anyway" ;;
       esac ;;
     ollama)
@@ -1296,6 +1337,288 @@ anthropic-version: 2023-06-01")
         esac
       fi ;;
   esac
+}
+
+# ./kingo claude key add|list|remove: the keys for Claude Code's model, apart from a start (Frank, 19 Nov 2026: "dann
+# kann man key verwaltung und project laden trennen"). add keeps what the first start with --key keeps (the key, its
+# provider, its model), and two things that only add takes: how many tokens the model holds (--context), for a model
+# that holds less than the 200000 that kingo tells Claude Code, and the certificate of a provider that signs with its
+# own (--ca). add --first puts another OpenRouter key in the place of the one without a name ("den ersten
+# OpenRouter-Schlüssel austauschen"). list shows the names and never a key. remove deletes a name with all that kingo
+# keeps and wrote for it. Nothing here starts Claude Code, needs the pod, or touches the key of another name.
+claude_key_help() {
+  echo "kingo claude key add <name> [--provider <provider>] [--model <ID>] [--context <tokens>] [--ca <file>]"
+  echo "  what the first start with --key <name> does, without starting Claude Code: kingo asks for the key and keeps"
+  echo "  it with its provider and its model. Then:  kc <folder> --key <name>"
+  echo "  --context <tokens>: how many tokens the model holds, when it holds less than 200000 (not for anthropic)."
+  echo "  --ca <file>: the certificate of a provider that signs with its own, for an address (https://...)."
+  echo "  ./kingo claude key add work --provider https://llm.example.com --model big-model --context 131072"
+  echo "  For a name that is there, add changes the model, the context or the certificate, and asks whether"
+  echo "  another key shall take the place of its key (Enter keeps the key)."
+  echo "kingo claude key add --first  another OpenRouter key in the place of your first one, the key without a name."
+  echo "  The first key stays until OpenRouter has accepted the new one."
+  echo "kingo claude key list  your names, each with its provider and its model. kingo never shows a key."
+  echo "kingo claude key remove <name>  deletes the key of that name from this laptop, with its provider and model."
+}
+
+claude_key_cmd() {
+  local sub=${1:-help}
+  [ $# = 0 ] || shift
+  case "$sub" in
+    add)    claude_key_add "$@" ;;
+    list)   [ $# = 0 ] || die "kingo claude key list takes nothing after it."
+            claude_key_list ;;
+    remove) claude_key_remove "$@" ;;
+    help|-h|--help) claude_key_help ;;
+    *) die "kingo claude key takes add, list or remove, not: $sub. See:  ./kingo claude key help" ;;
+  esac
+}
+
+claude_key_names() { # the names that kingo keeps a key or a provider for, one on each line, sorted
+  local f n
+  [ -d "$CLAUDE_KEYS" ] || return 0
+  for f in "$CLAUDE_KEYS"/openrouter-*.key "$CLAUDE_KEYS"/key-*.key "$CLAUDE_KEYS"/key-*.conf; do
+    [ -e "$f" ] || continue
+    n=${f##*/}
+    # one prefix and one ending, by the kind of file: a name may itself start with key- or openrouter-
+    case "$n" in
+      openrouter-*.key) n=${n#openrouter-}; n=${n%.key} ;;
+      key-*.key)        n=${n#key-}; n=${n%.key} ;;
+      key-*.conf)       n=${n#key-}; n=${n%.conf} ;;
+    esac
+    if claude_key_name_ok "$n"; then printf '%s\n' "$n"; fi
+  done | sort -u
+}
+
+claude_key_line() { # name [provider] -> one line that says what kingo keeps under it; never the key
+  local p=${2:-} m c what
+  [ -n "$p" ] || p=$(claude_key_have_provider "$1")
+  m=$(claude_key_conf_get "$1" model); c=$(claude_key_conf_get "$1" context)
+  if [ -z "$p" ]; then
+    printf '  %-10s %s\n' "$1" "kingo cannot read its provider. Delete it and add it again:  ./kingo claude key remove $1"
+    return 0
+  fi
+  what=$(claude_key_who "$p")
+  if [ -n "$m" ]; then what="$what, model $m"
+  elif [ "$p" = anthropic ]; then what="$what, the model that Claude Code picks"
+  else what="$what, the course's model"
+  fi
+  if [ -n "$c" ] && [ "$p" != anthropic ]; then what="$what, $c tokens of context"; fi
+  case "$p" in https://*) [ ! -s "$CLAUDE_KEYS/key-$1.crt" ] || what="$what, with your certificate" ;; esac
+  if [ "$p" = ollama ]; then what="$what (no key)"
+  elif [ ! -s "$(claude_key_file "$1" "$p")" ]; then what="$what. No key yet: the next start with --key $1 asks for it"
+  fi
+  printf '  %-10s %s\n' "$1" "$what"
+}
+
+claude_key_list() {
+  local n names
+  echo "Your keys for Claude Code's model. kingo keeps them in $CLAUDE_KEYS, outside the sandbox, and never shows one."
+  if [ -s "$CLAUDE_KEYS/openrouter.key" ]; then
+    printf '  %-10s %s\n' "(first)" "OpenRouter, the course's model. It has no name: every start without --key uses it"
+  else
+    printf '  %-10s %s\n' "(first)" "OpenRouter, the course's model. Not there yet: a start without --key asks for it"
+  fi
+  names=$(claude_key_names)
+  if [ -z "$names" ]; then
+    echo "No key with a name yet. Add one:  ./kingo claude key add <name>   (more: ./kingo claude key help)"
+    return 0
+  fi
+  for n in $names; do claude_key_line "$n"; done
+  echo "Start Claude Code with one:  kc <folder> --key <name>"
+}
+
+claude_key_first() { # another OpenRouter key in the place of the one without a name; the old one stays until the new one is accepted
+  local k code had=0
+  [ ! -s "$CLAUDE_KEYS/openrouter.key" ] || had=1
+  [ -t 0 ] || die "kingo claude key add --first needs your new OpenRouter key. Run it in a terminal, so that it can ask for the key."
+  echo "Your first OpenRouter key is the key without a name: every start without --key uses it."
+  read -r -s -p "Paste the new OpenRouter key (it is not shown): " k; echo
+  [ -n "$k" ] || die "no key given — your first key is as it was"
+  code=$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $k")
+  case "$code" in
+    200) ;;
+    401|403) die "OpenRouter did not accept the new key, so your first key is as it was. Check the new key on openrouter.ai (Settings, Keys)." ;;
+    *) die "kingo could not check the new key (HTTP $code), so your first key is as it was. Try again when you are online." ;;
+  esac
+  claude_save_key openrouter "$k"
+  if [ "$had" = 1 ]; then
+    echo "The new key is your first OpenRouter key now. The old one is gone from this laptop; on openrouter.ai it is as it was."
+  else
+    echo "kingo keeps it as your first OpenRouter key, in $CLAUDE_KEYS/openrouter.key, outside the sandbox."
+  fi
+  echo "Your flows in Langflow keep the key that they have."
+}
+
+# Another key in the place of the one that a name has: the provider, the model, the context and the certificate stay.
+# As for the first key: the old key stays until the provider has accepted the new one, where kingo can ask it.
+claude_key_replace() { # name provider file
+  local k code
+  read -r -s -p "The name \"$1\" has a key. Paste another key to put it in its place, or press Enter to keep the key (it is not shown): " k; echo
+  if [ -z "$k" ]; then echo "The key is as it was."; return 0; fi
+  case "$2" in
+    openrouter)
+      code=$(claude_http https://openrouter.ai/api/v1/key "Authorization: Bearer $k")
+      case "$code" in
+        200) ;;
+        401|403) die "OpenRouter did not accept the new key, so the key \"$1\" is as it was. Check the new key on openrouter.ai (Settings, Keys)." ;;
+        *) die "kingo could not check the new key (HTTP $code), so the key \"$1\" is as it was. Try again when you are online." ;;
+      esac ;;
+    anthropic)
+      # two headers, one on each line: curl reads them from stdin (claude_http)
+      code=$(claude_http https://api.anthropic.com/v1/models "Authorization: Bearer $k
+anthropic-version: 2023-06-01")
+      case "$code" in
+        200) ;;
+        401|403) die "Anthropic did not accept the new key, so the key \"$1\" is as it was. Check the new key on platform.claude.com (API keys)." ;;
+        400) die "Anthropic did not take the check of the new key (HTTP 400): it is probably not made for one workspace. The key \"$1\" is as it was. Make a key for one workspace on platform.claude.com (API keys)." ;;
+        *) die "kingo could not check the new key (HTTP $code), so the key \"$1\" is as it was. Try again when you are online." ;;
+      esac ;;
+  esac
+  ( umask 077; printf '%s' "$k" > "$3" )
+  echo "The new key is in its place. The old one is gone from this laptop; at the provider it is as it was."
+}
+
+claude_key_add() {
+  local name="" first=0 a more=""
+  local prov_arg="" prov_given=0 model_arg="" model_given=0 ctx_arg="" ctx_given=0 ca_arg="" ca_given=0
+  for a in "$@"; do
+    if [ -n "$more" ]; then
+      case "$more" in
+        provider) prov_arg=$a ;;
+        model)    model_arg=$a ;;
+        context)  ctx_arg=$a ;;
+        ca)       ca_arg=$a ;;
+      esac
+      more=""; continue
+    fi
+    case "$a" in
+      --first)      first=1 ;;
+      --provider)   more=provider; prov_given=1 ;;
+      --provider=*) prov_arg=${a#--provider=}; prov_given=1 ;;
+      --model)      more=model; model_given=1 ;;
+      --model=*)    model_arg=${a#--model=}; model_given=1 ;;
+      --context)    more=context; ctx_given=1 ;;
+      --context=*)  ctx_arg=${a#--context=}; ctx_given=1 ;;
+      --ca)         more=ca; ca_given=1 ;;
+      --ca=*)       ca_arg=${a#--ca=}; ca_given=1 ;;
+      -*)           die "kingo claude key add does not take $a. See:  ./kingo claude key help" ;;
+      *)            [ -z "$name" ] || die "kingo claude key add takes one name, not two: $name and $a"
+                    name=$a ;;
+    esac
+  done
+  case "$more" in
+    "") ;;
+    provider) die "kingo claude key add --provider needs a provider: anthropic, ollama, openrouter, or an address (https://...)" ;;
+    model)    die "kingo claude key add --model needs the ID of a model, for example:  --model claude-sonnet-5-5" ;;
+    context)  die "kingo claude key add --context needs a number of tokens, for example:  --context 131072" ;;
+    ca)       die "kingo claude key add --ca needs the file of a certificate, for example:  --ca ~/Downloads/root.crt" ;;
+  esac
+  if [ "$first" = 1 ]; then
+    [ -z "$name" ] && [ "$prov_given$model_given$ctx_given$ca_given" = 0000 ] \
+      || die "kingo claude key add --first takes nothing else: it puts another OpenRouter key in the place of your first one, the key without a name."
+    claude_key_first
+    return
+  fi
+  [ -n "$name" ] || die "kingo claude key add needs a name for the key, for example:  ./kingo claude key add thesis"
+  claude_key_name_ok "$name" \
+    || die "kingo claude key add takes a name of small letters, digits and - (not at the start or the end), at most 32 letters, for example:  thesis. Not: $name"
+
+  # The provider, the model and the context: what this line says, or what kingo keeps for the name. A name stays
+  # with its provider once it has a key, as at a start.
+  local have_prov prov have_model="" have_ctx="" model="" ctx="" crt="$CLAUDE_KEYS/key-$name.crt" f
+  have_prov=$(claude_key_have_provider "$name")
+  if [ "$prov_given" = 1 ]; then
+    prov=$(claude_key_provider "$prov_arg") || exit 1
+    if [ -n "$have_prov" ] && [ "$have_prov" != "$prov" ] && [ -s "$(claude_key_file "$name" "$have_prov")" ]; then
+      die "The key \"$name\" is for $(claude_key_who "$have_prov"), not for $(claude_key_who "$prov"). Take another name for the other provider. Or delete this name first:  ./kingo claude key remove $name"
+    fi
+  else
+    prov=${have_prov:-openrouter}
+  fi
+  if [ "$prov" = "$have_prov" ]; then
+    have_model=$(claude_key_conf_get "$name" model); have_ctx=$(claude_key_conf_get "$name" context)
+  fi
+  if [ "$model_given" = 1 ]; then
+    claude_key_model_ok "$model_arg" \
+      || die "kingo claude key add --model takes the ID of a model: letters, digits and . _ : / @ - (at most 100), for example  --model claude-sonnet-5-5. Not: $model_arg"
+    model=$model_arg
+  elif [ -n "$have_model" ] && claude_key_model_ok "$have_model"; then
+    model=$have_model
+  fi
+  case "$prov" in
+    openrouter|anthropic) ;;
+    *) [ -n "$model" ] || die "kingo claude key add $name --provider $prov needs a model too: --model and the ID that the provider names, for example  --model qwen3.5" ;;
+  esac
+  if [ "$ctx_given" = 1 ]; then
+    [ "$prov" != anthropic ] || die "With Anthropic's API, Claude Code knows how many tokens its models hold: --context is for the other providers."
+    claude_key_context_ok "$ctx_arg" \
+      || die "kingo claude key add --context takes a number of tokens from 1000 to 10000000, for example  --context 131072. Not: $ctx_arg"
+    ctx=$ctx_arg
+  elif [ -n "$have_ctx" ] && [ "$prov" != anthropic ] && claude_key_context_ok "$have_ctx"; then
+    ctx=$have_ctx
+  fi
+  if [ "$ca_given" = 1 ]; then
+    case "$prov" in
+      https://*) ;;
+      *) die "kingo claude key add --ca is for a provider by its address (https://...), whose certificate your laptop does not know. $(claude_key_who "$prov") needs none." ;;
+    esac
+    case "$ca_arg" in "~/"*) ca_arg="$HOME/${ca_arg#\~/}" ;; esac   # --ca=~/root.crt: the shell leaves this ~ as it is
+    { [ -f "$ca_arg" ] && [ -r "$ca_arg" ]; } || die "kingo claude key add --ca: there is no file that kingo can read at $ca_arg"
+    [ "$(($(wc -c < "$ca_arg")))" -le 200000 ] || die "kingo claude key add --ca: $ca_arg is too large for a certificate (more than 200 KB)."
+    grep -q -e '-----BEGIN CERTIFICATE-----' "$ca_arg" \
+      || die "kingo claude key add --ca takes a certificate as text (PEM): a file with the line -----BEGIN CERTIFICATE-----. Not: $ca_arg"
+    ! grep -q -e 'PRIVATE KEY-----' "$ca_arg" \
+      || die "kingo claude key add --ca: $ca_arg holds a private key. Give the certificate alone."
+  fi
+
+  mkdir -p "$CLAUDE_KEYS" && chmod 700 "$CLAUDE_KEYS"
+  if [ "$ca_given" = 1 ]; then
+    ( umask 077; cat "$ca_arg" > "$crt.$$" )
+    mv -f "$crt.$$" "$crt"
+  elif [ "$prov" != "$have_prov" ]; then
+    rm -f "$crt"   # the certificate of another address is not this one's
+  fi
+  # kept as a start with --key keeps it; an OpenRouter key with the course's model and no context needs no file
+  if [ "$prov" != openrouter ] || [ -n "$model" ] || [ -n "$ctx" ]; then
+    claude_key_conf_write "$name" "$prov" "$model" "$ctx"
+  fi
+  f=$(claude_key_file "$name" "$prov")
+  if [ "${KINGO_CLAUDE_DRY_RUN:-}" = 1 ]; then
+    echo "dry run — kingo asks for no key and checks none"
+  elif [ -s "$f" ] && [ "$prov" != ollama ] && [ -t 0 ]; then
+    claude_key_replace "$name" "$prov" "$f"   # the name has a key: another one in its place, or Enter to keep it
+  else
+    claude_named_key "$name" "$prov"   # asks for the key if there is none, and checks it where the provider can
+  fi
+  echo "kingo keeps under this name:"
+  claude_key_line "$name" "$prov"
+  echo "Start Claude Code with it:  kc <folder> --key $name   (without the short commands, in kingo-pod: ./kingo claude --in <folder> --key $name)"
+}
+
+claude_key_remove() {
+  [ $# = 1 ] || die "kingo claude key remove takes one name, for example:  ./kingo claude key remove thesis"
+  local name=$1 f any=0 rest cfg="$HOME/.kingo-claude" prof="${XDG_CONFIG_HOME:-$HOME/.config}/nono/profiles"
+  [ "$name" != --first ] \
+    || die "kingo claude key remove takes a name. For your first OpenRouter key, put another one in its place:  ./kingo claude key add --first"
+  claude_key_name_ok "$name" \
+    || die "kingo claude key remove takes the name of a key: small letters, digits and -. Your names:  ./kingo claude key list"
+  for f in "$CLAUDE_KEYS/openrouter-$name.key" "$CLAUDE_KEYS/key-$name.key" "$CLAUDE_KEYS/key-$name.conf" "$CLAUDE_KEYS/key-$name.crt"; do
+    [ ! -e "$f" ] || any=1
+  done
+  [ "$any" = 1 ] || die "There is no key with the name $name. Your names:  ./kingo claude key list"
+  rm -f "$CLAUDE_KEYS/openrouter-$name.key" "$CLAUDE_KEYS/key-$name.key" "$CLAUDE_KEYS/key-$name.conf" "$CLAUDE_KEYS/key-$name.crt"
+  # What kingo wrote for the starts with this name: the settings and the profiles. Never those of another name:
+  # the names are whole, and after the name of the settings of a folder come only the digits of the folder's sum.
+  rm -f "$cfg/settings-key-$name.json" "$prof/kingo-claude-key-course-$name.json" \
+        "$prof/kingo-claude-key-base-$name.json" "$prof/kingo-claude-key-mine-$name.json"
+  for f in "$cfg/settings-in-key-$name"-*.json; do
+    [ -e "$f" ] || continue
+    rest=${f##*/}; rest=${rest#"settings-in-key-$name-"}; rest=${rest%.json}
+    case "$rest" in ""|*[!0123456789]*) continue ;; esac
+    rm -f "$f"
+  done
+  echo "kingo deleted the key \"$name\" from this laptop, with its provider and its model. At the provider, the key is as it was."
 }
 
 claude_make_langflow_key() { # Langflow runs with auto-login: a token, then a key named "claude"
@@ -2050,6 +2373,7 @@ cmd_claude() {
   case "${1:-}" in
     browser) claude_browser_cmd; return ;;
     nono)    claude_nono_cmd; return ;;
+    key)     shift; claude_key_cmd "$@"; return ;;
   esac
   case "${1:-}" in
     help|-h|--help)
@@ -2081,7 +2405,8 @@ cmd_claude() {
       echo "kingo claude --key <name>  Claude Code's model is paid with another OpenRouter key of yours, for this start:"
       echo "  kc ~/projects/thesis --key thesis. The first start with a name asks for the key and keeps it in"
       echo "  $CLAUDE_KEYS/openrouter-<name>.key, outside the sandbox. On openrouter.ai, each key has its own limit and costs."
-      echo "  Names: small letters, digits and - (not at the start or the end). Another key for a name: delete its file."
+      echo "  Names: small letters, digits and - (not at the start or the end). Another key for a name:"
+      echo "  ./kingo claude key add <name> asks for it."
       echo "  Not with --login."
       echo "kingo claude --key <name> --provider <provider> [--model <ID>]  the key of that name is for another provider:"
       echo "  anthropic (Anthropic's API, with a key for one workspace), ollama (a model on this laptop, no key), openrouter, or the address that a provider"
@@ -2090,6 +2415,8 @@ cmd_claude() {
       echo "  kc ~/projects/thesis --key thesis --provider anthropic --model claude-sonnet-5-5"
       echo "  kingo keeps the provider and the model with the name ($CLAUDE_KEYS/key-<name>.conf, the key in key-<name>.key):"
       echo "  the next start needs only --key <name>. --model again changes the model. Without --key, --model is Claude Code's own."
+      echo "  An address that ends in /v1 or /v1/messages: kingo leaves the ending out, as Claude Code adds /v1/messages itself."
+      claude_key_help
       echo "Your own additions to the sandbox of the course: copy setup/claude/my-nono-profile.example.json to"
       echo "  $KINGO_DIR/my-nono-profile.json and change it. Claude can read that file and not change it."
       echo "kingo claude --login [--in <folder>] [claude options]  with your Claude subscription in place of OpenRouter:"
@@ -2138,6 +2465,9 @@ cmd_claude() {
       --provider=*) prov_arg=${a#--provider=}; prov_given=1; continue ;;
       --model)      if [ "$with_key" = 1 ]; then more=model; model_given=1; continue; fi ;;
       --model=*)    if [ "$with_key" = 1 ]; then model_arg=${a#--model=}; model_given=1; continue; fi ;;
+      # next to --key only, as --model: without --key, they are Claude Code's to take or to refuse, as before
+      --context|--context=*|--ca|--ca=*)
+        [ "$with_key" = 0 ] || die "kingo claude: ${a%%=*} belongs to the key, not to one start. Say it once:  ./kingo claude key add <name> ${a%%=*} ...  Then start with --key <name>." ;;
     esac
     keep+=("$a")
   done
@@ -2163,7 +2493,7 @@ cmd_claude() {
     || die "kingo claude --provider goes with --key <name>, the name under which kingo keeps the key, the provider and the model. For example:  kc ~/projects/thesis --key thesis --provider anthropic"
   # The provider and the model of the key: what this start says, or what an earlier start with this name said
   # (key-<name>.conf). A name stays with its provider once it has a key: another provider gets another name.
-  local key_prov="" key_model="" key_conf="" have_prov="" have_model=""
+  local key_prov="" key_model="" key_conf="" have_prov="" have_model="" key_ctx="" have_ctx=""
   if [ "$key_given" = 1 ]; then
     key_conf="$CLAUDE_KEYS/key-$key_name.conf"
     have_prov=$(claude_key_conf_get "$key_name" provider); have_model=$(claude_key_conf_get "$key_name" model)
@@ -2178,7 +2508,7 @@ cmd_claude() {
     if [ "$prov_given" = 1 ]; then
       key_prov=$(claude_key_provider "$prov_arg") || exit 1
       if [ -n "$have_prov" ] && [ "$have_prov" != "$key_prov" ] && [ -s "$(claude_key_file "$key_name" "$have_prov")" ]; then
-        die "The key \"$key_name\" is for $(claude_key_who "$have_prov"), not for $(claude_key_who "$key_prov"). Take another name for the other provider. Or delete the key of this name:  rm $(claude_key_file "$key_name" "$have_prov")"
+        die "The key \"$key_name\" is for $(claude_key_who "$have_prov"), not for $(claude_key_who "$key_prov"). Take another name for the other provider. Or delete this name first:  ./kingo claude key remove $key_name"
       fi
     else
       key_prov=${have_prov:-openrouter}
@@ -2197,12 +2527,22 @@ cmd_claude() {
       openrouter|anthropic) ;;
       *) [ -n "$key_model" ] || die "kingo claude --key $key_name --provider $key_prov needs a model too: --model and the ID that the provider names, for example  --model qwen3.5" ;;
     esac
-    # kept for the next start; an OpenRouter key with the course's model needs no file
-    if { [ "$key_prov" != openrouter ] || [ -n "$key_model" ]; } \
+    # How many tokens the model holds, when ./kingo claude key add said so (--context): kept with the name like the
+    # model, and not that of another provider. The certificate of another address is not this one's either.
+    have_ctx=$(claude_key_conf_get "$key_name" context)
+    if [ "$key_prov" != "$have_prov" ]; then
+      have_ctx=""
+      rm -f "$CLAUDE_KEYS/key-$key_name.crt"
+    fi
+    if [ -n "$have_ctx" ] && [ "$key_prov" != anthropic ]; then
+      claude_key_context_ok "$have_ctx" \
+        || die "$key_conf names a context that kingo does not take. Say it again:  ./kingo claude key add $key_name --context <tokens>"
+      key_ctx=$have_ctx
+    fi
+    # kept for the next start; an OpenRouter key with the course's model and no context needs no file
+    if { [ "$key_prov" != openrouter ] || [ -n "$key_model" ] || [ -n "$key_ctx" ]; } \
        && { [ "$key_prov" != "$(claude_key_conf_get "$key_name" provider)" ] || [ "$key_model" != "$(claude_key_conf_get "$key_name" model)" ]; }; then
-      mkdir -p "$CLAUDE_KEYS" && chmod 700 "$CLAUDE_KEYS"
-      ( umask 077; printf 'provider=%s\nmodel=%s\n' "$key_prov" "$key_model" > "$key_conf.$$" )
-      mv -f "$key_conf.$$" "$key_conf"
+      claude_key_conf_write "$key_name" "$key_prov" "$key_model" "$key_ctx"
     fi
   fi
   if [ "$take" = 2 ]; then
@@ -2434,6 +2774,14 @@ cmd_claude() {
       *) die "kingo claude --key does not go with the profile $profile." ;;   # --login is refused above
     esac
     key_json=$(printf '%s' "$key_file" | sed 's/[\\"]/\\&/g')
+    # A provider that signs with a certificate of its own (./kingo claude key add <name> --ca <file>): nono's proxy
+    # makes the connection, so it is nono that must trust it. tls_ca adds this one certificate to those of the
+    # system, for this route only (nono's guide, "tls_ca"). For an address with https only.
+    local key_ca="" key_ca_line=""
+    case "$key_prov" in
+      https://*) [ ! -s "$CLAUDE_KEYS/key-$key_name.crt" ] || key_ca="$CLAUDE_KEYS/key-$key_name.crt" ;;
+    esac
+    [ -z "$key_ca" ] || key_ca_line=$(printf ',\n        "tls_ca": "%s"' "$(printf '%s' "$key_ca" | sed 's/[\\"]/\\&/g')")
     cat > "$prof/$key_prof.json.$$" <<EOF
 {
   "extends": "$profile",
@@ -2449,7 +2797,7 @@ cmd_claude() {
         "credential_key": "file://$key_json",
         "env_var": "ANTHROPIC_AUTH_TOKEN",
         "inject_header": "Authorization",
-        "credential_format": "Bearer {}"
+        "credential_format": "Bearer {}"$key_ca_line
       }
     }
   }
@@ -2472,6 +2820,8 @@ EOF
     elif [ "$key_prov" = anthropic ]; then
       echo "The model: Claude Code picks one of Anthropic's; /model in Claude Code changes it."
     fi
+    [ -z "$key_ctx" ] || echo "The model holds $key_ctx tokens, as you said (./kingo claude key add $key_name --context changes it)."
+    [ -z "$key_ca" ] || echo "For this address, kingo trusts the certificate that you gave: $key_ca"
   fi
   # nono grants only folders that exist: also those of the browser, Node.js and playwright-core, when a download failed.
   mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude" \
@@ -2608,7 +2958,9 @@ EOF
   # warning and makes Claude Code compact a long session at 200k. The model itself takes 1m tokens (OpenRouter).
   # Not with --login: Claude Code knows Anthropic's models.
   # Nor with a key for Anthropic's API (--key <name> --provider anthropic).
-  [ "$login" = 1 ] || [ "$key_prov" = anthropic ] || envs+=(CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000)
+  # A key whose model holds another number of tokens says so (./kingo claude key add <name> --context <tokens>): a
+  # model that holds less than 200k would get more than it takes before Claude Code compacts (Frank, 19 Nov 2026).
+  [ "$login" = 1 ] || [ "$key_prov" = anthropic ] || envs+=("CLAUDE_CODE_MAX_CONTEXT_TOKENS=${key_ctx:-200000}")
   # PostgreSQL for psql, for the course only (the base profile would not let these variables through either).
   [ -n "$in_dir" ] || envs+=(PGHOST=127.0.0.1 "PGPORT=$P_POSTGRES" "PGUSER=$KINGO_USER" "PGPASSWORD=$KINGO_PASSWORD" PGDATABASE=classroom)
 
@@ -2621,6 +2973,7 @@ EOF
     echo "dry run — would start in $dir:"
     echo "  nono run${quiet[@]+ ${quiet[*]}} --profile $profile --allow-cwd --read $reads${more_nono[@]+ ${more_nono[*]}} -- $*"
     echo "  variables: $(printf '%s ' "${envs[@]%%=*}")"
+    for a in "${envs[@]}"; do case "$a" in CLAUDE_CODE_MAX_CONTEXT_TOKENS=*) echo "  context: $a" ;; esac; done
     echo "  ports: KINGO_DEV_PORT=$dev_port KINGO_POD_PORTS=$(claude_pod_ports)"
     return
   fi

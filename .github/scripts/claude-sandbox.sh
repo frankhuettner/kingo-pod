@@ -1472,6 +1472,171 @@ PYTHON
   fi
   rm -f "$kd"/key-api.* "$kd"/key-gw.* "$kd"/key-local.*
   ok "Ollama: the route goes to 127.0.0.1:11434 without asking for a key, and kingo stops when Ollama does not answer"
+
+  # ./kingo claude key add|list|remove (Frank, 19 Nov 2026: "dann kann man key verwaltung und project laden trennen"):
+  # the keys apart from a start. Checked here: what the three refuse; what add keeps (the address without /v1, the
+  # context, the certificate) and what a start makes of it; that list shows no key; that add puts another key in the
+  # place of the first one, and of a name's, only when the provider accepts it (typed through a terminal of its own,
+  # with_terminal.py); that remove takes the whole name and no other; and one turn of the real Claude Code to a
+  # provider that signs with a certificate of its own.
+  say "kingo claude key: add, list, remove; the context of a model; a certificate of the provider's own"
+  local tls="$CFG/tmp/tls" log5="$CFG/tmp/model-tls.jsonl" set5 first_before i
+  kk() { ( cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude key "$@" 2>&1 ); }
+  mkdir -p "$tls"
+  # a root, and a certificate for localhost that it signs: what a server at work or in a lab has
+  { openssl req -x509 -newkey rsa:2048 -nodes -keyout "$tls/root.key" -out "$tls/root.crt" -subj "/CN=kingo CI root" -days 2 \
+    && openssl req -newkey rsa:2048 -nodes -keyout "$tls/server.key" -out "$tls/server.csr" -subj "/CN=localhost" \
+    && printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n' > "$tls/server.ext" \
+    && openssl x509 -req -in "$tls/server.csr" -CA "$tls/root.crt" -CAkey "$tls/root.key" -CAcreateserial -out "$tls/server.crt" -days 2 -extfile "$tls/server.ext"
+  } > "$tls/openssl.log" 2>&1 || { show "$(cat "$tls/openssl.log")" 8; fail "openssl did not make the certificates of the stand-in"; }
+  cat "$tls/root.crt" "$tls/root.key" > "$tls/both.pem"
+  printf 'no certificate\n' > "$tls/text.txt"
+
+  refuses "takes add, list or remove" key bogus
+  refuses "needs a name for the key" key add
+  refuses "takes a name of small letters" key add Thesis
+  refuses "takes one name, not two" key add a b
+  refuses "does not take --in" key add a --in "$dir"
+  refuses "needs a model too" key add a --provider ollama
+  refuses "takes a number of tokens from 1000 to 10000000" key add a --context 64
+  refuses "takes a number of tokens from 1000 to 10000000" key add a --context 131072k
+  refuses "--context is for the other providers" key add a --provider anthropic --context 100000
+  refuses "is for a provider by its address" key add a --provider anthropic --ca "$tls/root.crt"
+  refuses "holds a private key" key add a --provider https://llm.example.com --model m --ca "$tls/both.pem"
+  refuses "takes a certificate as text (PEM)" key add a --provider https://llm.example.com --model m --ca "$tls/text.txt"
+  refuses "there is no file that kingo can read" key add a --provider https://llm.example.com --model m --ca "$tls/none.crt"
+  refuses "takes nothing else" key add --first a
+  refuses "takes a name. For your first OpenRouter key" key remove --first
+  refuses "There is no key with the name nothere" key remove nothere
+  refuses "belongs to the key, not to one start" --in "$dir" --key a --context 5000
+  refuses "belongs to the key, not to one start" --key a --ca=x
+  ls "$kd"/key-a.* > /dev/null 2>&1 && fail "a line that kingo claude key add refused left a file for the name"
+  ok "key add, list and remove refuse: an unknown word, no name or two, a context that is no number of tokens, a certificate for a provider that needs none, with a private key, or that is none; a start refuses --context and --ca"
+
+  # add: the address loses /v1, and kingo keeps the provider, the model, the context and the certificate
+  out=$(kk add spark --provider "https://localhost:$MODEL_PORT/v1/" --model spark/model --context 131072 --ca "$tls/root.crt") \
+    || { show "$out" 6; fail "kingo claude key add did not take a provider by its address, with a context and a certificate"; }
+  has "$out" "kingo left out /v1 at the end of the address" || { show "$out" 6; fail "kingo claude key add does not say that it left out /v1"; }
+  [ "$(cat "$kd/key-spark.conf")" = "$(printf 'provider=https://localhost:%s\nmodel=spark/model\ncontext=131072' "$MODEL_PORT")" ] \
+    || { show "$(cat "$kd/key-spark.conf")" 4; fail "kingo claude key add did not keep the address without /v1, the model and the context"; }
+  [ "$(stat -c %a "$kd/key-spark.conf")" = 600 ] && [ "$(stat -c %a "$kd/key-spark.crt")" = 600 ] || fail "what kingo claude key add keeps is readable for others"
+  cmp -s "$tls/root.crt" "$kd/key-spark.crt" || fail "kingo claude key add did not keep the certificate as it was given"
+  out=$(kk add spark2 --provider "https://localhost:$MODEL_PORT/v1/messages" --model m) || { show "$out" 4; fail "kingo claude key add did not take an address that ends in /v1/messages"; }
+  grep -qx "provider=https://localhost:$MODEL_PORT" "$kd/key-spark2.conf" || fail "kingo claude key add did not leave out /v1/messages at the end of an address"
+  ( umask 077; printf 'spark-key' > "$kd/key-spark.key" )   # the dry run asks for no key
+  out=$(kk add spark --context 100000) || { show "$out" 4; fail "kingo claude key add did not change the context of a name that is there"; }
+  [ "$(cat "$kd/key-spark.conf")" = "$(printf 'provider=https://localhost:%s\nmodel=spark/model\ncontext=100000' "$MODEL_PORT")" ] || fail "a new context changed more than the context"
+  [ -s "$kd/key-spark.crt" ] && [ "$(cat "$kd/key-spark.key")" = spark-key ] || fail "a new context took the certificate or the key of the name away"
+  out=$(kk add spark --context 131072) || fail "kingo claude key add did not set the context again"
+  if out=$(kk add spark --provider anthropic); then show "$out" 3; fail "kingo claude key add gave a name that has a key another provider"; fi
+  has "$out" "Or delete this name first:  ./kingo claude key remove spark" || { show "$out" 3; fail "for a name of another provider, kingo does not name key remove"; }
+  ok "key add keeps the address without /v1, the model, the context and the certificate, for the owner only; a new context changes nothing else"
+
+  # list: every name with what kingo keeps for it, and no key
+  out=$(kk list) || { show "$out" 6; fail "kingo claude key list failed"; }
+  has "$out" "(first)    OpenRouter, the course's model. It has no name" || { show "$out" 8; fail "kingo claude key list does not show the first key"; }
+  has "$out" "spark      https://localhost:$MODEL_PORT, model spark/model, 131072 tokens of context, with your certificate" || { show "$out" 8; fail "kingo claude key list does not say what kingo keeps for a name"; }
+  has "$out" "spark2     https://localhost:$MODEL_PORT, model m. No key yet" || { show "$out" 8; fail "kingo claude key list does not say that a name has no key yet"; }
+  if has "$out" spark-key || has "$out" "$(cat "$kd/openrouter.key")"; then fail "kingo claude key list shows a key"; fi
+  show "$out" 5
+  ok "key list shows each name with its provider, model, context and certificate, and never a key"
+
+  # a start with that name: the context goes to Claude Code in place of the 200000, and nono gets the certificate
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key spark) || fail "kc <folder> --key spark did not get as far as the start of Claude Code"
+  has "$dry" "The model holds 131072 tokens, as you said" || { show "$dry" 6; fail "a start does not say the context of the key"; }
+  has "$dry" "context: CLAUDE_CODE_MAX_CONTEXT_TOKENS=131072" || { show "$dry" 6; fail "the context of the key does not go to Claude Code"; }
+  has "$dry" "kingo trusts the certificate that you gave: $kd/key-spark.crt" || { show "$dry" 6; fail "a start does not say that kingo trusts the certificate of the key"; }
+  grep -q "\"tls_ca\": \"$kd/key-spark.crt\"" "$pd/kingo-claude-key-base-spark.json" || { show "$(cat "$pd/kingo-claude-key-base-spark.json")" 20; fail "the profile of the key does not give nono the certificate"; }
+  nono profile validate "$pd/kingo-claude-key-base-spark.json" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of a key with a certificate"; }
+  set5=$(printf '%s\n' "$dry" | sed -n 's/.* claude --settings \([^ ]*\) .*/\1/p' | head -n 1)
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key plain) || fail "kc <folder> --key plain did not get as far as the start of Claude Code"
+  has "$dry" "context: CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000" || { show "$dry" 6; fail "without a context of its own, a key no longer gets the 200000"; }
+  if grep -q tls_ca "$pd/kingo-claude-key-base-plain.json"; then fail "a key without a certificate got one in its profile"; fi
+  ok "a start with the name: its context in place of the 200000, and its certificate in the route that nono reads"
+
+  # The real Claude Code to a provider that signs with a certificate of its own: the stand-in, over https, with the
+  # certificate that the root above signed. This machine does not trust it by itself; nono does, from the profile.
+  PROBE='echo "token-in-sandbox=$ANTHROPIC_AUTH_TOKEN"; echo the-command-ended'
+  : > "$log5"
+  /usr/bin/python3 "$HERE/fake_model.py" "$MODEL_PORT" "$log5" "$PROBE" "$tls/server.crt" "$tls/server.key" &
+  MODEL_PID=$!
+  for i in $(seq 1 20); do curl -s -m 2 -o /dev/null --cacert "$tls/root.crt" "https://localhost:$MODEL_PORT/ready" && break; sleep 0.5; done
+  curl -s -m 2 -o /dev/null --cacert "$tls/root.crt" "https://localhost:$MODEL_PORT/ready" || fail "the stand-in with a certificate of its own did not start"
+  if curl -s -m 2 -o /dev/null "https://localhost:$MODEL_PORT/ready"; then fail "this machine trusts the certificate of the stand-in without being given the root: the turn would prove nothing"; fi
+  base_before=("${base[@]}")
+  base=(nono run --silent --profile kingo-claude-key-base-spark --allow-cwd --read "$KINGO_DIR/setup/claude" --)
+  out=$(in_folder "${LOCK[@]}" claude --settings "$set5" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
+  model_stop "$log5"
+  base=("${base_before[@]}")
+  has "$out" KINGO-PROBE-DONE || { show "$out" 40; fail "Claude Code did not finish the turn with a provider that signs with a certificate of its own"; }
+  /usr/bin/python3 - "$log5" <<'PYTHON' || fail "the requests to the provider with its own certificate did not carry the key of the name, or not its model"
+import json, sys
+posts = [e for e in map(json.loads, open(sys.argv[1])) if e.get("method") == "POST" and e.get("kind") not in ("count", "unknown")]
+seen = sorted({(e.get("model"), e.get("auth"), e.get("xkey")) for e in posts})
+for model, auth, xkey in seen:
+    print("         | model %s, Authorization %r, x-api-key %r" % (model, auth, xkey))
+sys.exit(0 if seen == [("spark/model", "Bearer spark-key", "")] else 1)
+PYTHON
+  if has "$(results "$log5")" "spark-key"; then fail "the key for the provider with its own certificate is readable inside the sandbox"; fi
+  ok "a provider with a certificate of its own: nono trusts it from the profile, and the model gets the key and the model of the name"
+
+  # The keys that are typed: kingo asks in a terminal only, so the CI gives it one (with_terminal.py). A curl that
+  # answers the check of a key with the code in a file stands for OpenRouter and Anthropic.
+  local fake2="$CFG/tmp/fake-curl-code" term="$HERE/with_terminal.py"
+  mkdir -p "$fake2"
+  cat > "$fake2/curl" <<'SH'
+#!/bin/sh
+case "$*" in *openrouter.ai/api/v1/key*|*api.anthropic.com/v1/models*) cat > /dev/null; cat "$(dirname "$0")/code"; exit 0 ;; esac
+exec /usr/bin/curl "$@"
+SH
+  chmod +x "$fake2/curl"
+  typed() { # typed <code> <answer> <what comes after kingo claude key>: in a terminal, with the answer typed once
+    local answer=$2; printf '%s' "$1" > "$fake2/code"; shift 2
+    ( cd "$KINGO_DIR" && PATH="$fake2:$PATH" /usr/bin/python3 "$term" "$answer" ./kingo claude key "$@" 2>&1 )
+  }
+  first_before=$(cat "$kd/openrouter.key")
+  if out=$(cd "$KINGO_DIR" && ./kingo claude key add --first < /dev/null 2>&1); then show "$out" 3; fail "kingo claude key add --first went on without a terminal"; fi
+  has "$out" "Run it in a terminal" || { show "$out" 3; fail "without a terminal, key add --first does not say that it must ask for the key"; }
+  for n in 401 000; do
+    if out=$(typed "$n" first-key-new add --first); then show "$out" 4; fail "key add --first took a key that OpenRouter answered with $n"; fi
+    has "$out" "your first key is as it was" || { show "$out" 4; fail "key add --first does not say that the first key is as it was (HTTP $n)"; }
+    [ "$(cat "$kd/openrouter.key")" = "$first_before" ] || fail "key add --first changed the first key, and OpenRouter answered with $n"
+  done
+  out=$(typed 200 first-key-new add --first) || { show "$out" 4; fail "key add --first did not take a key that OpenRouter accepted"; }
+  [ "$(cat "$kd/openrouter.key")" = first-key-new ] && [ "$(stat -c %a "$kd/openrouter.key")" = 600 ] || fail "key add --first did not put the new key in the place of the first one, for the owner only"
+  if has "$out" first-key-new; then show "$out" 4; fail "kingo showed the key that was typed"; fi
+  ( umask 077; printf '%s' "$first_before" > "$kd/openrouter.key" )   # the first key of this run, as it was
+  ok "key add --first: the first key stays until OpenRouter has accepted the new one, and the typed key is not shown"
+
+  out=$(typed 200 web-key-1 add website) || { show "$out" 4; fail "key add did not take a new name with a key that OpenRouter accepted"; }
+  has "$out" "Paste the OpenRouter key \"website\"" || { show "$out" 4; fail "key add does not ask for the key of a new name"; }
+  [ "$(cat "$kd/openrouter-website.key")" = web-key-1 ] || fail "key add did not keep the key of a new name"
+  out=$(typed 200 '' add website) || { show "$out" 4; fail "key add failed for a name that is there, with Enter alone"; }
+  has "$out" "The key is as it was." && [ "$(cat "$kd/openrouter-website.key")" = web-key-1 ] || { show "$out" 4; fail "Enter alone did not keep the key of the name"; }
+  if out=$(typed 403 web-key-2 add website); then show "$out" 4; fail "key add put a key that OpenRouter refused in the place of a name's key"; fi
+  has "$out" "the key \"website\" is as it was" && [ "$(cat "$kd/openrouter-website.key")" = web-key-1 ] || { show "$out" 4; fail "a refused new key changed the key of the name"; }
+  out=$(typed 200 web-key-3 add website --model other/model) || { show "$out" 4; fail "key add did not put an accepted key in the place of a name's key"; }
+  [ "$(cat "$kd/openrouter-website.key")" = web-key-3 ] && [ "$(cat "$kd/key-website.conf")" = "$(printf 'provider=openrouter\nmodel=other/model')" ] || fail "key add did not keep the new key and the new model of the name"
+  out=$(typed 200 api-key-1 add api --provider anthropic --model sonnet) || { show "$out" 4; fail "key add did not take a name for Anthropic's API"; }
+  if out=$(typed 400 api-key-2 add api); then show "$out" 4; fail "key add put a key that Anthropic answered with 400 in the place of a name's key"; fi
+  has "$out" "probably not made for one workspace" && [ "$(cat "$kd/key-api.key")" = api-key-1 ] || { show "$out" 4; fail "a new key for Anthropic that got 400 changed the key of the name"; }
+  ok "key add for a name: a new name is asked for its key; for a name that is there, Enter keeps the key, and another key takes its place only when the provider accepts it"
+
+  # remove: the whole name, with what kingo wrote for it, and nothing of another name
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key spark2) || fail "kc <folder> --key spark2 did not get as far as the start of Claude Code"
+  ls "$CFG"/settings-in-key-spark-*.json "$CFG"/settings-in-key-spark2-*.json > /dev/null 2>&1 || fail "the settings of the two names are not both there before remove"
+  out=$(kk remove spark) || { show "$out" 4; fail "kingo claude key remove failed"; }
+  has "$out" "kingo deleted the key \"spark\" from this laptop" || { show "$out" 4; fail "kingo claude key remove does not say what it deleted"; }
+  if ls "$kd"/key-spark.* "$pd"/kingo-claude-key-*-spark.json "$CFG"/settings-in-key-spark-[0-9]*.json > /dev/null 2>&1; then fail "kingo claude key remove left something of the name"; fi
+  [ -s "$kd/key-spark2.conf" ] && [ -s "$pd/kingo-claude-key-base-spark2.json" ] && ls "$CFG"/settings-in-key-spark2-*.json > /dev/null 2>&1 \
+    || fail "kingo claude key remove spark took something of spark2"
+  [ "$(cat "$kd/openrouter.key")" = "$first_before" ] || fail "kingo claude key remove changed the first key"
+  out=$(kk list)
+  if has "$out" "  spark  "; then show "$out" 8; fail "kingo claude key list still shows a name that was removed"; fi
+  for n in spark2 website api; do kk remove "$n" > /dev/null || fail "kingo claude key remove $n failed"; done
+  rm -f "$kd"/key-plain.* "$pd"/kingo-claude-key-*-plain.json
+  [ -z "$(ls "$kd" | grep -E '^(key|openrouter)-(spark|spark2|website|api|plain)[.]' || true)" ] || { show "$(ls "$kd")" 8; fail "after the removes, kingo still keeps a file of a name"; }
+  ok "key remove takes the key, the provider, the model, the certificate, the settings and the profiles of that name, and nothing of another"
 }
 
 # kingo claude --login: Claude Code with the student's Anthropic login in place of OpenRouter. No login can be made
