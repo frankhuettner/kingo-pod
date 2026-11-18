@@ -523,7 +523,9 @@ grep -q "\"tls_ca\": \"$KD/key-spark.crt\"" "$(dirname "$KP")/kingo-claude-key-b
 out=$(cd "$KINGO_DIR" && ./kingo claude key list 2>&1) || { show "$out" 6; fail "kingo claude key list failed"; }
 has "$out" "spark      https://llm.example.com, model spark/model, 131072 tokens of context, with your certificate" || { show "$out" 8; fail "kingo claude key list does not say what kingo keeps for the name"; }
 out=$(cd "$KINGO_DIR" && ./kingo claude key remove spark 2>&1) || { show "$out" 6; fail "kingo claude key remove failed"; }
-if ls "$KD"/key-spark.* "$(dirname "$KP")"/kingo-claude-key-*-spark.json "$HOME"/.kingo-claude/settings-in-key-spark-[0-9]*.json > /dev/null 2>&1; then fail "kingo claude key remove left something of the name"; fi
+for f in "$KD"/key-spark.* "$(dirname "$KP")"/kingo-claude-key-*-spark.json "$HOME"/.kingo-claude/settings-in-key-spark-[0-9]*.json; do
+  [ ! -e "$f" ] || fail "kingo claude key remove left something of the name: $f"   # each on its own: ls with three patterns fails when one matches nothing
+done
 ok "kingo claude key on a Mac: add keeps the address without /v1, the context and the certificate; nono takes the profile; list shows the name; remove takes it all away"
 
 out=$(in_sandbox sh -c 'if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
