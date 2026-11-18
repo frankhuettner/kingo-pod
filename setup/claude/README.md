@@ -65,16 +65,17 @@ for all of them.
 
 | Shortcut | What it does |
 |---|---|
-| `kc` | `kingo claude` in the folder you are in |
+| `kc` | `kingo claude`, the course; `kc .` in the folder you are in, `kc ~/projects/thesis` in that folder |
 | `kcl` | the same with `--login`: your own Claude subscription |
-| `ky` | `kingo yolo` in the folder you are in: Claude works without asking |
+| `ky` | the same as `kc`, with `kingo yolo`: Claude works without asking |
 | `kyl` | the same with `--login` |
 | `kingo` | `kingo` from any folder, for example `kingo status` |
 
-`kc` is `./kingo claude --in .`: in a folder of your own it starts Claude Code there, and in kingo-pod it starts the
-course. kingo writes the shortcuts into the file that a new terminal reads (`~/.zshrc`; for bash `~/.bashrc`, on a
+`kc` alone is `./kingo claude`, the course; `kc .` is `./kingo claude --in .`, the folder you are in, and
+`kc <folder>` is `./kingo claude --in <folder>` (in kingo-pod, that is the course too). An option first, as in
+`kc --resume`, goes to the course. kingo writes the shortcuts into the file that a new terminal reads (`~/.zshrc`; for bash `~/.bashrc`, on a
 Mac `~/.bash_profile`), between two marked lines, and keeps a copy of the file first. They call kingo-pod's `kingo`,
-so `./kingo update` keeps them up to date. A name that means something in your terminal already, kingo writes only
+so `./kingo update` keeps them up to date, and it writes a block of an older kingo anew. A name that means something in your terminal already, kingo writes only
 when you say yes. `./kingo shortcuts remove` takes them out again.
 
 To keep versions of what Claude Code writes, use git in the folder (`git init`); it works inside the sandbox, in the

@@ -76,7 +76,7 @@ then one command per job:
 | `./kingo mail` | set up the mailbox for the mail assistant (n8n workshop); `./kingo mail help` shows the rest |
 | `./kingo claude` | start Claude Code, your coding agent, in its sandbox (see [Claude Code](#claude-code--your-coding-agent)) |
 | `./kingo claude --login` | the same with your Claude subscription in place of OpenRouter (see [Your Claude subscription](#your-claude-subscription-optional)) |
-| `./kingo shortcuts` | short commands for your terminal, such as `kc` for Claude Code in the folder you are in (see [Shorter commands](#shorter-commands-optional)) |
+| `./kingo shortcuts` | short commands for your terminal, such as `kc` for Claude Code and `kc .` for Claude Code in the folder you are in (see [Shorter commands](#shorter-commands-optional)) |
 | `./kingo doctor` | something's wrong? start here |
 | `./kingo version` | which version am I running? (send this when you ask for help) |
 | `./kingo update` | get the newest class files + images (run it when the instructor announces an update) |
@@ -313,25 +313,26 @@ Enter. Enter alone takes all of them.
 
 | Shortcut | What it does |
 |---|---|
-| `kc` | Claude Code (`./kingo claude`) in the folder you are in |
+| `kc` | Claude Code for the course (`./kingo claude`); `kc .` in the folder you are in, `kc ~/projects/thesis` in that folder |
 | `kcl` | the same with `--login`: your Claude subscription |
-| `ky` | `./kingo yolo` in the folder you are in: Claude works without asking |
+| `ky` | the same as `kc`, with `./kingo yolo`: Claude works without asking |
 | `kyl` | the same with `--login` |
 | `kingo` | `./kingo` from any folder, for example `kingo status` |
 
-They work in every new Terminal window. Where you start them matters:
+They work in every new Terminal window, from any folder:
 
-- **In `~/kingo-pod`,** `kc` starts Claude Code for the course, as
-  `./kingo claude` does. Terminal says so in one line.
-- **In a folder of your own,** for example `~/projects/thesis`, `kc` starts
-  Claude Code there, without the course: it writes only in that folder, and
-  there is no n8n, Langflow or database. Not in your home folder itself: make
-  a folder first, for example `mkdir -p ~/projects/thesis`.
+- **`kc` alone** starts Claude Code for the course, as `./kingo claude` does.
+- **`kc .`** starts Claude Code in the folder you are in, and
+  **`kc ~/projects/thesis`** in that folder, without the course: it writes
+  only in that folder, and there is no n8n, Langflow or database. Not in your
+  home folder itself: make a folder first, for example
+  `mkdir -p ~/projects/thesis`. In `~/kingo-pod`, `kc .` is the course again,
+  and Terminal says so in one line.
 
 kingo writes the shortcuts into `~/.zshrc`, between two lines that it marks,
 and keeps a copy of the file first. If you use one of these names already,
-kingo asks before it writes it. To take them out again:
-`./kingo shortcuts remove`.
+kingo asks before it writes it. `./kingo update` writes them anew when kingo
+changes them. To take them out again: `./kingo shortcuts remove`.
 
 ## Keeping up to date
 
