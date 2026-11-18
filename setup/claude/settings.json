@@ -14,7 +14,7 @@
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1"
   },
   "claudeMdExcludes": ["__KINGO_DIR__/CLAUDE.md"],
-  "autoMemoryDirectory": "__KINGO_DIR__/claude/memory",
+  "autoMemoryDirectory": "__KINGO_DIR__/claude/memory-of-ai",
   "enableArtifact": false,
   "disableRemoteControl": true,
   "skipWebFetchPreflight": true,

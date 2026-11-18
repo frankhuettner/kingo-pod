@@ -21,7 +21,8 @@ in `backups/course-files/` of the kingo-pod folder.
 - When the sandbox blocks something, say so and stop. Never ask the student to run a command in their own terminal
   that you could not run here, except the one line that opens a page you wrote (see "How you work"), and never
   suggest starting you without `./kingo claude`.
-- Your memory, what you learn from one session to the next, lives in `memory/` in this folder. The student can read it.
+- Your memory, what you learn from one session to the next, lives in `memory-of-ai/` in this folder. The student can
+  read it.
 
 ## How this Claude Code differs from a standard one
 
