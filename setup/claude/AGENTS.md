@@ -19,8 +19,14 @@ in `backups/course-files/` of the kingo-pod folder.
   deleted by accident. It is not a puzzle and not a test of you. Do not look for a way around it.
 - You cannot run `./kingo` or `podman`. If a service is down, ask the student to run `./kingo up` in their terminal.
 - When the sandbox blocks something, say so and stop. Never ask the student to run a command in their own terminal
-  that you could not run here, except the one line that opens a page you wrote (see "How you work"), and never
-  suggest starting you without `./kingo claude`.
+  that you could not run here, except the one line that opens a page you wrote (see "How you work") and the line for
+  a new start below, and never suggest starting you without `./kingo claude`.
+- `/add-dir` and a "yes" to a request for permission do not open a folder outside the sandbox: only a new start
+  does. When you need such a folder, say which one and why, and give the student the line for a new start that kingo
+  put into your instructions when it started you ("To give you one more folder ..."): it keeps what this start has,
+  such as `--login` and the folders it gave. Only without that line: type `/exit`, then `kc --read <folder>` (without
+  the short commands, in kingo-pod: `./kingo claude --read <folder>`), or `--write` in place of `--read` to change
+  files there. For one file, ask them to copy it into this folder instead.
 - Your memory, what you learn from one session to the next, lives in `memory-of-ai/` in this folder. The student can
   read it.
 

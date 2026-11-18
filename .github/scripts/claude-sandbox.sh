@@ -125,7 +125,7 @@ prepare() {
   printf '%s\n' "$SECRET" > "$OUTSIDE/secret.txt"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude) || fail "kingo claude did not get as far as the start of Claude Code"
   show "$dry" 3
-  has "$dry" "-- /usr/bin/python3 -I $KINGO_DIR/setup/claude/no_unix_sockets.py claude --add-dir $KINGO_DIR --permission-mode default" \
+  has "$dry" "-- /usr/bin/python3 -I $KINGO_DIR/setup/claude/no_unix_sockets.py claude --add-dir=$KINGO_DIR --permission-mode default" \
     || fail "under Linux, kingo claude would start Claude Code without the lock"
   ok "kingo claude starts Claude Code through the lock, and has written the nono profile"
   # The variables that kingo sets for nono and Claude Code: the dry run names them, from the list that the start
@@ -143,7 +143,7 @@ prepare() {
     || fail "kingo claude does not hand the variables that the dry run names to nono"
   ok "kingo claude sets its variables for the start: NONO_NO_SAVE_PROMPT, GIT_CONFIG_NOSYSTEM, those against telemetry, the PATH for look, PostgreSQL"
   # nono: the one that kingo downloaded (./kingo claude nono, in the workflow), and no other
-  grep -q '^  exec "\$nono" run --profile "\$profile" --allow-cwd --read "\$reads" -- "\$@"$' "$KINGO_DIR/kingo" \
+  grep -q '^  exec "\$nono" run --profile "\$profile" --allow-cwd --read "\$reads" \${more_nono\[@\]+"\${more_nono\[@\]}"} -- "\$@"$' "$KINGO_DIR/kingo" \
     || fail "kingo claude does not start its own nono with the line this script copies"
   has "$dry" "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- " \
     || fail "for the course, kingo claude would not start nono with the course profile and read access to kingo-pod"
@@ -923,12 +923,23 @@ part_own() {
   rm -rf "$dir" "$mine"; mkdir -p "$dir" "$HOME/Documents"
 
   say "kingo claude --in: the folders it does not take"
-  # kingo-pod and a folder in it are not refused: they start the course (claude-shortcuts.sh in checks that).
-  for d in / "$HOME" "$HOME/Documents" "$HOME/.config" /mnt/c/Users/someone "$(dirname "$KINGO_DIR")" "$HOME/no-such-folder"; do
-    if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$d" 2>&1); then show "$out" 3; fail "kingo claude --in took the folder $d"; fi
+  # refuses <why> <arguments of kingo claude>: kingo stops, and for that reason (a stop for another reason, early in
+  # kingo, would pass a check of the stop alone)
+  refuses() {
+    local why=$1; shift
+    if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude "$@" 2>&1); then show "$out" 3; fail "kingo claude $* did not stop"; fi
+    has "$out" "$why" || { show "$out" 3; fail "kingo claude $* stopped, but not because: $why"; }
     printf '         | %s\n' "$(printf '%s\n' "$out" | tail -n 1 | cut -c1-140)"
-  done
-  ok "it refuses /, the home folder, Documents, a hidden folder, a Windows folder, a folder that holds kingo-pod, a folder that is not there"
+  }
+  # kingo-pod and a folder in it are not refused: they start the course (claude-shortcuts.sh in checks that).
+  refuses "takes a folder inside your home folder" --in /
+  refuses "not the home folder itself" --in "$HOME"
+  refuses "is too wide" --in "$HOME/Documents"
+  refuses "is a hidden folder" --in "$HOME/.config"
+  refuses "is a Windows folder" --in /mnt/c/Users/someone
+  refuses "holds kingo-pod" --in "$(dirname "$KINGO_DIR")"
+  refuses "there is no folder" --in "$HOME/no-such-folder"
+  ok "it refuses /, the home folder, Documents, a hidden folder, a Windows folder, a folder that holds kingo-pod, a folder that is not there, and says why"
 
   say "kingo claude --in: what it would start"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$dir") || fail "kingo claude --in did not get as far as the start of Claude Code"
@@ -948,6 +959,114 @@ part_own() {
   has "$dry" "run it with: clickthrough <script.cjs>" || fail "kingo claude --in does not tell Claude Code about clickthrough"
   has "$dry" "Start the dev server yourself (npm run dev), on that port." || fail "under Linux, kingo claude --in does not tell Claude Code to start the dev server itself"
   ok "kingo claude --in names no n8n, and Claude starts the dev server itself"
+
+  # --read and --write: more folders for one start (Frank, 18 Nov 2026). kingo checks them as it checks --in, gives
+  # them to nono (--read, --allow) and to Claude Code (--add-dir), and names them; the shortcut kc passes them on.
+  # Before stand_in below: a dry run writes the profiles again, and so takes the stand-in out of them.
+  say "kingo claude --read and --write: the folders it does not take, and what it would start"
+  local notes="$HOME/projects/notes" out2="$HOME/projects/out" base_before
+  rm -rf "$notes" "$out2"; mkdir -p "$notes" "$out2" "$KINGO_DIR/shared" "$KINGO_DIR/backups"
+  printf 'notes-probe-%s\n' "$$" > "$notes/note.txt"
+  refuses "takes a folder inside your home folder" --read /
+  refuses "not the home folder itself" --read "$HOME"
+  refuses "is too wide" --read "$HOME/Documents"
+  refuses "is a hidden folder" --read "$HOME/.config"
+  refuses "is a Windows folder" --read /mnt/c/Users/someone
+  refuses "there is no folder" --read "$HOME/no-such-folder"
+  refuses "is in kingo-pod" --write "$KINGO_DIR"
+  refuses "is in kingo-pod" --write "$KINGO_DIR/setup"
+  refuses "is in kingo-pod" --write "$KINGO_DIR/backups"
+  refuses "holds kingo-pod" --write "$(dirname "$KINGO_DIR")"
+  # no folder, and nothing as the folder: not the folder kingo was started in (the review of 18 Nov 2026)
+  refuses "needs a folder" --read
+  refuses "needs a folder" --read=
+  refuses "needs a folder" --write ""
+  ok "--read refuses what --in refuses; --write takes nothing of kingo-pod but shared, and no folder that holds kingo-pod; nothing is no folder"
+  # In --read=~/notes no shell puts in the home folder: kingo does.
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude "--read=~/projects/notes") || fail "kingo claude --read=~/projects/notes did not get as far as the start of Claude Code"
+  has "$dry" "--read $KINGO_DIR --read $notes -- " || { show "$dry" 3; fail "in --read=~/projects/notes, kingo does not put the home folder in for ~"; }
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --read "$notes" --write "$KINGO_DIR/shared") || fail "kingo claude --read --write did not get as far as the start of Claude Code"
+  show "$dry" 4
+  has "$dry" "nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR --read $notes --allow $KINGO_DIR/shared -- " || fail "kingo does not give nono the two folders"
+  has "$dry" "claude --add-dir=$KINGO_DIR --add-dir=$notes --add-dir=$KINGO_DIR/shared --permission-mode default" || fail "kingo does not give Claude Code the two folders"
+  has "$dry" "Claude Code may also read this folder, and not change it: $notes" || fail "kingo does not name the folder to read"
+  has "$dry" "You may also read these, and not change them: $notes. You may also read and change these: $KINGO_DIR/shared." \
+    || fail "kingo does not tell Claude Code about the two folders"
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --read "$notes") || fail "kc <folder> --read did not get as far as the start of Claude Code"
+  has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude --read $notes -- " || { show "$dry" 3; fail "kc <folder> --read does not give nono the folder"; }
+  has "$dry" "claude --settings $HOME/.kingo-claude/settings-in.json --add-dir=$notes --permission-mode default --append-system-prompt You were started with" \
+    || { show "$dry" 3; fail "kc <folder> --read does not give Claude Code the folder"; }
+  has "$dry" "/add-dir and a yes to a request for permission do not open a folder outside the sandbox" || fail "the text for --in does not say that /add-dir does not open the sandbox"
+  ok "the folders go to nono and to Claude Code, and kingo names them: with the course, and with kc <folder>"
+
+  # The second review of 18 Nov 2026: no folder with commands for --write and --in (a curl put into ~/bin got the
+  # keys from kingo); no folder where a link puts the keys and settings of programs (~/.config in ~/dotfiles/config);
+  # shared/ as a link is where it leads; Library as a whole; kingo-pod for --read in a folder of one's own, where it
+  # is closed; --in "" and --in=; an option in place of a folder; kingo's options before the folder of kc.
+  say "kingo claude --in, --read and --write: commands, links, Library, kingo-pod, and the words around the folder"
+  mkdir -p "$HOME/bin" "$HOME/projects/tools/bin" "$HOME/Library/notes"
+  refuses "is a folder where your terminal finds its commands" --write "$HOME/bin"
+  refuses "is a folder where your terminal finds its commands" --in "$HOME/bin"
+  ( PATH="$HOME/projects/tools/bin:$PATH"; refuses "holds $HOME/projects/tools/bin, a folder where your terminal finds its commands" --write "$HOME/projects/tools" )
+  ( PATH="$HOME/projects/tools/bin:$PATH"; cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --read "$HOME/projects/tools" > /dev/null ) \
+    || fail "kingo claude --read did not take a folder with commands in it, which it only reads"
+  # Library as a whole is too wide; a folder in it is the student's choice (Frank, 18 Nov 2026), but not LaunchAgents
+  # for --write: its programs start at login, outside the sandbox
+  mkdir -p "$HOME/Library/LaunchAgents"
+  refuses "is too wide" --read "$HOME/Library"
+  (cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --read "$HOME/Library/notes" > /dev/null) \
+    || fail "kingo claude --read did not take a folder in Library, which the student chose"
+  refuses "is in ~/Library/LaunchAgents" --write "$HOME/Library/LaunchAgents"
+  rmdir "$HOME/bin" 2>/dev/null || true; rm -rf "$HOME/projects/tools" "$HOME/Library"
+  local fh="$CFG/tmp/dotfiles-home"
+  rm -rf "$fh"; mkdir -p "$fh/dotfiles/config/kingo" "$fh/dotfiles/zsh" "$fh/projects/x"; ln -s dotfiles/config "$fh/.config"
+  : > "$fh/dotfiles/zsh/zshrc"; ln -s dotfiles/zsh/zshrc "$fh/.zshrc"
+  for d in "$fh/dotfiles" "$fh/dotfiles/config/kingo" "$fh/dotfiles/zsh"; do
+    if out=$(cd "$KINGO_DIR" && HOME="$fh" KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --read "$d" 2>&1); then show "$out" 3; fail "with ~/.config and ~/.zshrc in ~/dotfiles, kingo claude --read took $d"; fi
+    has "$out" "where kingo or another program keeps its keys and settings" || { show "$out" 3; fail "kingo claude --read $d stopped, but not for the keys and settings"; }
+    printf '         | %s\n' "$(printf '%s\n' "$out" | tail -n 1 | cut -c1-140)"
+  done
+  rm -rf "$fh"
+  mv "$KINGO_DIR/shared" "$KINGO_DIR/shared.ci"; ln -s "$HOME" "$KINGO_DIR/shared"
+  refuses "not the home folder itself" --write "$KINGO_DIR/shared"
+  refuses "is a hidden folder" --read "$KINGO_DIR/shared/.config"
+  rm "$KINGO_DIR/shared"; mv "$KINGO_DIR/shared.ci" "$KINGO_DIR/shared"
+  refuses "holds kingo-pod" --in "$dir" --read "$(dirname "$KINGO_DIR")"
+  refuses "is in kingo-pod" --in "$dir" --read "$KINGO_DIR/backups"
+  (cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --read "$(dirname "$KINGO_DIR")" > /dev/null) \
+    || fail "in the course, kingo claude --read did not take a folder that holds kingo-pod, which the course reads anyway"
+  refuses "needs a folder" --in ""
+  refuses "needs a folder, not --login" --in "$dir" --read --login
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude "--in=$dir") || fail "kingo claude --in=<folder> did not get as far as the start of Claude Code"
+  has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- " || { show "$dry" 3; fail "kingo claude --in=<folder> did not start in the folder"; }
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc --read "$notes" "$dir") || fail "kc --read <folder> <folder> did not get as far as the start of Claude Code"
+  has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude --read $notes -- " || { show "$dry" 3; fail "kc --read <folder> <folder> did not start in the folder"; }
+  ok "commands, links to keys, shared as a link, Library and LaunchAgents, kingo-pod in a folder of one's own, --in \"\", --in=, an option for a folder, and kc --read <folder> <folder>"
+
+  # The line for a new start that Claude Code gets: this start's own, with one --read more (the review: a fixed
+  # "kc --read <folder>" dropped --login, ky and the folders of the start).
+  say "kingo claude: the line for a new start with one more folder"
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --read "$notes")
+  has "$dry" "starts you again with this line, which keeps what this start has: kc $dir --read $notes --read <that folder> (without the short commands, in kingo-pod: ./kingo claude --in $dir --read $notes --read <that folder>)" \
+    || { show "$dry" 3; fail "kc <folder> --read does not give Claude Code the line for a new start with its folders"; }
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kyl)
+  has "$dry" "starts you again with this line, which keeps what this start has: kyl --read <that folder> (without the short commands, in kingo-pod: ./kingo yolo --login --read <that folder>)" \
+    || { show "$dry" 3; fail "kyl does not give Claude Code the line for a new start with yolo and the login"; }
+  if ls "$HOME/.config/nono/profiles" | grep -q '\.json\.[0-9]*$'; then fail "kingo left a part of a profile in ~/.config/nono/profiles"; fi
+  ok "the line keeps the folder, the folders of --read, ky and the login; no part of a profile is left"
+
+  say "kingo claude --read and --write, in the sandbox"
+  base_before=("${base[@]}")
+  base=(nono run --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" --read "$notes" --allow "$out2" --)
+  out=$(in_folder "${LOCK[@]}" sh -c 'cat "$1/note.txt"; ( : >> "$1/x.txt" ) 2>/dev/null && echo WROTE-READ; ( : >> "$2/y.txt" ) 2>/dev/null && echo WROTE-WRITE; cat "$3" 2>&1' sh "$notes" "$out2" "$OUTSIDE/secret.txt")
+  base=("${base_before[@]}")
+  show "$out" 4
+  has "$out" "notes-probe-$$" || { show "$out" 12; fail "with --read, the sandbox cannot read the folder"; }
+  if has "$out" WROTE-READ; then fail "with --read, the sandbox can write in the folder"; fi
+  has "$out" WROTE-WRITE || { show "$out" 12; fail "with --write (nono --allow), the sandbox cannot write in the folder"; }
+  if has "$out" "$SECRET"; then fail "with --read and --write, a file outside both folders was read"; fi
+  rm -rf "$notes" "$out2"
+  ok "it reads the folder of --read and cannot write there, writes in the folder of --write, and still reads nothing outside"
 
   say "my-nono-profile.json: the student's own additions to the sandbox of the course"
   out=$(in_sandbox "${LOCK[@]}" sh -c 'if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
@@ -1106,7 +1225,7 @@ part_login() {
   say "kingo claude --login: what it would start"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login) || fail "kingo claude --login did not get as far as the start of Claude Code"
   show "$dry" 3
-  has "$dry" "nono run --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --add-dir $KINGO_DIR --settings $tpl/settings-login.json --permission-mode default" \
+  has "$dry" "nono run --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --add-dir=$KINGO_DIR --settings $tpl/settings-login.json --permission-mode default" \
     || fail "kingo claude --login would not start Claude Code with the course profile of the login, under the lock, with the settings of the login"
   vars=" $(printf '%s\n' "$dry" | sed -n 's/^  variables: //p')"
   has "$vars" " PGHOST " || fail "kingo claude --login does not set the variables for PostgreSQL"
@@ -1123,12 +1242,13 @@ part_login() {
   say "kingo claude --login with the student's own profile"
   cp "$tpl/my-nono-profile.example.json" "$mine"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login) || fail "kingo claude --login did not start with the example of my-nono-profile.json"
-  has "$dry" "nono run --profile kingo-claude-mine --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "with --login, kingo does not start nono with the student's profile"; }
-  grep -q '^  "extends": "kingo-claude-login-course",$' "$prof/kingo-claude-mine.json" \
+  # under a name of its own: a kc and a kcl at the same time must not take each other's copy (the review of 18 Nov 2026)
+  has "$dry" "nono run --profile kingo-claude-login-mine --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 3; fail "with --login, kingo does not start nono with the student's profile"; }
+  grep -q '^  "extends": "kingo-claude-login-course",$' "$prof/kingo-claude-login-mine.json" \
     || fail "with --login, the student's profile does not extend the course profile of the login"
-  nono profile validate "$prof/kingo-claude-mine.json" > "$CFG/tmp/validate.log" 2>&1 \
+  nono profile validate "$prof/kingo-claude-login-mine.json" > "$CFG/tmp/validate.log" 2>&1 \
     || { show "$(cat "$CFG/tmp/validate.log")" 8; fail "nono does not take the student's profile on top of the login"; }
-  out=$(in_login kingo-claude-mine "$KINGO_DIR/claude" "$KINGO_DIR" sh -c 'echo "base=${ANTHROPIC_BASE_URL:-none} n8n=${N8N_BASE_URL:+set}"; if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
+  out=$(in_login kingo-claude-login-mine "$KINGO_DIR/claude" "$KINGO_DIR" sh -c 'echo "base=${ANTHROPIC_BASE_URL:-none} n8n=${N8N_BASE_URL:+set}"; if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
   has "$out" "base=none n8n=set" || { show "$out" 12; fail "the student's profile on top of the login: the way to OpenRouter is there, or n8n is gone"; }
   has "$out" WROTE || { show "$out" 12; fail "the student's profile on top of the login does not give shared"; }
   rm -f "$KINGO_DIR/shared/own-probe.txt"

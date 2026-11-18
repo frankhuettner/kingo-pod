@@ -448,14 +448,18 @@ difference students choose between.
   dry run names and the start exports.** Do not go back to variables in front
   of the `exec` line over several lines: a comment line between them once cut
   five of them off without any error.
-- **`claude_in_folder` decides which folder `--in` takes.** It must keep out
-  every folder in which a program of the sandbox could write something that
-  runs outside later: the home folder, hidden folders and any folder that
-  holds kingo-pod. kingo-pod itself and a folder in it are not given to
-  `--in`: they start the course, as `./kingo claude` does, with one line that
-  says so (Frank, 15 Nov 2026). A relative `--in` is named from the folder
-  kingo was started in (`_kingo_from`, taken before kingo's `cd`): `--in .` is
-  the folder you are in.
+- **`claude_folder_rules` decides which folder `--in`, `--read` and `--write`
+  take: one set of rules for all three.** It must keep out every folder in
+  which a program of the sandbox could write something that runs outside
+  later, or read keys: the home folder, hidden folders, kingo's own folders
+  and where a linked hidden folder really is (`claude_private_places`), the
+  folders of `PATH` and `~/bin` (`claude_command_places`, not for `--read`),
+  and any folder that holds kingo-pod. It compares folders, not names
+  (`claude_below`, `test -ef`): on a Mac, `~/Kingo-Pod` is kingo-pod. kingo-pod
+  itself and a folder in it are not given to `--in`: they start the course, as
+  `./kingo claude` does, with one line that says so (Frank, 15 Nov 2026). A
+  relative folder is named from the folder kingo was started in (`_kingo_from`,
+  taken before kingo's `cd`): `--in .` is the folder you are in.
 - **`./kingo shortcuts` writes one marked block into the file a new terminal
   reads, and nothing else** (`$SHELL`: zsh `~/.zshrc`; bash `~/.bashrc`, on a
   Mac `~/.bash_profile`, which then reads a `~/.profile` that bash read

@@ -75,7 +75,7 @@ part_in() {
       || { show "$out" 6; fail "kingo claude --in . in $d does not say that it starts the course"; }
     has "$out" "dry run — would start in $KINGO_DIR/claude:" || { show "$out" 6; fail "kingo claude --in . in $d would not start in kingo-pod/claude"; }
     has "$out" "nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- " || { show "$out" 6; fail "kingo claude --in . in $d would not start with the course profile"; }
-    has "$out" "claude --add-dir $KINGO_DIR " || { show "$out" 6; fail "kingo claude --in . in $d would not start Claude Code as ./kingo claude does"; }
+    has "$out" "claude --add-dir=$KINGO_DIR " || { show "$out" 6; fail "kingo claude --in . in $d would not start Claude Code as ./kingo claude does"; }
     if has "$out" "is kingo-pod or a folder in it"; then fail "kingo claude --in . in $d still refuses kingo-pod"; fi
   done
   HOME_SHOWN=$h brief "$out"

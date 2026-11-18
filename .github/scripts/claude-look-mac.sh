@@ -424,6 +424,43 @@ if has "$out" "$(cat "$KINGO_DIR/VERSION")"; then fail "the rest of kingo-pod ca
 if has "$out" WROTE-KINGO; then fail "setup/claude can be written from a folder of one's own"; fi
 has "$out" "commits=1" || { show "$out" 20; fail "git does not work in the folder inside the sandbox"; }
 ok "in a folder of one's own: it writes there, reads setup/claude and not the rest of kingo-pod, nothing of the course, git works"
+# --read and --write on a Mac: what kingo would start, and what Seatbelt gives with the two folders
+NOTES="$HOME/projects/notes"; OUT2="$HOME/projects/out"
+rm -rf "$NOTES" "$OUT2"; mkdir -p "$NOTES" "$OUT2"; printf 'notes-probe\n' > "$NOTES/note.txt"
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$OWN" --read "$NOTES" --write "$OUT2") || fail "kingo claude --in --read --write did not get as far as the start of Claude Code"
+has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude --read $NOTES --allow $OUT2 -- claude --settings $HOME/.kingo-claude/settings-in.json --add-dir=$NOTES --add-dir=$OUT2 --permission-mode default" \
+  || { show "$dry" 3; fail "kingo claude --in --read --write does not give the two folders to nono and to Claude Code"; }
+if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --read "$HOME/Library" 2>&1); then show "$out" 3; fail "kingo claude --read took ~/Library"; fi
+# On a Mac, a name in other capitals is the same folder (APFS, as on the students' Macs): ~/library is ~/Library.
+# kingo compares the folders, not their names (the review of 18 Nov 2026 found --write ~/Kingo-Pod taken).
+mac_refuses() { # why, arguments of kingo claude
+  local why=$1; shift
+  if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude "$@" 2>&1); then show "$out" 3; fail "kingo claude $* did not stop"; fi
+  has "$out" "$why" || { show "$out" 3; fail "kingo claude $* stopped, but not because: $why"; }
+}
+# kingo-pod's path below the home folder in capitals, as a student might type it: ~/WORK/KINGO-POD/KINGO-POD
+UP="$HOME/$(printf '%s' "${KINGO_DIR#"$HOME"/}" | tr '[:lower:]' '[:upper:]')"
+[ -d "$UP" ] && [ -d "$HOME/library" ] || fail "this disk tells capitals from small letters ($UP): the students' Macs do not, so the checks below would prove nothing"
+mac_refuses "is in kingo-pod" --write "$UP"
+mac_refuses "is in kingo-pod" --write "$UP/SETUP"
+mac_refuses "holds kingo-pod" --write "$(dirname "$UP")"
+mac_refuses "is too wide" --read "$HOME/library"
+mkdir -p "$HOME/Library/LaunchAgents"
+mac_refuses "is in ~/Library/LaunchAgents" --write "$HOME/LIBRARY/LaunchAgents"
+mac_refuses "is too wide" --read "$HOME/DOCUMENTS"
+mac_refuses "is too wide" --in "$HOME/library"
+mac_refuses "holds kingo-pod" --in "$(dirname "$UP")"
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$UP/setup") || fail "kingo claude --in <kingo-pod in capitals>/setup did not get as far as the start of Claude Code"
+has "$dry" "This folder is in kingo-pod: Claude Code starts for the course" || { show "$dry" 3; fail "kingo claude --in <kingo-pod in capitals>/setup does not start the course"; }
+ok "names in other capitals: kingo-pod, a folder that holds it, ~/library, ~/LIBRARY/LaunchAgents and ~/DOCUMENTS are refused; kingo-pod/setup starts the course"
+out=$( ( cd "$OWN" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 \
+    "$NONO_BIN" run --profile kingo-claude-base --allow-cwd --read "$KINGO_DIR/setup/claude" --read "$NOTES" --allow "$OUT2" -- \
+    sh -c 'cat "$1/note.txt"; ( : >> "$1/x.txt" ) 2>/dev/null && echo WROTE-READ; ( : >> "$2/y.txt" ) 2>/dev/null && echo WROTE-WRITE' sh "$NOTES" "$OUT2" ) 2>&1 || true )
+has "$out" notes-probe || { show "$out" 12; fail "with --read, the sandbox cannot read the folder"; }
+if has "$out" WROTE-READ; then fail "with --read, the sandbox can write in the folder"; fi
+has "$out" WROTE-WRITE || { show "$out" 12; fail "with --write (nono --allow), the sandbox cannot write in the folder"; }
+rm -rf "$NOTES" "$OUT2"
+ok "--read and --write: kingo gives both folders to nono and Claude Code; the sandbox reads the one and writes the other"
 
 out=$(in_sandbox sh -c 'if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
 has "$out" refused || { show "$out" 12; fail "with the course profile alone, the sandbox can already write in shared"; }
@@ -450,7 +487,7 @@ TPL="$KINGO_DIR/setup/claude"; LCFG="$HOME/.kingo-claude-login"; STORE="$HOME/.l
 mkdir -p "$LCFG/tmp" "$LCFG.lock" "$STORE"
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login) || fail "kingo claude --login did not get as far as the start of Claude Code"
 show "$dry" 3
-has "$dry" "nono run --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- claude --add-dir $KINGO_DIR --settings $TPL/settings-login.json --permission-mode default" \
+has "$dry" "nono run --profile kingo-claude-login-course --allow-cwd --read $KINGO_DIR -- claude --add-dir=$KINGO_DIR --settings $TPL/settings-login.json --permission-mode default" \
   || fail "kingo claude --login would not start Claude Code with the course profile of the login and the settings of the login"
 if has "$dry" " CLAUDE_CODE_MAX_CONTEXT_TOKENS "; then fail "kingo claude --login tells Claude Code the context size of the course's model"; fi
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login --in "$OWN") || fail "kingo claude --login --in did not get as far as the start of Claude Code"
