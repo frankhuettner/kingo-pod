@@ -48,13 +48,38 @@ Change `my-nono-profile.json` and start `./kingo claude` again. Your file adds t
 anything of it away. Claude Code can read the file and cannot change it, so the sandbox is yours to widen, not
 Claude's. Delete the file to go back.
 
+For one start, without a file: `./kingo claude --read <folder>` lets Claude Code also read a folder, and
+`--write <folder>` also change it; both go more than once, with `--in` and `--login` too, and with the short commands
+(`kc ~/projects/site --read ~/projects/notes`). kingo gives the folders to nono (`--read`, `--allow`) and to Claude
+Code (`--add-dir`, so that it reads there without asking), names them before the start, and tells Claude Code. The
+rules are those of `--in` (below). Of kingo-pod, both take only `shared/`; in the course, `--read` takes all of it,
+as the course reads it anyway. The next start without them is the sandbox as before.
+
+`/add-dir` in Claude Code is no way into the sandbox: it adds a folder to Claude Code's own list, and nono, which no
+program inside it can widen, still refuses it (`Operation not permitted` on a Mac, `Permission denied` under Linux
+and Windows). So kingo gives Claude Code, with its instructions, the line for a new start with one more folder: this
+start's own (`--login`, the folder, the folders of `--read` and `--write`), with one `--read` more. `AGENTS.md` and
+the text for `--in` tell Claude Code to give the student that line in place of `/add-dir`.
+
 ## A folder of your own, without the course
 
 `./kingo claude --in ~/projects/thesis` starts the same Claude Code in that folder: the same sandbox, the same model
 and key, `look`. It writes only in that folder. There is no n8n, no Langflow and no database, and the pod need not
 run. kingo puts no file into your folder; Claude Code keeps its memory there, in `memory-of-ai/`, with and without
-`--login`. The folder must be inside your home folder; kingo refuses the home folder
-itself, `Documents` as a whole, hidden folders, a folder that holds kingo-pod, and Windows folders (`/mnt/c/...`).
+`--login`. The folder must be inside your home folder. kingo refuses:
+
+- the home folder itself, and `Desktop`, `Documents`, `Downloads`, `Pictures`, `Music`, `Movies` and `Library` as a
+  whole. A folder in them is your choice: on a Mac, Dropbox, OneDrive, Google Drive and iCloud Drive keep their files
+  in `~/Library` (`~/Library/CloudStorage/Dropbox/notes`);
+- hidden folders;
+- where kingo and other programs keep their keys and settings, also when a link puts such a folder elsewhere
+  (`~/.config` in `~/dotfiles/config`);
+- a folder where your terminal finds its commands (`~/bin`, the folders of `PATH`), or one that holds one, and
+  `~/Library/LaunchAgents`, whose programs a Mac starts at login: a program put there would run outside the sandbox
+  later;
+- a folder that holds kingo-pod, and Windows folders (`/mnt/c/...`).
+
+The same rules hold for `--read` and `--write`, but `--read` may take a folder with commands in it.
 
 You can name the folder from where you are: `--in .` is the folder you are in, `--in thesis` the folder `thesis` in
 it. kingo-pod or a folder in it starts Claude Code for the course, as `./kingo claude` does, and kingo says so.

@@ -10,15 +10,25 @@
   (n8n for the student: <http://localhost:5678>)
   (the student's OpenRouter key, the one of their flows in Langflow: a call of a model costs them money)
   You are the role `claude` in the database `classroom`. You can read everything there. You can create and change
+  `--write` in place of `--read` to change files there. For one file, ask them to copy it into this folder instead.
+  `kc --read <folder>` (without the short commands, in kingo-pod: `./kingo claude --read <folder>`), or with
   `psql -l` lists the databases. The project data is in `classroom`; the databases `n8n` and `langflow` belong to
+  a new start below, and never suggest starting you without `./kingo claude`.
   apps and are closed to you: use the APIs.
   delete the student's data. Never connect as another role. The databases `n8n` and `langflow` belong to those
   deleted by accident. It is not a puzzle and not a test of you. Do not look for a way around it.
+  does. When you need such a folder, say which one and why, and give the student the line for a new start that kingo
+  does. When you need such a folder, say which one and why, and tell the student: type `/exit`, then start again with
+  files there. For one file, ask them to copy it into this folder instead.
   kingo-pod folder one level up (`compose.yml`, `kingo`, `docs/`) to understand the stack, but you cannot change it.
+  put into your instructions when it started you ("To give you one more folder ..."): it keeps what this start has,
   read it.
+  such as `--login` and the folders it gave. Only without that line: type `/exit`, then `kc --read <folder>` (without
   suggest starting you without `./kingo claude`.
   tables only in the schema `project`: `create table x` lands there. This is on purpose, so that a mistake cannot
+  that you could not run here, except the one line that opens a page you wrote (see "How you work") and the line for
   that you could not run here, except the one line that opens a page you wrote (see "How you work"), and never
+  the short commands, in kingo-pod: `./kingo claude --read <folder>`), or `--write` in place of `--read` to change
   those apps.
   to click **Publish** in n8n and to check that the dot on the button is green.
 # Working in kingo-pod
@@ -44,6 +54,7 @@
 - You cannot run `./kingo` or `podman`. If a service is down, ask the student to run `./kingo up` in their terminal.
 - Your memory, what you learn from one session to the next, lives in `memory-of-ai/` in this folder. The student can
 - Your memory, what you learn from one session to the next, lives in `memory/` in this folder. The student can read it.
+- `/add-dir` and a "yes" to a request for permission do not open a folder outside the sandbox: only a new start
 - n8n: @info-for-ai/n8n.md
 1. Change workflows and flows through the n8n and Langflow APIs, never in the databases `n8n` and `langflow`.
 2. Before you change a workflow or a flow, save its current JSON in `backups/` in this folder.

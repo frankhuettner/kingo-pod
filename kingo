@@ -1704,47 +1704,175 @@ claude_login_step() { # nono, templates folder
 # folder and nowhere else, with the profile "kingo-claude-base" (setup/claude/nono-profile-base.json). kingo puts
 # no file into the folder: the settings come from setup/claude/settings-in.json and the text below, on the command
 # line. What Claude Code is told there, in place of the course's AGENTS.md:
-CLAUDE_IN_HINT='You were started with "./kingo claude --in" and run in a sandbox (nono). You can write only in the folder you were started in. The sandbox is there so that a mistake cannot harm this laptop: a wrong command, a wrong path, a file deleted by accident. It is not a puzzle and not a test of you: do not look for a way around it. When it blocks something, say what was blocked and stop. Never ask the user to run a command in their own terminal that you could not run here, and never suggest starting you without ./kingo claude. Your memory, what you learn from one session to the next, lives in memory-of-ai/ in this folder: the user can read it.'
+CLAUDE_IN_HINT='You were started with "./kingo claude --in" and run in a sandbox (nono). You can write only in the folder you were started in, and in a folder that this start names below. The sandbox is there so that a mistake cannot harm this laptop: a wrong command, a wrong path, a file deleted by accident. It is not a puzzle and not a test of you: do not look for a way around it. When it blocks something, say what was blocked and stop. Never ask the user to run a command in their own terminal that you could not run here, but for the new start below, and never suggest starting you without ./kingo claude. /add-dir and a yes to a request for permission do not open a folder outside the sandbox: only a new start does. When you need such a folder, say which one and why, and give the user the line for a new start below. For one file, ask them to copy it into this folder instead. Your memory, what you learn from one session to the next, lives in memory-of-ai/ in this folder: the user can read it.'
 
-# The folder must be one that Claude Code may get as a whole. Prints its full path, or says why not and fails.
-# kingo-pod or a folder in it is the course (Frank, 15 Nov 2026): then it prints nothing, and kingo claude starts as
-# without --in, in kingo-pod/claude. That comes first, before the rules for a folder of one's own: it gives the
-# sandbox of ./kingo claude, wherever kingo-pod is. A folder that holds kingo-pod stays refused.
-claude_in_folder() { # folder, as the student typed it
-  local want=$1 dir home rel pod
+# Is the folder $1 the folder $2, or in it? Then this prints the part of $1 below $2 (nothing for $2 itself) and
+# succeeds. It compares the folders themselves (test -ef), not their names: on a Mac, ~/kingo-pod is also
+# ~/Kingo-Pod, and ~/Library also ~/library. A comparison of names took both (the review of 18 Nov 2026).
+claude_below() { # folder top, both full paths
+  local d=$1 rest=""
+  while [ -n "$d" ]; do
+    if [ "$d" -ef "$2" ]; then printf '%s' "$rest"; return 0; fi
+    rest="${d##*/}${rest:+/$rest}"
+    d=${d%/*}
+  done
+  return 1
+}
+
+# Desktop, Documents, Downloads, Pictures, Music, Movies and Library: too wide to give as a whole. A folder in them
+# is the student's choice (Frank, 18 Nov 2026, on Dropbox and iCloud Drive in ~/Library: "wer diesen access gibt
+# (z.b. an locale modelle), weiß was dort liegt").
+claude_too_wide() { # folder home
+  local w
+  for w in Desktop Documents Downloads Pictures Music Movies Library; do
+    [ "$1" -ef "$2/$w" ] && return 0
+  done
+  return 1
+}
+
+# Where kingo and other programs keep their keys and settings, as on the disk: kingo's own folders, and where each
+# hidden folder or file of the home folder that is a link really is. A dotfiles setup keeps ~/.config in
+# ~/dotfiles/config, where the rule for hidden folders does not see it (the review of 18 Nov 2026: --read ~/dotfiles
+# read kingo's keys). Lines "<the place on the disk>|<its name>".
+claude_private_places() { # home
+  local d h t
+  for d in "$CLAUDE_KEYS" "${XDG_CONFIG_HOME:-$HOME/.config}/nono" "$CLAUDE_SHARE" "$HOME/.local/state/nono" \
+           "$HOME/.kingo-claude" "$CLAUDE_LOGIN_CFG"; do
+    [ ! -d "$d" ] || printf '%s|%s\n' "$(cd "$d" && pwd -P)" "$d"
+  done
+  for h in "$1"/.[!.]* "$1"/..?*; do
+    [ -L "$h" ] || continue
+    if [ -d "$h" ]; then
+      printf '%s|%s\n' "$(cd "$h" && pwd -P)" "$h"
+    elif [ -e "$h" ] && t=$(readlink "$h"); then
+      case "$t" in /*) ;; *) t="$1/$t" ;; esac
+      [ ! -d "${t%/*}" ] || printf '%s|%s\n' "$(cd "${t%/*}" && pwd -P)/${t##*/}" "$h"
+    fi
+  done
+  return 0
+}
+
+# Where a terminal finds its commands: the folders of PATH, and ~/bin, which Ubuntu's ~/.profile puts there once it
+# exists. A program put there runs outside the sandbox, the next time the student or kingo starts it (the review of
+# 18 Nov 2026: with --write ~/bin, a curl of Claude's got the keys from kingo). One per line, as on the disk.
+claude_command_places() { # home
+  local p IFS=:
+  for p in $PATH "$1/bin"; do
+    case "$p" in /*) [ ! -d "$p" ] || (cd "$p" && pwd -P) ;; esac
+  done
+  return 0
+}
+
+# The rules for a folder given to --in, --read or --write, one set for all three (the review of 18 Nov 2026). Claude
+# Code may take everything in such a folder, and what it reads goes to the model's company. Prints the folder's full
+# path. For --in, kingo-pod or a folder in it is the course (Frank, 15 Nov 2026): then it prints nothing, and kingo
+# claude starts as without --in, in kingo-pod/claude. Says why not, and fails, for:
+#  - nothing, or an option in place of the folder (--read --key thesis); a Windows folder; a folder that is not there;
+#  - a folder not inside the home folder, the home folder itself, and a hidden folder of the home folder;
+#  - Desktop, Documents, Downloads, Pictures, Music, Movies and Library as a whole (a folder in them is fine);
+#  - where kingo and other programs keep their keys and settings, also where a link puts it (claude_private_places);
+#  - for --in and --write, a folder where the terminal finds its commands, or one that holds one, and
+#    ~/Library/LaunchAgents, whose programs the Mac starts at login;
+#  - kingo-pod: for --in, a folder that holds it; for --write, a folder in it or one that holds it, but shared/
+#    (Langflow's /app/shared); for --read the same in a folder of one's own, where kingo-pod is closed. The course
+#    reads kingo-pod anyway.
+claude_folder_rules() { # in|read|write, course|own, folder as the student typed it
+  local how=$1 mode=$2 want=$3 dir home rel pod p name what="Claude Code may write everywhere in the folder you give it"
+  local ex="~/projects/notes"
+  [ "$how" != read ] || what="Claude Code gets everything in the folder you give it"
+  [ "$how" != in ] || ex="~/projects/thesis"
+  # Nothing is not the folder you are in (--read= or an empty variable), nor is the next option (--read --key x).
+  # In --read=~/notes no shell puts in the home folder: kingo does.
+  case "$want" in
+    "") die "kingo claude --$how needs a folder, for example:  ./kingo claude --$how $ex" ;;
+    -*) die "kingo claude --$how needs a folder, not $want. For example:  ./kingo claude --$how $ex" ;;
+    "~") want=$HOME ;;
+    "~/"*) want="$HOME/${want#"~/"}" ;;
+  esac
   # A relative folder is named from where kingo was started, not from kingo-pod (kingo has done a cd there).
   case "$want" in
     /*) ;;
-    *) [ -n "$_kingo_from" ] || die "kingo cannot tell which folder you are in. Name the folder in full, for example:  ./kingo claude --in ~/projects/thesis"
+    *) [ -n "$_kingo_from" ] || die "kingo cannot tell which folder you are in. Name the folder in full, for example:  ./kingo claude --$how $ex"
        want="$_kingo_from/$want" ;;
   esac
   case "$want" in
-    /mnt/*) die "$want is a Windows folder. kingo claude --in takes a folder in Linux, for example ~/projects/thesis: there the sandbox is tested. To move files between Windows and that folder, open it in Windows with: explorer.exe ." ;;
+    /mnt/*) die "$want is a Windows folder. kingo claude --$how takes a folder in Linux, for example ~/projects/thesis: there the sandbox is tested. To move files between Windows and that folder, open it in Windows with: explorer.exe ." ;;
   esac
-  [ -d "$want" ] || die "there is no folder $want. Make it first:  mkdir -p $want"
+  [ -d "$want" ] || die "there is no folder $want. Make it first:  mkdir -p $(printf '%q' "$want")"
   dir=$(cd "$want" && pwd -P) || die "cannot open the folder $want"
   home=$(cd "$HOME" && pwd -P)
   pod=$(cd "$KINGO_DIR" && pwd -P)
-  case "$dir/" in
-    "$pod"/*) return 0 ;;
-  esac
+  if [ "$how" = in ]; then
+    if claude_below "$dir" "$pod" > /dev/null; then return 0; fi
+  elif [ -d "$pod/shared" ] && [ ! -L "$pod/shared" ] && claude_below "$dir" "$pod/shared" > /dev/null; then
+    # kingo-pod/shared, wherever kingo-pod is: the folder for Langflow. Not when shared is a link: then the rules
+    # below hold for where it leads (the review of 18 Nov 2026: a link to ~ gave all of it).
+    printf '%s' "$dir"; return 0
+  fi
   case "$dir" in
-    /mnt/*) die "$want is a Windows folder ($dir). kingo claude --in takes a folder in Linux, for example ~/projects/thesis." ;;
+    /mnt/*) die "$want is a Windows folder ($dir). kingo claude --$how takes a folder in Linux." ;;
   esac
-  case "$dir/" in
-    "$home"/?*) ;;
-    *) die "kingo claude --in takes a folder inside your home folder ($home), not $dir and not the home folder itself: Claude Code may write everywhere in the folder you give it." ;;
-  esac
-  rel=${dir#"$home"/}
+  rel=$(claude_below "$dir" "$home") && [ -n "$rel" ] \
+    || die "kingo claude --$how takes a folder inside your home folder ($home), not $dir and not the home folder itself: $what."
   case "$rel" in
-    .*) die "$dir is a hidden folder of your home folder, where programs keep their settings and keys. Choose a folder for your work, for example ~/projects/thesis." ;;
-    Desktop|Documents|Downloads|Pictures|Music|Movies|Library|Library/*)
-      die "$dir is too wide: Claude Code may write everywhere in the folder you give it. Choose a folder inside it, or make one:  mkdir -p ~/projects/thesis" ;;
+    .*) die "$dir is a hidden folder of your home folder, where programs keep their settings and keys. Choose a folder for your work, or copy the files into one." ;;
   esac
-  case "$pod/" in
-    "$dir"/*) die "$dir holds kingo-pod ($pod). Claude Code could then change kingo itself. Choose a folder that kingo-pod is not in." ;;
-  esac
+  if claude_too_wide "$dir" "$home"; then
+    if [ "$dir" -ef "$home/Library" ]; then
+      die "$dir is too wide: $what. Name the folder in it that you mean, for example ~/Library/CloudStorage/Dropbox/notes."
+    fi
+    if [ "$how" = in ]; then
+      die "$dir is too wide: $what. Choose a folder inside it, or make one:  mkdir -p ~/projects/thesis"
+    fi
+    die "$dir is too wide: $what. Make a folder inside it for what Claude Code needs:  mkdir -p $(printf '%q' "$dir/for-claude")"
+  fi
+  while IFS='|' read -r p name; do
+    [ -n "$p" ] || continue
+    ! claude_below "$dir" "$p" > /dev/null \
+      || die "$dir is in $name, where kingo or another program keeps its keys and settings. Choose a folder for your work, or copy the files into one."
+    ! claude_below "$p" "$dir" > /dev/null \
+      || die "$dir holds $name, where kingo or another program keeps its keys and settings. Choose a folder for your work, or copy the files into one."
+  done <<EOF
+$(claude_private_places "$home")
+EOF
+  if [ "$how" != read ]; then
+    # ~/Library/LaunchAgents: programs that the Mac starts by itself at login, outside the sandbox
+    ! claude_below "$dir" "$home/Library/LaunchAgents" > /dev/null \
+      || die "$dir is in ~/Library/LaunchAgents, where your Mac keeps programs that it starts by itself at login: a program that Claude Code put there would run outside the sandbox. Choose another folder."
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      claude_below "$p" "$dir" > /dev/null || continue
+      [ "$p" -ef "$dir" ] && name="$dir is a folder" || name="$dir holds $p, a folder"
+      die "$name where your terminal finds its commands: a program that Claude Code put there would run outside the sandbox, the next time you or kingo start it. Choose a folder without commands in it. Is it the bin folder of a Python environment that is on in this terminal? Type deactivate, then start again."
+    done <<EOF
+$(claude_command_places "$home")
+EOF
+  fi
+  if [ "$how" = in ]; then
+    ! claude_below "$pod" "$dir" > /dev/null \
+      || die "$dir holds kingo-pod ($pod). Claude Code could then change kingo itself. Choose a folder that kingo-pod is not in."
+  elif [ "$how" = write ] || [ "$mode" = own ]; then
+    ! claude_below "$dir" "$pod" > /dev/null \
+      || die "$dir is in kingo-pod. Of kingo-pod, --$how takes only $pod/shared: kingo, its backups and my-nono-profile.json stay closed."
+    ! claude_below "$pod" "$dir" > /dev/null \
+      || die "$dir holds kingo-pod ($pod), and kingo, its backups and my-nono-profile.json stay closed. Choose a folder that kingo-pod is not in."
+  fi
   printf '%s' "$dir"
+}
+
+# --in <folder>: the folder Claude Code works in, in place of the course (CLAUDE.md: claude_folder_rules).
+claude_in_folder() { # folder, as the student typed it
+  claude_folder_rules in own "$1"
+}
+
+# ── kingo claude --read <folder>, --write <folder>: one more folder, for one start ──
+# Frank, 18 Nov 2026: "can this be done without a different nono profile, by adding flags to kc?"; "--write". nono
+# adds a folder from its command line to the profile (--read: read it; --allow: read and change it), and kingo names
+# it to Claude Code too (--add-dir), so that Claude Code reads there without asking. Claude Code's own /add-dir
+# cannot do that: a program in the sandbox cannot widen it, so a folder that the start did not give stays closed.
+# The rules are claude_folder_rules.
+claude_more_folder() { # read|write, course|own, folder as the student typed it
+  claude_folder_rules "$1" "$2" "$3"
 }
 
 cmd_claude() {
@@ -1770,9 +1898,15 @@ cmd_claude() {
       echo "  without asking (the sandbox protects your laptop either way; ./kingo backup saves your workflows and flows)."
       echo "kingo claude --in <folder> [claude options]  the same Claude Code for a folder of your own, without the course:"
       echo "  Claude writes only in that folder. No n8n, no Langflow, no database; the pod need not run."
-      echo "  The folder is inside your home folder, and not a Windows folder (/mnt/c/...)."
+      echo "  The folder is inside your home folder, not a Windows folder (/mnt/c/...), and none where your terminal finds its"
+      echo "  commands (~/bin) or programs keep their keys."
       echo "  Name it from where you are: --in . is the folder you are in. kingo-pod or a folder in it starts the course."
       echo "  ./kingo shortcuts makes kc: kc alone is kingo claude, kc . the folder you are in, kc <folder> that folder (ky: kingo yolo)."
+      echo "kingo claude --read <folder>  Claude Code may also read that folder, for this one start, and not change it."
+      echo "  --write <folder>: it may also change it. Both go more than once, and with --in and --login: kc ~/projects/x --read ~/notes."
+      echo "  The rules are those of --in. Of kingo-pod, they take only shared/ (in Langflow: /app/shared); in the course,"
+      echo "  --read takes it all, as the course reads it anyway."
+      echo "  /add-dir in Claude Code does not open the sandbox: only a start with --read or --write does."
       echo "Your own additions to the sandbox of the course: copy setup/claude/my-nono-profile.example.json to"
       echo "  $KINGO_DIR/my-nono-profile.json and change it. Claude can read that file and not change it."
       echo "kingo claude --login [--in <folder>] [claude options]  with your Claude subscription in place of OpenRouter:"
@@ -1789,23 +1923,65 @@ cmd_claude() {
     [ $# = 1 ] || die "kingo claude logout takes nothing after it."
     logout=1; set -- --login
   fi
-  # --in <folder> and --login, anywhere before Claude Code's own options (./kingo yolo --in ... puts an option first)
-  local in_dir="" login=0 a keep=() take=0
+  # --in <folder>, --login, and --read/--write <folder> (more folders for this one start), anywhere before Claude
+  # Code's own options (./kingo yolo --in ... puts an option first)
+  local in_dir="" login=0 a keep=() take=0 more="" more_read=() more_write=()
   for a in "$@"; do
     if [ "$take" = 1 ]; then in_dir=$a; take=2; continue; fi
-    if [ "$a" = "--in" ] && [ "$take" = 0 ]; then take=1; continue; fi
-    if [ "$a" = "--login" ]; then login=1; continue; fi
+    if [ -n "$more" ]; then
+      if [ "$more" = read ]; then more_read+=("$a"); else more_write+=("$a"); fi
+      more=""; continue
+    fi
+    case "$a" in
+      --in)      if [ "$take" = 0 ]; then take=1; continue; fi ;;
+      --in=*)    if [ "$take" = 0 ]; then in_dir=${a#--in=}; take=2; continue; fi ;;
+      --login)   login=1; continue ;;
+      --read)    more=read; continue ;;
+      --write)   more=write; continue ;;
+      --read=*)  more_read+=("${a#--read=}"); continue ;;
+      --write=*) more_write+=("${a#--write=}"); continue ;;
+    esac
     keep+=("$a")
   done
   [ "$take" != 1 ] || die "kingo claude --in needs a folder, for example:  ./kingo claude --in ~/projects/thesis"
+  [ -z "$more" ] || die "kingo claude --$more needs a folder, for example:  ./kingo claude --$more ~/projects/notes"
   if [ "$take" = 2 ]; then
     in_dir=$(claude_in_folder "$in_dir") || exit 1
     # kingo-pod or a folder in it: the course, as without --in
     [ -n "$in_dir" ] || echo "This folder is in kingo-pod: Claude Code starts for the course, in ${KINGO_DIR##*/}/claude."
   fi
-  if [ "$take" = 2 ] || [ "$login" = 1 ]; then
-    set -- ${keep[@]+"${keep[@]}"}
+  set -- ${keep[@]+"${keep[@]}"}
+  # The more folders: for nono (more_nono), for Claude Code (more_add), and one sentence for Claude Code (more_hint).
+  # --add-dir=<folder> in one word: Claude Code's --add-dir takes several folders, and so would take a prompt that
+  # comes after it for one more (the review of 18 Nov 2026).
+  local mf md more_nono=() more_add=() more_r="" more_w="" more_hint="" more_again="" mode=course
+  [ -z "$in_dir" ] || mode=own
+  for mf in ${more_read[@]+"${more_read[@]}"}; do
+    md=$(claude_more_folder read "$mode" "$mf") || exit 1
+    more_nono+=(--read "$md"); more_add+=("--add-dir=$md"); more_r="${more_r:+$more_r, }$md"
+    more_again="$more_again --read $(printf '%q' "$md")"
+    echo "Claude Code may also read this folder, and not change it: $md"
+  done
+  for mf in ${more_write[@]+"${more_write[@]}"}; do
+    md=$(claude_more_folder write "$mode" "$mf") || exit 1
+    more_nono+=(--allow "$md"); more_add+=("--add-dir=$md"); more_w="${more_w:+$more_w, }$md"
+    more_again="$more_again --write $(printf '%q' "$md")"
+    echo "Claude Code may also read and change this folder: $md"
+  done
+  [ -z "$more_r$more_w" ] || more_hint="This start gives you more folders, for this one session."
+  [ -z "$more_r" ] || more_hint="$more_hint You may also read these, and not change them: $more_r."
+  [ -z "$more_w" ] || more_hint="$more_hint You may also read and change these: $more_w."
+  # The line for a new start with one more folder: this start's own, with one --read more. A fixed "kc --read
+  # <folder>" dropped --login, ky and the folders of this start, and so changed who pays and what is open (the review
+  # of 18 Nov 2026). Claude Code gets it with its instructions: it is the one command it may ask the student to type.
+  local yolo=0 again_kc=kc again_kingo="./kingo claude"
+  for a in "$@"; do [ "$a" != --dangerously-skip-permissions ] || yolo=1; done
+  if [ "$yolo" = 1 ]; then again_kc=ky; again_kingo="./kingo yolo"; fi
+  if [ "$login" = 1 ]; then again_kc="${again_kc}l"; again_kingo="$again_kingo --login"; fi
+  if [ -n "$in_dir" ]; then
+    again_kc="$again_kc $(printf '%q' "$in_dir")"; again_kingo="$again_kingo --in $(printf '%q' "$in_dir")"
   fi
+  local again_hint="To give you one more folder, the user types /exit and starts you again with this line, which keeps what this start has: $again_kc$more_again --read <that folder> (without the short commands, in kingo-pod: $again_kingo$more_again --read <that folder>), or with --write in place of --read to change files there. It is the one command you may ask the user to type in their own terminal."
   local dir="$KINGO_DIR/claude" tpl="$KINGO_DIR/setup/claude" cfg="$HOME/.kingo-claude"
   [ -z "$in_dir" ] || dir=$in_dir
   [ "$login" = 0 ] || cfg=$CLAUDE_LOGIN_CFG
@@ -1909,6 +2085,8 @@ cmd_claude() {
   # The profiles follow this folder: ports from .env.local, changes from kingo update. Seven files; the top of
   # each says what it is. core: the sandbox without a way to a model. base and login: core and one way to a model
   # (OpenRouter, the Anthropic login). course: what the course adds. The course profiles name a way and course.
+  # Each is written whole, under another name and then moved (mv): two starts at once (hw3, step 13) must never
+  # find half of one (the review of 18 Nov 2026: 19 of 400 tries did).
   kesc=$(printf '%s' "$CLAUDE_KEYS" | sed 's/[&|\\]/\\&/g')
   local dev_port; dev_port=$(claude_dev_port)
   mkdir -p "$prof"
@@ -1919,7 +2097,8 @@ cmd_claude() {
            nono-profile-login-open.json:kingo-claude-login-open.json; do
     sed -e "s|__N8N_PORT__|$P_N8N|g" -e "s|__LANGFLOW_PORT__|$P_LANGFLOW|g" -e "s|__POSTGRES_PORT__|$P_POSTGRES|g" \
         -e "s|__KEYS_DIR__|$kesc|g" -e "s|__DEV_PORT__|$dev_port|g" \
-      "$tpl/${f%%:*}" > "$prof/${f##*:}"
+      "$tpl/${f%%:*}" > "$prof/${f##*:}.$$"
+    mv -f "$prof/${f##*:}.$$" "$prof/${f##*:}"
   done
   # Which profile nono starts with. For the course, the student may add to the sandbox: my-nono-profile.json in
   # this folder, which Claude can read and not change. It must extend the course profile, so that it adds to the
@@ -1927,8 +2106,8 @@ cmd_claude() {
   # __KEYS_DIR__ (the folder of the key files, for a route to another provider).
   # With --login, the student's file adds to the course profile of the login: kingo writes that name into the
   # copy that nono reads. A file that names another provider for the model does not go together with --login.
-  local profile=kingo-claude mine="$KINGO_DIR/my-nono-profile.json" course=kingo-claude
-  [ "$login" = 0 ] || { profile=kingo-claude-login-course; course=kingo-claude-login-course; }
+  local profile=kingo-claude mine="$KINGO_DIR/my-nono-profile.json" course=kingo-claude mine_prof=kingo-claude-mine
+  [ "$login" = 0 ] || { profile=kingo-claude-login-course; course=kingo-claude-login-course; mine_prof=kingo-claude-login-mine; }
   if [ "$logout" = 1 ]; then
     profile=kingo-claude-login
   elif [ -n "$in_dir" ]; then
@@ -1940,17 +2119,20 @@ cmd_claude() {
     if [ "$login" = 1 ] && grep -Eq '^[[:space:]]*"anthropic"[[:space:]]*:' "$mine"; then
       die "my-nono-profile.json names another provider for the model (\"anthropic\"), and --login uses your Claude subscription. Take one of the two: start without --login, or rename the file."
     fi
+    # With --login the copy has a name of its own (kingo-claude-login-mine): a kc and a kcl at the same time must not
+    # take each other's (the review of 18 Nov 2026).
     sed -e "s|__KINGO_DIR__|$esc|g" -e "s|__KEYS_DIR__|$kesc|g" \
         -e "s|^\([[:space:]]*\)\"extends\"[[:space:]]*:[[:space:]]*\"kingo-claude\"|\1\"extends\": \"$course\"|" \
-      "$mine" > "$prof/kingo-claude-mine.json"
-    if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ] && ! "$nono" profile validate "$prof/kingo-claude-mine.json" >/dev/null 2>&1; then
-      "$nono" profile validate "$prof/kingo-claude-mine.json" 2>&1 | tail -n 8 >&2 || true
+      "$mine" > "$prof/$mine_prof.json.$$"
+    mv -f "$prof/$mine_prof.json.$$" "$prof/$mine_prof.json"
+    if [ "${KINGO_CLAUDE_DRY_RUN:-}" != 1 ] && ! "$nono" profile validate "$prof/$mine_prof.json" >/dev/null 2>&1; then
+      "$nono" profile validate "$prof/$mine_prof.json" 2>&1 | tail -n 8 >&2 || true
       die "nono does not take my-nono-profile.json (the lines above say why). Claude Code was not started. To start without your own profile, rename the file."
     fi
-    profile=kingo-claude-mine
+    profile=$mine_prof
     echo "The sandbox follows your own profile too: $mine"
   else
-    rm -f "$prof/kingo-claude-mine.json"
+    rm -f "$prof/kingo-claude-mine.json" "$prof/kingo-claude-login-mine.json"
   fi
   # nono grants only folders that exist: also those of the browser, Node.js and playwright-core, when a download failed.
   mkdir -p "$cfg/tmp" "$cfg.lock" "$HOME/.local/state/claude/locks" "$HOME/.cache/claude" "$HOME/.local/share/claude" \
@@ -2003,8 +2185,8 @@ cmd_claude() {
   done
   if [ -n "$in_dir" ]; then
     # no AGENTS.md from kingo there: what the sandbox is comes on the command line, with the hint for look
-    if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT $(claude_look_hint_in)"
-    elif [ "$hint" = 1 ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT"; fi
+    if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT${more_hint:+ $more_hint} $again_hint $(claude_look_hint_in)"
+    elif [ "$hint" = 1 ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT${more_hint:+ $more_hint} $again_hint"; fi
     # Claude Code's memory goes into the folder, in memory-of-ai/ (Frank, 18 Nov 2026: "memory-of-ai"), as in the
     # course: there the student can read it, and it is the same with and without --login. Without this line it would
     # go into the config folder, hidden, one for each way. The settings are the template's with that line, written
@@ -2013,13 +2195,14 @@ cmd_claude() {
     [ "$login" = 0 ] || in_src="$tpl/settings-in-login.json"
     in_mem=$(printf '%s' "$dir/memory-of-ai" | sed 's/[\\"]/\\&/g')
     { head -n 1 "$in_src"; printf '  "autoMemoryDirectory": "%s",\n' "$in_mem"; tail -n +2 "$in_src"; } > "$in_set"
-    set -- claude --settings "$in_set" "$@"
+    set -- claude --settings "$in_set" ${more_add[@]+"${more_add[@]}"} "$@"
   else
-    if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_LOOK_HINT"; fi
+    if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_LOOK_HINT${more_hint:+ $more_hint} $again_hint"
+    elif [ "$hint" = 1 ]; then set -- "$@" --append-system-prompt "${more_hint:+$more_hint }$again_hint"; fi
     # With --login: the course folder's settings name the course's model at OpenRouter; these settings, which rank
     # above them, blank those lines, and Claude Code asks for Anthropic's models.
     if [ "$login" = 1 ]; then set -- --settings "$tpl/settings-login.json" "$@"; fi
-    set -- claude --add-dir "$KINGO_DIR" "$@"
+    set -- claude "--add-dir=$KINGO_DIR" ${more_add[@]+"${more_add[@]}"} "$@"
   fi
 
   # Linux and Windows (WSL2): there nono does not keep a program in the sandbox from connecting to a Unix socket
@@ -2035,6 +2218,7 @@ cmd_claude() {
 
   # What the sandbox may read besides the folder it starts in: for the course all of kingo-pod; for a folder of
   # your own only setup/claude, where look, the lock and the settings are.
+  # The folders of --read and --write come after it (more_nono): nono adds them to the profile.
   local reads="$KINGO_DIR"
   [ -z "$in_dir" ] || reads="$tpl"
 
@@ -2074,7 +2258,7 @@ cmd_claude() {
 
   if [ "${KINGO_CLAUDE_DRY_RUN:-}" = 1 ]; then
     echo "dry run — would start in $dir:"
-    echo "  nono run --profile $profile --allow-cwd --read $reads -- $*"
+    echo "  nono run --profile $profile --allow-cwd --read $reads${more_nono[@]+ ${more_nono[*]}} -- $*"
     echo "  variables: $(printf '%s ' "${envs[@]%%=*}")"
     echo "  ports: KINGO_DEV_PORT=$dev_port KINGO_POD_PORTS=$(claude_pod_ports)"
     return
@@ -2092,7 +2276,11 @@ cmd_claude() {
   fi
   cd "$dir"
   if [ -n "$in_dir" ]; then
-    echo "Claude Code works in $dir: it can write there and nowhere else on this laptop."
+    if [ -n "$more_w" ]; then
+      echo "Claude Code works in $dir: it can write there and in the folders of --write above, and nowhere else on this laptop."
+    else
+      echo "Claude Code works in $dir: it can write there and nowhere else on this laptop."
+    fi
     if grep -qi microsoft /proc/version 2>/dev/null && command -v wslpath >/dev/null 2>&1; then
       echo "In Windows, this folder is: $(wslpath -w "$dir" 2>/dev/null || true)"
     fi
@@ -2104,7 +2292,7 @@ cmd_claude() {
     unset XDG_RUNTIME_DIR
   fi
   export "${envs[@]}"
-  exec "$nono" run --profile "$profile" --allow-cwd --read "$reads" -- "$@"
+  exec "$nono" run --profile "$profile" --allow-cwd --read "$reads" ${more_nono[@]+"${more_nono[@]}"} -- "$@"
 }
 
 # ── shortcuts: kc, ky and kingo as commands of the student's own terminal ─────
@@ -2350,20 +2538,28 @@ shortcuts_remove() {
 
 # cmd_shortcut <kc|kcl|ky|kyl> [folder] [claude options]: what the shortcuts run. Alone, or with an option first
 # (kc --resume), the course; with a folder first (kc ., kc ~/projects/x), that folder, as --in does. A folder is a
-# first word that does not start with "-".
+# first word that does not start with "-". kingo's own options may come before it (kc --read ~/notes ~/projects/x):
+# without that, the folder went to Claude Code as its first prompt (the review of 18 Nov 2026).
 cmd_shortcut() {
-  local name=$1 pre=()
+  local name=$1 pre=() lead=()
   shift
   case "$name" in
     kcl) pre=(--login) ;;
     ky)  pre=(--dangerously-skip-permissions) ;;
     kyl) pre=(--dangerously-skip-permissions --login) ;;
   esac
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --read|--write) [ $# -ge 2 ] || break; lead+=("$1" "$2"); shift 2 ;;
+      --read=*|--write=*|--login) lead+=("$1"); shift ;;
+      *) break ;;
+    esac
+  done
   if [ $# -gt 0 ] && [ -n "$1" ] && [ "${1#-}" = "$1" ]; then
     pre+=(--in "$1")
     shift
   fi
-  cmd_claude ${pre[@]+"${pre[@]}"} "$@"
+  cmd_claude ${pre[@]+"${pre[@]}"} ${lead[@]+"${lead[@]}"} "$@"
 }
 
 # shortcuts_refresh: each startup file with a block of kingo shortcuts gets its block anew, with the same names, for
