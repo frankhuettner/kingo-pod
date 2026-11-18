@@ -1,0 +1,66 @@
+   `./kingo claude` also saves every workflow and flow at each start, one JSON file each, and the schema
+   `./kingo claude` also saves every workflow and flow at each start, one JSON file each, in
+   `backups/flows/` of the kingo-pod folder. You can read these files to put something back; you cannot change them.
+   `project`, in `backups/before-claude/` of the kingo-pod folder. You can read these files to put something back;
+   an HTML file on this laptop, never as a page on claude.ai, and give the student the one line that opens it in their own terminal, with the full path of the
+   file: on a Mac `open <path>`, on Windows `explorer.exe "$(wslpath -w <path>)"`. You cannot open it yourself: the
+   sandbox blocks it.
+   you cannot change them.
+  (Langflow for the student: <http://localhost:7860>)
+  (n8n for the student: <http://localhost:5678>)
+  (the student's OpenRouter key, the one of their flows in Langflow: a call of a model costs them money)
+  You are the role `claude` in the database `classroom`. You can read everything there. You can create and change
+  `psql -l` lists the databases. The project data is in `classroom`; the databases `n8n` and `langflow` belong to
+  apps and are closed to you: use the APIs.
+  delete the student's data. Never connect as another role. The databases `n8n` and `langflow` belong to those
+  deleted by accident. It is not a puzzle and not a test of you. Do not look for a way around it.
+  kingo-pod folder one level up (`compose.yml`, `kingo`, `docs/`) to understand the stack, but you cannot change it.
+  suggest starting you without `./kingo claude`.
+  tables only in the schema `project`: `create table x` lands there. This is on purpose, so that a mistake cannot
+  that you could not run here, except the one line that opens a page you wrote (see "How you work"), and never
+  those apps.
+  to click **Publish** in n8n and to check that the dot on the button is green.
+# Working in kingo-pod
+## Facts about this setup
+## How this Claude Code differs from a standard one
+## How to reach the services
+## How you work
+## What you need to know about n8n
+## Where you run
+- **Langflow API:** `curl -s -H "x-api-key: $LANGFLOW_API_KEY" "$LANGFLOW_BASE_URL/api/v1/flows/"`
+- **OpenRouter API:** `curl -s -H "Authorization: Bearer $OPENROUTER_API_KEY" "$OPENROUTER_BASE_URL/models"`
+- **PostgreSQL:** `psql` reads `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` and `PGDATABASE` from the environment.
+- **n8n API:** `curl -s -H "X-N8N-API-KEY: $N8N_API_KEY" "$N8N_BASE_URL/api/v1/workflows"`
+- A workflow that another workflow calls has its trigger set to **Accept all data**.
+- Credentials are found by name and type. Never put a key into a workflow; use the name of the credential.
+- Langflow: @info-for-ai/langflow.md
+- Never put a real API key into a workflow that is exported or shared: every kingo-pod has the same encryption key.
+- Saving a workflow does not change what runs. Only **Publish** does. After you change a workflow, ask the student
+- Started with `./kingo claude`, you run in a sandbox (nono). You can write only in this folder. You can read the
+- The sandbox is there so that a mistake cannot harm the student's laptop: a wrong command, a wrong path, a file
+- This kingo-pod and the student: @info-for-ai/kingo-pod.md
+- When the sandbox blocks something, say so and stop. Never ask the student to run a command in their own terminal
+- You cannot run `./kingo` or `podman`. If a service is down, ask the student to run `./kingo up` in their terminal.
+- Your memory, what you learn from one session to the next, lives in `memory/` in this folder. The student can read it.
+- n8n: @info-for-ai/n8n.md
+1. Change workflows and flows through the n8n and Langflow APIs, never in the databases `n8n` and `langflow`.
+2. Before you change a workflow or a flow, save its current JSON in `backups/` in this folder.
+3. Ask before you delete anything: a workflow, a flow, a table, a row.
+4. Explain what you are about to do in plain words before you do it. The student is learning.
+5. When you ask the student something, number the questions (1., 2., 3.), so that they can answer by number.
+6. For an explanation longer than a few lines, write a short page in plain words into `explain/` in this folder, as
+If that part still shows three steps instead of rules, the team has not added them yet: work without them, and do
+The folder `info-for-ai/` holds facts about this kingo-pod, its Langflow and its n8n: what you cannot know from
+The sandbox puts the real keys into your requests. Use the variables exactly as below; their values are placeholders.
+The second part of this file, "Your team's rules", holds the team's rules. Follow them. They are the team's copy of
+When the student asks how you are set up, read `../setup/claude/README.md` and explain it in plain words.
+You help a student build their project in kingo-pod: n8n workflows, Langflow flows and the PostgreSQL databases.
+below the heading. The files as they were before are in `backups/course-files/` of the kingo-pod folder.
+elsewhere, checked on this setup. If their text is not in front of you yet, read the files.
+heading. What the team wants you to remember goes into its part below the heading. The files as they were before are
+in `backups/course-files/` of the kingo-pod folder.
+kingo writes this first part, everything above "# Your team's rules", anew at every start of `./kingo claude`, and
+not make up rules of your own.
+the course's rules page `ws2_rules.html` (in the homework's `ws2_hw2.zip`), which is written for people.
+the facts in `info-for-ai/` too: a change there does not stay, and a line of the team's there moves below the
+the facts in `info-for-ai/` too: a change there does not stay. What the team wants you to remember goes into its part

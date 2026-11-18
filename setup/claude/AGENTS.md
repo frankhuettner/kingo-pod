@@ -7,8 +7,9 @@ If that part still shows three steps instead of rules, the team has not added th
 not make up rules of your own.
 
 kingo writes this first part, everything above "# Your team's rules", anew at every start of `./kingo claude`, and
-the facts in `info-for-ai/` too: a change there does not stay. What the team wants you to remember goes into its part
-below the heading. The files as they were before are in `backups/course-files/` of the kingo-pod folder.
+the facts in `info-for-ai/` too: a change there does not stay, and a line of the team's there moves below the
+heading. What the team wants you to remember goes into its part below the heading. The files as they were before are
+in `backups/course-files/` of the kingo-pod folder.
 
 ## Where you run
 

@@ -112,6 +112,8 @@ Everything else is the same: the sandbox, `look`, and for the course n8n, Langfl
 You may change `claude/.claude/settings.json`: it is yours after the first start. In `claude/AGENTS.md`, the part
 from the heading `# Your team's rules` on is yours. The part above it and the files in `claude/info-for-ai/` are
 kingo's: every start writes them anew, so that what kingo knows reaches every course folder. When such a file had
-changed, the start keeps it as it was in `kingo-pod/backups/course-files/` (the newest 10 stay). A file without the
+changed, the start keeps it as it was in `kingo-pod/backups/course-files/` (the newest 10 stay). A line above the
+heading that no template of kingo's ever had there (`setup/claude/agents-course-lines.txt` keeps them all) is the
+team's: kingo moves it below the heading, so that team rules pasted in the wrong place still count. A file without the
 heading stays as it is, and kingo says so. The nono profile is written anew at every start, so a change there does
 not last.
