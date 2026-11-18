@@ -103,6 +103,54 @@ With `--in`, only the key of that name is asked for and checked. In the course, 
 keeps the key of your flows. Names are small letters, digits and `-` (not at the start or the end). Not with
 `--login`, and not with a `my-nono-profile.json` that names another provider for the model.
 
+## A key for another provider: Anthropic's API, Ollama, or an address
+
+`--key <name> --provider <provider>` gives the key of that name to another provider than OpenRouter:
+
+| `--provider` | The model comes from | The key |
+|---|---|---|
+| `anthropic` | Anthropic's API, `https://api.anthropic.com` | an Anthropic API key, made for one workspace, sent in `Authorization: Bearer` |
+| `ollama` | Ollama on this laptop, `http://127.0.0.1:11434` | none |
+| an address | what the provider names for `ANTHROPIC_BASE_URL`: `https://...`, or `http://` on this laptop only (`127.0.0.1`, `localhost`) | the provider's, sent in `Authorization: Bearer`; a server on this laptop may need none |
+| `openrouter` | OpenRouter, as without `--provider` | an OpenRouter key |
+
+The provider must speak Anthropic's Messages API (`/v1/messages`): it is what Claude Code speaks.
+
+`--model <ID>` names the model. Ollama and an address need it. With `anthropic`, Claude Code picks one of Anthropic's
+models without it, and `/model` in Claude Code switches; with `--model`, that model is the first one. For every other
+provider, the one model does every job, as in the course. Without `--key`, `--model` is Claude Code's own option, as
+before.
+
+```
+kc ~/projects/thesis --key thesis --provider anthropic
+kc ~/projects/thesis --key thesis --provider anthropic --model claude-sonnet-5-5
+kc ~/projects/notes --key local --provider ollama --model qwen3.5
+kc ~/projects/work --key work --provider https://llm.example.com/anthropic --model big-model
+```
+
+kingo keeps the provider and the model with the name, in `~/.config/kingo/key-<name>.conf`, and the key in
+`~/.config/kingo/key-<name>.key`, outside the sandbox. So the next start needs only `--key <name>`, and kingo says at
+every start where the model comes from and which model it is. `--model` again changes the model. A name stays with
+its provider once it has a key: for another provider, take another name, or delete the key's file.
+
+What kingo checks: an OpenRouter key and an Anthropic API key at their provider, at every start; a key that is refused
+is deleted, and the next start asks again. For Ollama, that Ollama answers. A key for an address is not checked: kingo
+knows no address there that would check it.
+
+How it works: the profile `kingo-claude-key-<course|base|mine>-<name>` gives the route of the model for that
+provider. Inside the sandbox, Claude Code holds a stand-in in `ANTHROPIC_AUTH_TOKEN` for every provider; nono puts the
+key into the request on the way out, in `Authorization: Bearer`. The model goes into settings that kingo writes at every
+start, into Claude Code's config folder: `settings-in-key-<name>-<number>.json` for a folder of your own, and
+`settings-key-<name>.json` for the course, where they rank above the settings of the course folder.
+
+An Anthropic API key must be made for one workspace (on platform.claude.com, API keys, Create key: choose a
+workspace). A key that is not for one workspace needs the workspace in every request, which Claude Code does not send;
+Anthropic then answers with an error that names `anthropic-workspace-id`.
+
+Not tested with a real key in the CI: there, a stand-in takes the provider's place and says which key came in which
+header and which model was asked for. Under Windows, Ollama must run in Ubuntu, where kingo runs: an Ollama that runs
+in Windows does not answer on `127.0.0.1` there.
+
 ## Shorter commands: `./kingo shortcuts`
 
 `./kingo shortcuts` adds short commands to your terminal. It shows a list: type the numbers you want, or press Enter

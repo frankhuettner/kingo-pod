@@ -1313,6 +1313,165 @@ PYTHON
   if has "$(results "$log3")" "thesis-key"; then fail "the key of --key is readable inside the sandbox"; fi
   rm -f "$kf"
   ok "the model gets the key of --key, also without the key without a name; inside the sandbox it is a stand-in"
+
+  # --key <name> --provider <provider> [--model <ID>]: the key of a name for another provider (Frank, 19 Nov 2026:
+  # "beliebig, z.b. auch local"). kingo keeps the provider and the model with the name, writes the route of the model
+  # for that provider, and the settings with that model. Checked here: what kingo refuses; what it keeps; the route as
+  # nono sees it; and with the real Claude Code and the stand-in for the model, which key comes in which header, and
+  # which model is asked for.
+  say "kingo claude --key --provider: Anthropic's API, Ollama, or the address of a provider"
+  local kd="$HOME/.config/kingo" set4 log4="$CFG/tmp/model-provider.jsonl"
+  refuses "goes with --key <name>" --provider anthropic
+  refuses "needs a provider" --key api --provider
+  for n in "ftp://x" "http://example.com" "http://127.0.0.2:8000" "https://" "https://a b" "https://x:9z" "anthropic2" 'https://x/$(id)' "https://user@x.y" "HTTPS://x.y"; do
+    refuses "kingo claude --provider" --key bad --provider "$n" --model m
+  done
+  refuses "needs a model too" --key bad --provider ollama
+  refuses "needs a model too" --key bad --provider https://api.example.com/anthropic
+  refuses "takes the ID of a model" --key bad --provider ollama --model 'a"b'
+  refuses "takes the ID of a model" --key bad --provider ollama --model 'a|b'
+  refuses "needs the ID of a model" --key bad --provider ollama --model
+  [ ! -e "$kd/key-bad.conf" ] || { show "$(cat "$kd/key-bad.conf")" 3; fail "a start that kingo refused left a file for the key"; }
+  ok "--provider refuses: no --key, no provider, an address that is not https (or http on this laptop), a letter that is not of an address; no model, or one with a letter that is not of an ID"
+
+  # Anthropic's API, in a folder of one's own
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key api --provider anthropic) || fail "kc <folder> --key api --provider anthropic did not get as far as the start of Claude Code"
+  has "$dry" "nono run --silent --profile kingo-claude-key-base-api --allow-cwd --read $KINGO_DIR/setup/claude -- " || { show "$dry" 4; fail "--provider anthropic does not start nono with the profile of the key"; }
+  has "$dry" "Claude Code's model comes from Anthropic's API, paid with your key \"api\": $kd/key-api.key" || { show "$dry" 4; fail "--provider anthropic does not say where the model comes from"; }
+  has "$dry" "The model: Claude Code picks one of Anthropic's" || { show "$dry" 4; fail "--provider anthropic without --model does not say who picks the model"; }
+  if has "$dry" CLAUDE_CODE_MAX_CONTEXT_TOKENS; then fail "with Anthropic's API, kingo still tells Claude Code the size of the course model's context"; fi
+  [ "$(cat "$kd/key-api.conf")" = "$(printf 'provider=anthropic\nmodel=')" ] || { show "$(cat "$kd/key-api.conf")" 3; fail "kingo did not keep the provider with the name"; }
+  [ "$(stat -c %a "$kd/key-api.conf")" = 600 ] || fail "the file with the provider of the key is readable for others"
+  set4=$(printf '%s\n' "$dry" | sed -n 's/.* claude --settings \([^ ]*\) .*/\1/p' | head -n 1)
+  [ -s "$set4" ] || { show "$dry" 4; fail "kingo did not write settings for the key"; }
+  /usr/bin/python3 - "$set4" "$dir" <<'PYTHON' || fail "the settings for Anthropic's API are not the settings of a folder of one's own without the lines that name a model"
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+env = data["env"]
+models = sorted(k for k in env if k.endswith("_MODEL"))
+print("         | lines that name a model: %s; ANTHROPIC_API_KEY=%r; memory in %s" % (models or "none", env.get("ANTHROPIC_API_KEY"), data.get("autoMemoryDirectory")))
+sys.exit(0 if not models and env.get("ANTHROPIC_API_KEY") == "" and data.get("autoMemoryDirectory") == sys.argv[2] + "/memory-of-ai"
+         and data.get("disableRemoteControl") is True and env.get("DISABLE_TELEMETRY") == "1" else 1)
+PYTHON
+  kp="$pd/kingo-claude-key-base-api.json"
+  nono profile validate "$kp" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of the key for Anthropic's API"; }
+  /usr/bin/python3 - kingo-claude-key-base-api "$kd/key-api.key" <<'PYTHON' || fail "the route of the model for Anthropic's API is not: api.anthropic.com, the key in Authorization: Bearer, a stand-in in ANTHROPIC_AUTH_TOKEN"
+import json, subprocess, sys
+out = subprocess.run(["nono", "profile", "show", "--format", "manifest", sys.argv[1]], capture_output=True, text=True, check=True).stdout
+routes = {c["name"]: c for c in json.loads(out[out.index("{"):])["credentials"]}
+r = routes.get("anthropic", {})
+print("         | routes: %s; the model: %s, %s: %s, stand-in in %s" % (", ".join(sorted(routes)), r.get("upstream"), r.get("inject", {}).get("header"), r.get("inject", {}).get("format"), r.get("env_var")))
+sys.exit(0 if list(routes) == ["anthropic"] and r.get("upstream") == "https://api.anthropic.com" and r.get("inject") == {"format": "Bearer {}", "header": "Authorization", "mode": "header"}
+         and r.get("env_var") == "ANTHROPIC_AUTH_TOKEN" and r.get("source") == "file://" + sys.argv[2] else 1)
+PYTHON
+  # the next start needs only the name; --model is kept too, and names the first model only
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key api) || fail "kc <folder> --key api did not start with the provider that kingo kept"
+  has "$dry" "Claude Code's model comes from Anthropic's API" || { show "$dry" 4; fail "the next start with --key api forgot the provider"; }
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc --key api --model claude-sonnet-5-5 "$dir") || fail "kc --key api --model <ID> <folder> did not get as far as the start of Claude Code"
+  has "$dry" "The model: claude-sonnet-5-5 (kept with \"api\"; --model changes it)" || { show "$dry" 4; fail "--model next to --key does not name the model of the key"; }
+  if has "$(printf '%s\n' "$dry" | grep '^  nono run ')" " --model"; then show "$dry" 4; fail "--model next to --key went on to Claude Code as well"; fi
+  [ "$(cat "$kd/key-api.conf")" = "$(printf 'provider=anthropic\nmodel=claude-sonnet-5-5')" ] || fail "kingo did not keep the model with the name"
+  /usr/bin/python3 - "$set4" <<'PYTHON' || fail "with --model, the settings for Anthropic's API do not name that model, and that one only"
+import json, sys
+env = json.load(open(sys.argv[1], encoding="utf-8"))["env"]
+models = {k: v for k, v in env.items() if k.endswith("_MODEL")}
+print("         | %s" % models)
+sys.exit(0 if models == {"ANTHROPIC_MODEL": "claude-sonnet-5-5"} else 1)
+PYTHON
+  # the course: settings for the command line, which rank above the settings of the course folder
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --key api) || fail "kingo claude --key api did not get as far as the start of Claude Code"
+  has "$dry" "nono run --silent --profile kingo-claude-key-course-api --allow-cwd --read $KINGO_DIR -- " || { show "$dry" 4; fail "in the course, --key api does not start nono with the profile of the key"; }
+  has "$dry" " claude --add-dir=$KINGO_DIR --settings $CFG/settings-key-api.json " || { show "$dry" 4; fail "in the course, the key of a name with a model does not bring its settings"; }
+  /usr/bin/python3 - "$CFG/settings-key-api.json" <<'PYTHON' || fail "in the course, the settings of the key do not name its model and blank the other five"
+import json, sys
+env = json.load(open(sys.argv[1], encoding="utf-8"))["env"]
+print("         | %s" % env)
+sys.exit(0 if env.pop("ANTHROPIC_MODEL") == "claude-sonnet-5-5" and len(env) == 5 and set(env.values()) == {""} else 1)
+PYTHON
+  # a name stays with its provider once it has a key, and an OpenRouter key of before stays one
+  ( umask 077; printf 'api-key-of-the-name' > "$kd/key-api.key" )
+  refuses "The key \"api\" is for Anthropic's API, not for Ollama on this laptop" --key api --provider ollama --model m
+  ( umask 077; printf 'thesis-key' > "$kf" )
+  refuses "The key \"thesis\" is for OpenRouter, not for Anthropic's API" --key thesis --provider anthropic
+  rm -f "$kf"
+  # --model without --key is Claude Code's own option, as before
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --model opus) || fail "kc <folder> --model opus did not get as far as the start of Claude Code"
+  has "$(printf '%s\n' "$dry" | grep '^  nono run ')" " --model opus" || { show "$dry" 4; fail "--model without --key no longer goes on to Claude Code"; }
+  ok "Anthropic's API: kingo keeps the provider and the model with the name; the route is api.anthropic.com with the key in Authorization: Bearer; the settings name no model, or the first only"
+
+  # The real Claude Code with that route and those settings; the stand-in takes Anthropic's place and says what came.
+  # The key comes in Authorization: Bearer and nothing in x-api-key: Anthropic's API refuses a request that carries a
+  # credential in both.
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key api) || fail "kc <folder> --key api did not write its profile again"
+  sed -i "s|https://api.anthropic.com|http://127.0.0.1:$MODEL_PORT|" "$kp"
+  grep -q "\"upstream\": \"http://127.0.0.1:$MODEL_PORT\"" "$kp" || fail "the profile of the key has no line for Anthropic's API that the stand-in could take"
+  PROBE='echo "token-in-sandbox=$ANTHROPIC_AUTH_TOKEN key-in-sandbox=${ANTHROPIC_API_KEY:-none}"; echo the-command-ended'
+  base_before=("${base[@]}")
+  base=(nono run --silent --profile kingo-claude-key-base-api --allow-cwd --read "$KINGO_DIR/setup/claude" --)
+  model_start "$log4"
+  out=$(in_folder "${LOCK[@]}" claude --settings "$set4" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
+  model_stop "$log4"
+  base=("${base_before[@]}")
+  has "$out" KINGO-PROBE-DONE || { show "$out" 40; fail "Claude Code did not finish the turn with the route for Anthropic's API"; }
+  /usr/bin/python3 - "$log4" <<'PYTHON' || fail "the requests for Anthropic's API did not carry the key in Authorization: Bearer and nothing in x-api-key, or not the model of the key"
+import json, sys
+posts = [e for e in map(json.loads, open(sys.argv[1])) if e.get("method") == "POST" and e.get("kind") not in ("count", "unknown")]
+seen = sorted({(e.get("model"), e.get("xkey"), e.get("auth")) for e in posts})
+for model, xkey, auth in seen:
+    print("         | model %s, x-api-key %r, Authorization %r" % (model, xkey, auth))
+# The first model is the key's. Claude Code may ask one of Anthropic's small models for a side task: the settings
+# name the first model only, as Claude Code knows Anthropic's others itself.
+models = {m for m, _, _ in seen}
+sys.exit(0 if seen and {(x, a) for _, x, a in seen} == {("", "Bearer api-key-of-the-name")} and "claude-sonnet-5-5" in models
+         and all(str(m).startswith("claude-") for m in models) else 1)
+PYTHON
+  if has "$(results "$log4")" "api-key-of-the-name"; then fail "the key for Anthropic's API is readable inside the sandbox"; fi
+  has "$(results "$log4")" "key-in-sandbox=none" || { show "$(results "$log4")" 6; fail "ANTHROPIC_API_KEY is set inside the sandbox: Claude Code would ask whether to use it"; }
+  show "$(results "$log4")" 2
+  ok "Anthropic's API: the model gets the key in Authorization: Bearer and nothing in x-api-key, and is asked for the model of the key; inside the sandbox the key is a stand-in"
+
+  # The address of a provider: here the stand-in itself, on this laptop. No file is changed by hand: the profile and
+  # the settings are kingo's as they are. The key goes out in Authorization: Bearer, and all six lines name the model.
+  ( umask 077; printf 'gateway-key' > "$kd/key-gw.key" )
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key gw --provider "http://localhost:$MODEL_PORT/" --model other/model:8b) || fail "kc <folder> --key gw --provider <address> did not get as far as the start of Claude Code"
+  has "$dry" "Claude Code's model comes from http://127.0.0.1:$MODEL_PORT, with your key \"gw\": $kd/key-gw.key" || { show "$dry" 4; fail "--provider <address> does not say where the model comes from"; }
+  has "$dry" CLAUDE_CODE_MAX_CONTEXT_TOKENS || fail "with the address of a provider, kingo no longer tells Claude Code the size of the context"
+  set4=$(printf '%s\n' "$dry" | sed -n 's/.* claude --settings \([^ ]*\) .*/\1/p' | head -n 1)
+  nono profile validate "$pd/kingo-claude-key-base-gw.json" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of the key for the address of a provider"; }
+  PROBE='echo "token-in-sandbox=$ANTHROPIC_AUTH_TOKEN"; echo the-command-ended'
+  base=(nono run --silent --profile kingo-claude-key-base-gw --allow-cwd --read "$KINGO_DIR/setup/claude" --)
+  model_start "$log4"
+  out=$(in_folder "${LOCK[@]}" claude --settings "$set4" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
+  model_stop "$log4"
+  base=("${base_before[@]}")
+  has "$out" KINGO-PROBE-DONE || { show "$out" 40; fail "Claude Code did not finish the turn with the address of a provider"; }
+  /usr/bin/python3 - "$log4" <<'PYTHON' || fail "the requests to the address of the provider did not carry its key in Authorization: Bearer, or not the model of the key"
+import json, sys
+posts = [e for e in map(json.loads, open(sys.argv[1])) if e.get("method") == "POST" and e.get("kind") not in ("count", "unknown")]
+seen = sorted({(e.get("model"), e.get("auth"), e.get("xkey")) for e in posts})
+for model, auth, xkey in seen:
+    print("         | model %s, Authorization %r, x-api-key %r" % (model, auth, xkey))
+sys.exit(0 if seen == [("other/model:8b", "Bearer gateway-key", "")] else 1)
+PYTHON
+  if has "$(results "$log4")" "gateway-key"; then fail "the key for the address of a provider is readable inside the sandbox"; fi
+  ok "the address of a provider: the model gets the key of the name in Authorization: Bearer, and every request asks for the model of the key"
+
+  # Ollama: a model on this laptop, no key. kingo writes a word into the key file, and stops when Ollama does not
+  # answer. Here nothing listens on Ollama's port.
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key local --provider ollama --model qwen3.5) || fail "kc <folder> --key local --provider ollama did not get as far as the start of Claude Code"
+  has "$dry" "Claude Code's model comes from Ollama on this laptop (\"local\")." || { show "$dry" 4; fail "--provider ollama does not say where the model comes from"; }
+  grep -q '"upstream": "http://127.0.0.1:11434"' "$pd/kingo-claude-key-base-local.json" || fail "the route for Ollama does not go to 127.0.0.1:11434"
+  nono profile validate "$pd/kingo-claude-key-base-local.json" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of the key for Ollama"; }
+  if curl -s -m 2 -o /dev/null http://127.0.0.1:11434/api/version; then
+    printf '         | something answers on 127.0.0.1:11434 here: the start without Ollama is not checked\n'
+  else
+    if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_NO_BROWSER=1 ./kingo claude --in "$dir" --key local < /dev/null 2>&1); then show "$out" 3; fail "kingo claude started for Ollama, and Ollama does not run"; fi
+    has "$out" "Ollama does not answer on this laptop" || { show "$out" 3; fail "kingo does not say that Ollama does not answer"; }
+    if has "$out" "Paste"; then show "$out" 3; fail "for Ollama, kingo asked for a key"; fi
+    [ "$(cat "$kd/key-local.key")" = ollama ] || fail "for Ollama, kingo did not write the word that stands for a key"
+  fi
+  rm -f "$kd"/key-api.* "$kd"/key-gw.* "$kd"/key-local.*
+  ok "Ollama: the route goes to 127.0.0.1:11434 without asking for a key, and kingo stops when Ollama does not answer"
 }
 
 # kingo claude --login: Claude Code with the student's Anthropic login in place of OpenRouter. No login can be made

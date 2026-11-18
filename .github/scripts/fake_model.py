@@ -108,7 +108,8 @@ class Handler(BaseHTTPRequestHandler):
         self.note(method="POST", path=self.path, kind=kind, model=body.get("model"), stream=bool(body.get("stream")),
                   tools=len(body.get("tools") or []), messages=len(body.get("messages") or []), results=results,
                   key=(self.headers.get("Authorization") or self.headers.get("x-api-key") or "")[:40],
-                  key_header="authorization" if self.headers.get("Authorization") else "x-api-key" if self.headers.get("x-api-key") else "")
+                  key_header="authorization" if self.headers.get("Authorization") else "x-api-key" if self.headers.get("x-api-key") else "",
+                  auth=(self.headers.get("Authorization") or "")[:40], xkey=(self.headers.get("x-api-key") or "")[:40])
         model = body.get("model") or "stand-in"
         if body.get("stream"):
             return self.reply(200, "text/event-stream", events(model, blocks, stop))
