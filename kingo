@@ -1249,6 +1249,34 @@ claude_course_theirs() {
   rm -f "$known"
 }
 
+# Claude Code's memory in the course folder was memory/ until 1.4.21; since then it is memory-of-ai/ (Frank,
+# 18 Nov 2026: "memory-of-ai", the name says who writes it, as info-for-ai/ does). The settings of a course folder are
+# the student's after the first start, so kingo changes only the line that its own template wrote, and moves the notes:
+# a note that is in both folders stays in memory/, and kingo says so. Never fatal.
+claude_memory_move() { # course folder
+  local dir=$1 set="$1/.claude/settings.json" f n=0 left=0
+  if [ -f "$set" ] && grep -Eq '"autoMemoryDirectory"[[:space:]]*:[[:space:]]*"[^"]*/claude/memory"' "$set"; then
+    sed -E 's|("autoMemoryDirectory"[[:space:]]*:[[:space:]]*"[^"]*/claude/memory)"|\1-of-ai"|' "$set" > "$set.kingo-new" \
+      && mv "$set.kingo-new" "$set" || { rm -f "$set.kingo-new"; warn "could not change the memory folder in $set to memory-of-ai/"; }
+  fi
+  [ -d "$dir/memory" ] || return 0
+  if [ ! -e "$dir/memory-of-ai" ]; then
+    mv "$dir/memory" "$dir/memory-of-ai" && echo "kingo moved Claude Code's memory from claude/memory/ to claude/memory-of-ai/." \
+      || warn "could not move claude/memory/ to claude/memory-of-ai/"
+    return 0
+  fi
+  for f in "$dir/memory"/* "$dir/memory"/.[!.]*; do
+    [ -e "$f" ] || continue
+    if [ -e "$dir/memory-of-ai/${f##*/}" ]; then left=$((left + 1)); else mv "$f" "$dir/memory-of-ai/" && n=$((n + 1)); fi
+  done
+  rmdir "$dir/memory" 2>/dev/null || true
+  local w=notes; [ "$n" != 1 ] || w=note
+  [ "$n" = 0 ] || echo "kingo moved $n $w of Claude Code's memory from claude/memory/ to claude/memory-of-ai/."
+  w="notes are"; [ "$left" != 1 ] || w="note is"
+  [ "$left" = 0 ] || warn "$left $w in both claude/memory/ and claude/memory-of-ai/: kingo left what is in both in claude/memory/. Claude Code reads only claude/memory-of-ai/."
+  return 0
+}
+
 # claude_course_files <template folder> <course folder>
 claude_course_files() {
   local tpl=$1 dir=$2 t n f name tmp kept moved=0 had=0 wrote="" root="$KINGO_DIR/backups/course-files" all k d
@@ -1676,7 +1704,7 @@ claude_login_step() { # nono, templates folder
 # folder and nowhere else, with the profile "kingo-claude-base" (setup/claude/nono-profile-base.json). kingo puts
 # no file into the folder: the settings come from setup/claude/settings-in.json and the text below, on the command
 # line. What Claude Code is told there, in place of the course's AGENTS.md:
-CLAUDE_IN_HINT='You were started with "./kingo claude --in" and run in a sandbox (nono). You can write only in the folder you were started in. The sandbox is there so that a mistake cannot harm this laptop: a wrong command, a wrong path, a file deleted by accident. It is not a puzzle and not a test of you: do not look for a way around it. When it blocks something, say what was blocked and stop. Never ask the user to run a command in their own terminal that you could not run here, and never suggest starting you without ./kingo claude.'
+CLAUDE_IN_HINT='You were started with "./kingo claude --in" and run in a sandbox (nono). You can write only in the folder you were started in. The sandbox is there so that a mistake cannot harm this laptop: a wrong command, a wrong path, a file deleted by accident. It is not a puzzle and not a test of you: do not look for a way around it. When it blocks something, say what was blocked and stop. Never ask the user to run a command in their own terminal that you could not run here, and never suggest starting you without ./kingo claude. Your memory, what you learn from one session to the next, lives in memory-of-ai/ in this folder: the user can read it.'
 
 # The folder must be one that Claude Code may get as a whole. Prints its full path, or says why not and fails.
 # kingo-pod or a folder in it is the course (Frank, 15 Nov 2026): then it prints nothing, and kingo claude starts as
@@ -1876,6 +1904,7 @@ cmd_claude() {
     [ -f "$dir/CLAUDE.md" ] || cp "$tpl/CLAUDE.md" "$dir/CLAUDE.md"
     claude_course_files "$tpl" "$dir"
     [ -f "$dir/.claude/settings.json" ] || sed "s|__KINGO_DIR__|$esc|g" "$tpl/settings.json" > "$dir/.claude/settings.json"
+    claude_memory_move "$dir"
   fi
   # The profiles follow this folder: ports from .env.local, changes from kingo update. Seven files; the top of
   # each says what it is. core: the sandbox without a way to a model. base and login: core and one way to a model
@@ -1976,8 +2005,15 @@ cmd_claude() {
     # no AGENTS.md from kingo there: what the sandbox is comes on the command line, with the hint for look
     if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT $(claude_look_hint_in)"
     elif [ "$hint" = 1 ]; then set -- "$@" --append-system-prompt "$CLAUDE_IN_HINT"; fi
-    if [ "$login" = 1 ]; then set -- claude --settings "$tpl/settings-in-login.json" "$@"
-    else set -- claude --settings "$tpl/settings-in.json" "$@"; fi
+    # Claude Code's memory goes into the folder, in memory-of-ai/ (Frank, 18 Nov 2026: "memory-of-ai"), as in the
+    # course: there the student can read it, and it is the same with and without --login. Without this line it would
+    # go into the config folder, hidden, one for each way. The settings are the template's with that line, written
+    # at every start into the config folder, which the sandbox lets Claude Code read.
+    local in_set="$cfg/settings-in.json" in_src="$tpl/settings-in.json" in_mem
+    [ "$login" = 0 ] || in_src="$tpl/settings-in-login.json"
+    in_mem=$(printf '%s' "$dir/memory-of-ai" | sed 's/[\\"]/\\&/g')
+    { head -n 1 "$in_src"; printf '  "autoMemoryDirectory": "%s",\n' "$in_mem"; tail -n +2 "$in_src"; } > "$in_set"
+    set -- claude --settings "$in_set" "$@"
   else
     if [ "$hint" = 1 ] && [ -n "$(claude_browser_platform)" ]; then set -- "$@" --append-system-prompt "$CLAUDE_LOOK_HINT"; fi
     # With --login: the course folder's settings name the course's model at OpenRouter; these settings, which rank

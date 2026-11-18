@@ -404,6 +404,24 @@ course_files() {
 
   mv "$dir/AGENTS.ci-before" "$dir/AGENTS.md"; rm -f "$dir/AGENTS.ci-none"; rm -rf "$saved"
   cf_start "with the template's AGENTS.md again"
+
+  # Claude Code's memory: memory/ until 1.4.21, memory-of-ai/ since (Frank, 18 Nov 2026). A course folder of that
+  # time: the line of the old template in settings.json, and a note in memory/.
+  say "the course folder: Claude Code's memory moves from memory/ to memory-of-ai/"
+  grep -q "\"autoMemoryDirectory\": \"$KINGO_DIR/claude/memory-of-ai\"," "$dir/.claude/settings.json" \
+    || fail "a new course folder does not keep Claude Code's memory in memory-of-ai/"
+  sed -i "s|/claude/memory-of-ai\"|/claude/memory\"|" "$dir/.claude/settings.json"
+  rm -rf "$dir/memory-of-ai"; mkdir -p "$dir/memory"; echo "- a note of $$" > "$dir/memory/MEMORY.md"
+  cf_start "with the memory in memory/"
+  has "$dry" "kingo moved Claude Code's memory from claude/memory/ to claude/memory-of-ai/." || { show "$dry" 6; fail "kingo did not say that it moved the memory"; }
+  grep -qxF -- "- a note of $$" "$dir/memory-of-ai/MEMORY.md" || fail "the note is not in memory-of-ai/"
+  [ ! -e "$dir/memory" ] || fail "memory/ is still there"
+  grep -q "\"autoMemoryDirectory\": \"$KINGO_DIR/claude/memory-of-ai\"," "$dir/.claude/settings.json" \
+    || { show "$(grep autoMemory "$dir/.claude/settings.json")" 2; fail "settings.json does not name memory-of-ai/"; }
+  cf_start "a second time, after the move"
+  if has "$dry" "Claude Code's memory"; then show "$dry" 6; fail "kingo moved the memory again"; fi
+  rm -rf "$dir/memory-of-ai"
+  ok "a course folder from before: the note moves to memory-of-ai/, settings.json names it, the next start does nothing"
 }
 
 part_sandbox() {
@@ -915,10 +933,15 @@ part_own() {
   say "kingo claude --in: what it would start"
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$dir") || fail "kingo claude --in did not get as far as the start of Claude Code"
   show "$dry" 2
-  has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- /usr/bin/python3 -I $KINGO_DIR/setup/claude/no_unix_sockets.py claude --settings $KINGO_DIR/setup/claude/settings-in.json --permission-mode default --append-system-prompt You were started with" \
+  has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- /usr/bin/python3 -I $KINGO_DIR/setup/claude/no_unix_sockets.py claude --settings $HOME/.kingo-claude/settings-in.json --permission-mode default --append-system-prompt You were started with" \
     || fail "kingo claude --in would not start Claude Code with the base profile, under the lock, with its own settings"
   [ -z "$(ls -A "$dir")" ] || fail "kingo put a file into the folder: $(ls -A "$dir")"
-  ok "the base profile, the lock, settings from kingo-pod, and no file in the folder"
+  # The settings are kingo's template with one line more: Claude Code's memory in memory-of-ai/ of the folder.
+  [ "$(grep -v autoMemoryDirectory "$HOME/.kingo-claude/settings-in.json")" = "$(cat "$KINGO_DIR/setup/claude/settings-in.json")" ] \
+    || fail "the settings of kingo claude --in are not the template's with the line for the memory"
+  grep -qxF "  \"autoMemoryDirectory\": \"$dir/memory-of-ai\"," "$HOME/.kingo-claude/settings-in.json" \
+    || { show "$(cat "$HOME/.kingo-claude/settings-in.json")" 5; fail "with --in, Claude Code's memory does not go into memory-of-ai/ of the folder"; }
+  ok "the base profile, the lock, settings from kingo-pod with the memory in memory-of-ai/ of the folder, and no file in the folder"
   # What Claude Code is told there: no n8n, and nothing for the user's own terminal (CLAUDE_IN_HINT forbids that)
   if has "$dry" 'N8N_BASE_URL'; then fail "kingo claude --in tells Claude Code about n8n, which is not there"; fi
   if has "$dry" "in their own terminal (npm run dev)"; then fail "kingo claude --in asks Claude Code to send the user to their own terminal, which CLAUDE_IN_HINT forbids"; fi
@@ -1089,7 +1112,7 @@ part_login() {
   has "$vars" " PGHOST " || fail "kingo claude --login does not set the variables for PostgreSQL"
   if has "$vars" " CLAUDE_CODE_MAX_CONTEXT_TOKENS "; then fail "kingo claude --login tells Claude Code the context size of the course's model"; fi
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login --in "$dir") || fail "kingo claude --login --in did not get as far as the start of Claude Code"
-  has "$dry" "nono run --profile kingo-claude-login --allow-cwd --read $tpl -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --settings $tpl/settings-in-login.json --permission-mode default --append-system-prompt You were started with" \
+  has "$dry" "nono run --profile kingo-claude-login --allow-cwd --read $tpl -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --settings $HOME/.kingo-claude-login/settings-in.json --permission-mode default --append-system-prompt You were started with" \
     || { show "$dry" 3; fail "kingo claude --login --in would not start Claude Code with the profile of the login and its own settings"; }
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo yolo --in "$dir" --login) || fail "kingo yolo --in --login did not get as far as the start of Claude Code"
   has "$dry" "nono run --profile kingo-claude-login --allow-cwd --read $tpl -- " || { show "$dry" 3; fail "kingo does not find --login after --in"; }
@@ -1158,7 +1181,7 @@ EOF
     || { show "$out" 30; fail "without a login, kingo does not run the login inside the sandbox, under the lock"; }
   has "$out" "Logged in." || { show "$out" 30; fail "kingo does not take a login that nono kept outside the sandbox"; }
   sess=$(session_of "$out")
-  has "$sess" "STUB nono run --profile kingo-claude-login --allow-cwd --read $tpl -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --settings $tpl/settings-in-login.json" \
+  has "$sess" "STUB nono run --profile kingo-claude-login --allow-cwd --read $tpl -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --settings $fh/.kingo-claude-login/settings-in.json" \
     || { show "$out" 30; fail "after the login, kingo does not start the session"; }
   for p in "CLAUDE_CODE_DISABLE_ARTIFACT=1" "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1" "DISABLE_TELEMETRY=1" "DISABLE_ERROR_REPORTING=1" \
            "CLAUDE_CODE_MAX_CONTEXT_TOKENS=unset" "CLAUDE_CONFIG_DIR=$fh/.kingo-claude-login" "TMPDIR=$fh/.kingo-claude-login/tmp" \

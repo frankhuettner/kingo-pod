@@ -410,7 +410,7 @@ for d in / "$HOME" "$HOME/Documents" "$HOME/Library" "$(dirname "$KINGO_DIR")"; 
   if out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$d" 2>&1); then show "$out" 3; fail "kingo claude --in took the folder $d"; fi
 done
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$OWN") || fail "kingo claude --in did not get as far as the start of Claude Code"
-has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- claude --settings $KINGO_DIR/setup/claude/settings-in.json --permission-mode default --append-system-prompt You were started with" \
+has "$dry" "nono run --profile kingo-claude-base --allow-cwd --read $KINGO_DIR/setup/claude -- claude --settings $HOME/.kingo-claude/settings-in.json --permission-mode default --append-system-prompt You were started with" \
   || { show "$dry" 3; fail "kingo claude --in would not start Claude Code with the base profile and its own settings"; }
 [ -z "$(ls -A "$OWN")" ] || fail "kingo put a file into the folder"
 out=$( ( cd "$OWN" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_CODE_TMPDIR="$CFG/tmp" TMPDIR="$CFG/tmp" NONO_NO_SAVE_PROMPT=1 GIT_CONFIG_NOSYSTEM=1 \
@@ -454,7 +454,7 @@ has "$dry" "nono run --profile kingo-claude-login-course --allow-cwd --read $KIN
   || fail "kingo claude --login would not start Claude Code with the course profile of the login and the settings of the login"
 if has "$dry" " CLAUDE_CODE_MAX_CONTEXT_TOKENS "; then fail "kingo claude --login tells Claude Code the context size of the course's model"; fi
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --login --in "$OWN") || fail "kingo claude --login --in did not get as far as the start of Claude Code"
-has "$dry" "nono run --profile kingo-claude-login --allow-cwd --read $TPL -- claude --settings $TPL/settings-in-login.json --permission-mode default --append-system-prompt You were started with" \
+has "$dry" "nono run --profile kingo-claude-login --allow-cwd --read $TPL -- claude --settings $HOME/.kingo-claude-login/settings-in.json --permission-mode default --append-system-prompt You were started with" \
   || { show "$dry" 3; fail "kingo claude --login --in would not start Claude Code with the profile of the login and its own settings"; }
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude logout) || fail "kingo claude logout did not get as far as the logout"
 has "$dry" "nono run --profile kingo-claude-login --allow-cwd -- claude auth logout" || { show "$dry" 3; fail "kingo claude logout would not log out inside the sandbox of the login"; }
@@ -489,7 +489,7 @@ has "$out" "STUB nono run --profile kingo-claude-login-open --allow-cwd --allow-
   || { show "$out" 30; fail "on a Mac, kingo does not run the login with the profile that may open the browser"; }
 has "$out" "Logged in." || { show "$out" 30; fail "kingo does not take a login that nono kept outside the sandbox"; }
 sess=$(printf '%s\n' "$out" | awk '/^STUB nono run .*--read /{f=1} f')
-has "$sess" "STUB nono run --profile kingo-claude-login --allow-cwd --read $TPL -- claude --settings $TPL/settings-in-login.json" \
+has "$sess" "STUB nono run --profile kingo-claude-login --allow-cwd --read $TPL -- claude --settings $FH/.kingo-claude-login/settings-in.json" \
   || { show "$out" 30; fail "after the login, kingo does not start the session with the profile of the login"; }
 if has "$sess" "allow-launch-services"; then fail "the session after the login may open pages in the browser"; fi
 for p in "CLAUDE_CODE_DISABLE_ARTIFACT=1" "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1" "DISABLE_TELEMETRY=1" "DISABLE_ERROR_REPORTING=1" \

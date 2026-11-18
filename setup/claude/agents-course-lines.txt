@@ -15,6 +15,7 @@
   delete the student's data. Never connect as another role. The databases `n8n` and `langflow` belong to those
   deleted by accident. It is not a puzzle and not a test of you. Do not look for a way around it.
   kingo-pod folder one level up (`compose.yml`, `kingo`, `docs/`) to understand the stack, but you cannot change it.
+  read it.
   suggest starting you without `./kingo claude`.
   tables only in the schema `project`: `create table x` lands there. This is on purpose, so that a mistake cannot
   that you could not run here, except the one line that opens a page you wrote (see "How you work"), and never
@@ -41,6 +42,7 @@
 - This kingo-pod and the student: @info-for-ai/kingo-pod.md
 - When the sandbox blocks something, say so and stop. Never ask the student to run a command in their own terminal
 - You cannot run `./kingo` or `podman`. If a service is down, ask the student to run `./kingo up` in their terminal.
+- Your memory, what you learn from one session to the next, lives in `memory-of-ai/` in this folder. The student can
 - Your memory, what you learn from one session to the next, lives in `memory/` in this folder. The student can read it.
 - n8n: @info-for-ai/n8n.md
 1. Change workflows and flows through the n8n and Langflow APIs, never in the databases `n8n` and `langflow`.
