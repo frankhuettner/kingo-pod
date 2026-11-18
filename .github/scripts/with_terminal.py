@@ -10,6 +10,7 @@ Enter alone. A command that never asks gets no answer.
 import os
 import pty
 import select
+import signal
 import sys
 
 ANSWER, COMMAND = sys.argv[1], sys.argv[2:]
@@ -19,11 +20,15 @@ pid, fd = pty.fork()
 if pid == 0:
     os.execvp(COMMAND[0], COMMAND)
 
-seen, answered = b"", False
+seen, answered, hangs = b"", False, False
 while True:
     ready, _, _ = select.select([fd], [], [], 60)
     if not ready:
-        break   # a minute of silence: the command hangs
+        # A minute of silence: the command waits for something that this program does not type (a second question,
+        # or one that ends in other words). End it, so that the step fails now and shows the screen that says why.
+        hangs = True
+        os.kill(pid, signal.SIGKILL)
+        break
     try:
         data = os.read(fd, 4096)
     except OSError:   # Linux: the terminal is gone with the command
@@ -37,4 +42,7 @@ while True:
 
 _, status = os.waitpid(pid, 0)
 sys.stdout.write(seen.decode("utf-8", "replace").replace("\r", ""))
+if hangs:
+    sys.stdout.write("\nwith_terminal.py: no output for 60 seconds, the command was ended\n")
+    sys.exit(124)
 sys.exit(os.waitstatus_to_exitcode(status) if hasattr(os, "waitstatus_to_exitcode") else (status >> 8))

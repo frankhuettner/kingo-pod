@@ -471,6 +471,18 @@ difference students choose between.
   `/v1/messages` at its end (`claude_key_provider`): Claude Code adds
   `/v1/messages` itself. The CI types the keys through a terminal of its own
   (`.github/scripts/with_terminal.py`), since kingo asks in a terminal only.
+- **A start with `--key` and `key add` share their rules: `claude_key_resolve`
+  says what a name stands for, and `claude_key_keep` writes it (the code
+  review of 19 Nov 2026 found two copies that had come apart within a day).**
+  Resolve writes nothing; keep runs once nothing in the line can refuse it any
+  more, and at a start before the key is asked for, so that a refused key
+  leaves the name with its provider. Three rules live there. A key never goes
+  to a provider that kingo cannot name: a `key-<name>.conf` changed by hand,
+  with a key under the name, stops both. A name that turns into plain
+  OpenRouter loses its file, or the file of before would keep the old
+  provider. And `key add` never deletes a key: only a start does, for a key
+  that its provider refuses (`claude_named_key`); `key add` checks a typed key
+  first (`claude_key_typed_ok`) and touches no key without a terminal.
 - **`claude_folder_rules` decides which folder `--in`, `--read` and `--write`
   take: one set of rules for all three.** It must keep out every folder in
   which a program of the sandbox could write something that runs outside

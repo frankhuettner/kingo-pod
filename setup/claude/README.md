@@ -173,10 +173,14 @@ kc ~/projects/thesis --key thesis
   provider can (OpenRouter, Anthropic), and keeps it with its provider and its model. It takes `--provider` and
   `--model` as a start does, and two things that only it takes, below. For a name that is there, it changes what the
   line says and asks whether another key shall take the place of its key; Enter keeps the key. The old key stays
-  until the provider has accepted the new one.
+  until the provider has accepted the new one. Without a terminal, `key add` neither asks for a key nor checks one:
+  the key of a name stays as it is. For Ollama it needs no running Ollama: nothing starts here.
 - **`--context <tokens>`** says how many tokens the model holds. kingo tells Claude Code 200000 for every provider
   but Anthropic's API, and Claude Code compacts a long session there. A model that holds less would get more than it
-  takes first: say its number, for example `--context 131072`. Not for `anthropic`: Claude Code knows its models.
+  takes first: say its number, for example `--context 131072`. The number is 32000 or more: Claude Code's own
+  instructions take about half of that before your first question. Not for `anthropic`: Claude Code knows its
+  models. For the same reason the number may change nothing for one of Anthropic's models behind another address:
+  Claude Code takes it for a model that it does not know, and kingo says so when the model's ID has `claude` in it.
 - **`--ca <file>`** gives the certificate of a provider that signs with its own, for an address with `https://`: a
   server at work or in a lab, whose certificate your laptop does not know. kingo copies the file (PEM, the
   certificate alone) to `~/.config/kingo/key-<name>.crt`, and nono trusts it for this one route, in addition to the
