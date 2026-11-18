@@ -500,6 +500,13 @@ has "$dry" "nono run --silent --profile kingo-claude-key-base-thesis --allow-cwd
   || { show "$dry" 3; fail "kingo claude --in --key does not start nono with the profile of the key"; }
 "$NONO_BIN" profile validate "$KP" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of --key"; }
 ok "--key on a Mac: kingo starts nono with the profile of the key, and nono takes it"
+# --key --provider on a Mac: the profile for Anthropic's API, which nono must take
+dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$OWN" --key api --provider anthropic --model claude-sonnet-5-5) || fail "kingo claude --in --key --provider anthropic did not get as far as the start of Claude Code"
+has "$dry" "nono run --silent --profile kingo-claude-key-base-api --allow-cwd " || { show "$dry" 3; fail "kingo claude --in --key --provider does not start nono with the profile of the key"; }
+has "$dry" "The model: claude-sonnet-5-5 (kept with \"api\"; --model changes it)" || { show "$dry" 3; fail "--model next to --key does not name the model of the key"; }
+"$NONO_BIN" profile validate "$(dirname "$KP")/kingo-claude-key-base-api.json" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of --key --provider anthropic"; }
+rm -f "$HOME/.config/kingo/key-api.conf"
+ok "--key --provider on a Mac: kingo keeps the model with the name, and nono takes the profile for Anthropic's API"
 
 out=$(in_sandbox sh -c 'if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
 has "$out" refused || { show "$out" 12; fail "with the course profile alone, the sandbox can already write in shared"; }

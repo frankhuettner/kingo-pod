@@ -439,6 +439,21 @@ difference students choose between.
   start where Claude Code may write. `KINGO_CLAUDE_LOUD=1` brings nono's output
   back. The login and the logout run nono as before. The CI copies the line,
   with `--silent`, and checks on Linux and on a Mac that nothing of nono shows.
+- **`--key <name>` takes any provider (`--provider anthropic|ollama|an
+  address`, `--model <ID>`; Frank, 19 Nov 2026).** kingo keeps the provider
+  and the model with the name (`key-<name>.conf` next to the keys); an
+  OpenRouter key without `--model` has no such file and the profile it had
+  before. Keep three things. Inside the sandbox it is always
+  `ANTHROPIC_AUTH_TOKEN`, never `ANTHROPIC_API_KEY`: Claude Code asks in a
+  session whether to use such a key, and the course's settings blank it. So
+  every route puts the key into `Authorization: Bearer`, also the one to
+  Anthropic's API, whose docs name that header for an API key (and refuse a
+  request with a credential in both headers). An Anthropic key must be made
+  for one workspace: kingo sends no `anthropic-workspace-id`. And `--model` is
+  kingo's only next to
+  `--key`; without it, it goes on to Claude Code (`kcl --model opus`). The
+  provider's address and the model's ID go into JSON and into `sed`: both are
+  checked letter by letter first (`claude_key_provider`, `claude_key_model_ok`).
 - **`claude_folder_rules` decides which folder `--in`, `--read` and `--write`
   take: one set of rules for all three.** It must keep out every folder in
   which a program of the sandbox could write something that runs outside
