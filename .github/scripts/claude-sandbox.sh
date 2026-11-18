@@ -348,17 +348,42 @@ course_files() {
   cf_start "after AGENTS.md and info-for-ai/n8n.md were changed"
   has "$dry" "kingo wrote the course's part of your course folder anew: AGENTS.md above \"# Your team's rules\", info-for-ai/n8n.md." \
     || { show "$dry" 6; fail "kingo did not say which files it wrote anew"; }
+  has "$dry" "1 line above \"# Your team's rules\" was not kingo's: kingo moved it below the heading" \
+    || { show "$dry" 6; fail "kingo did not say that it moved the line of the team's below the heading"; }
   [ "$(cf_part "$dir/AGENTS.md")" = "$(cf_part "$tpl/AGENTS.md")" ] || fail "the course's part of AGENTS.md is not the template's"
   grep -qxF "$rule" "$dir/AGENTS.md" || fail "the team's rules are gone from AGENTS.md"
+  tail -n +"$t" "$dir/AGENTS.md" | grep -qxF "A line that someone added above the heading." \
+    || { show "$(tail -n +"$t" "$dir/AGENTS.md")" 8; fail "the line above the heading did not move below it"; }
   cmp -s "$tpl/info-for-ai/n8n.md" "$dir/info-for-ai/n8n.md" || fail "info-for-ai/n8n.md was not written anew"
   [ "$(ls -1 "$saved" | wc -l)" = 1 ] || fail "kingo kept $(ls -1 "$saved" | wc -l) copies, not one"
   grep -q "A line that someone added above the heading." "$saved"/*/AGENTS.md || fail "the copy of AGENTS.md is not the file as it was"
   grep -q "A fact that Claude Code added." "$saved"/*/info-for-ai/n8n.md || fail "the copy of info-for-ai/n8n.md is not the file as it was"
-  ok "a line above the heading and a line in a fact file go, the team's rules stay, the files as they were are in backups/course-files/"
+  ok "a line above the heading moves below it, a line in a fact file goes, the team's rules stay, the files as they were are in backups/course-files/"
 
+  # A line that an older template had above the heading is kingo's: it goes, it does not move.
+  local old
+  old=$(LC_ALL=C sort -u "$tpl/agents-course-lines.txt" \
+    | LC_ALL=C comm -23 - <(cf_part "$tpl/AGENTS.md" | sed 's/[[:space:]]*$//' | grep -v '^$' | LC_ALL=C sort -u) | head -n 1)
+  [ -n "$old" ] || fail "agents-course-lines.txt has no line of an older template to try"
+  cp "$dir/AGENTS.md" "$dir/AGENTS.ci-moved"
+  { cf_part "$dir/AGENTS.md"; printf '%s\n' "$old"; tail -n +"$t" "$dir/AGENTS.md"; } > "$dir/AGENTS.ci-new"
+  mv "$dir/AGENTS.ci-new" "$dir/AGENTS.md"
+  sleep 1
+  cf_start "with a line of an older template above the heading"
+  if has "$dry" "was not kingo's" || has "$dry" "were not kingo's"; then show "$dry" 6; fail "kingo moved a line of an older template"; fi
+  cmp -s "$dir/AGENTS.md" "$dir/AGENTS.ci-moved" || fail "the line of an older template did not go"
+  rm -f "$dir/AGENTS.ci-moved"
+  # Every line that the template has above the heading is in agents-course-lines.txt (.github/scripts/agents-course-lines.sh)
+  local miss
+  miss=$(cf_part "$tpl/AGENTS.md" | sed 's/[[:space:]]*$//' | grep -v '^$' | LC_ALL=C sort -u | LC_ALL=C comm -23 - <(LC_ALL=C sort -u "$tpl/agents-course-lines.txt"))
+  [ -z "$miss" ] || { show "$miss" 5; fail "lines of setup/claude/AGENTS.md are not in agents-course-lines.txt: run .github/scripts/agents-course-lines.sh"; }
+  ok "a line of an older template above the heading goes and does not move; every line of the template is in agents-course-lines.txt"
+
+  local copies
+  copies=$(ls -1 "$saved" | wc -l)
   cf_start "a second time"
   if has "$dry" "kingo wrote the course's part"; then show "$dry" 6; fail "kingo wrote the course's part anew, though nothing had changed"; fi
-  [ "$(ls -1 "$saved" | wc -l)" = 1 ] || fail "kingo kept a copy, though nothing had changed"
+  [ "$(ls -1 "$saved" | wc -l)" = "$copies" ] || fail "kingo kept a copy, though nothing had changed"
   ok "nothing changed: nothing written, nothing said, no copy"
 
   # Notepad on Windows: a CR at the end of every line, and the heading typed again with ’

@@ -1214,7 +1214,9 @@ claude_backup_flows() {
 # exists (Frank, 18 Nov 2026). From the heading on, the file is the team's, and kingo never changes that part. The
 # facts in info-for-ai/, which AGENTS.md loads, are kingo's too. Before kingo writes over a file that is not as kingo
 # would write it, it keeps a copy, in backups/course-files/<time>/ (the newest CLAUDE_BACKUP_KEEP stay). A file
-# without the heading stays as it is: kingo cannot tell which part is the team's.
+# without the heading stays as it is: kingo cannot tell which part is the team's. A line above the heading that no
+# template of kingo's ever had there (setup/claude/agents-course-lines.txt keeps them all) is the team's: kingo moves
+# it below the heading, so that team rules pasted in the wrong place still count (Frank, 18 Nov 2026).
 CLAUDE_COURSE_SAVED=""   # the folder of this start's copies, once there is one
 
 # claude_team_line <file>: the number of the line with the heading "# Your team's rules", or nothing. Any apostrophe
@@ -1229,9 +1231,27 @@ claude_course_save() {
   mkdir -p "$(dirname "$CLAUDE_COURSE_SAVED/$2")" 2>/dev/null && cp -p "$1" "$CLAUDE_COURSE_SAVED/$2" 2>/dev/null
 }
 
+# claude_course_theirs <template folder> <its heading's line> <file> <its heading's line>: the lines above the file's
+# heading that kingo never wrote there, neither now nor in an earlier template, in their order, with one blank line
+# between two parts. A line counts without a CR and without spaces at its end; a blank line is no part of its own.
+claude_course_theirs() {
+  local known
+  known=$(mktemp "${TMPDIR:-/tmp}/kingo-lines.XXXXXX")
+  { cat "$1/agents-course-lines.txt" 2>/dev/null || true; head -n "$(($2 - 1))" "$1/AGENTS.md"; } > "$known"
+  head -n "$(($4 - 1))" "$3" | LC_ALL=C awk '
+    function norm(s) { sub(/\r$/, "", s); sub(/[ \t]+$/, "", s); return s }
+    NR == FNR { k[norm($0)] = 1; next }
+    { l = norm($0) }
+    l == "" { if (run) gap = 1; next }
+    l in k  { run = 0; gap = 0; next }
+            { if (out && (gap || !run)) print ""; print; run = 1; gap = 0; out = 1 }
+  ' "$known" - || true
+  rm -f "$known"
+}
+
 # claude_course_files <template folder> <course folder>
 claude_course_files() {
-  local tpl=$1 dir=$2 t n f name tmp had=0 wrote="" root="$KINGO_DIR/backups/course-files" all k d
+  local tpl=$1 dir=$2 t n f name tmp kept moved=0 had=0 wrote="" root="$KINGO_DIR/backups/course-files" all k d
   t=$(claude_team_line "$tpl/AGENTS.md")
   [ -n "$t" ] || die "setup/claude/AGENTS.md has no heading \"# Your team's rules\". Run ./kingo update."
   if [ ! -f "$dir/AGENTS.md" ]; then
@@ -1243,16 +1263,29 @@ claude_course_files() {
       warn "AGENTS.md in your course folder has no heading \"# Your team's rules\", so kingo left the file as it is: it cannot tell which part is your team's. Put the heading back above your team's rules; the next start then writes the course's part above it."
     else
       tmp=$(mktemp "$dir/.AGENTS.md.XXXXXX")
-      { head -n "$((t - 1))" "$tpl/AGENTS.md"; tail -n +"$n" "$dir/AGENTS.md"; } > "$tmp"
+      kept=$(mktemp "$dir/.AGENTS.kept.XXXXXX")
+      claude_course_theirs "$tpl" "$t" "$dir/AGENTS.md" "$n" > "$kept"
+      moved=$(LC_ALL=C grep -c '[^[:space:]]' "$kept" || true)
+      { head -n "$((t - 1))" "$tpl/AGENTS.md"
+        sed -n "${n}p" "$dir/AGENTS.md"
+        if [ "$moved" -gt 0 ]; then
+          echo
+          echo "<!-- kingo moved these lines here on $(date +%Y-%m-%d), from above this heading: there, kingo writes its own part anew at every start. -->"
+          cat "$kept"
+          echo
+        fi
+        tail -n +"$((n + 1))" "$dir/AGENTS.md"
+      } > "$tmp"
       if cmp -s "$tmp" "$dir/AGENTS.md"; then
-        :
+        moved=0
       elif claude_course_save "$dir/AGENTS.md" AGENTS.md; then
         cat "$tmp" > "$dir/AGENTS.md"
         wrote="$wrote, AGENTS.md above \"# Your team's rules\""
       else
+        moved=0
         warn "kingo could not keep a copy of AGENTS.md in backups/course-files/, so it left the file as it is."
       fi
-      rm -f "$tmp"
+      rm -f "$tmp" "$kept"
     fi
   fi
   mkdir -p "$dir/info-for-ai"
@@ -1273,6 +1306,11 @@ claude_course_files() {
   done
   [ -n "$wrote" ] || return 0
   echo "kingo wrote the course's part of your course folder anew: ${wrote#, }. Your team's rules stay as they are."
+  if [ "$moved" = 1 ]; then
+    echo "1 line above \"# Your team's rules\" was not kingo's: kingo moved it below the heading, where it stays."
+  elif [ "$moved" -gt 1 ]; then
+    echo "$moved lines above \"# Your team's rules\" were not kingo's: kingo moved them below the heading, where they stay."
+  fi
   [ -z "$CLAUDE_COURSE_SAVED" ] || echo "The files as they were before: backups/course-files/${CLAUDE_COURSE_SAVED##*/}/"
   # Keep the newest copies — only ours, by name.
   all="$(ls -1 "$root" 2>/dev/null | LC_ALL=C grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}$' | LC_ALL=C sort || true)"

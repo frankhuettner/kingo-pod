@@ -243,9 +243,10 @@ Press Enter for yes, and type your Linux password.
 
 **Tell it your team's rules.** Claude reads the file
 `~/kingo-pod/claude/AGENTS.md` at every start. Paste your team's copy of
-`ws2_rules.html` into it, below the heading **Your team's rules**, as the file explains,
-then start Claude again. kingo writes the part above the heading anew at every start. This
-line opens the file in Notepad:
+`ws2_rules.html` into it, below the heading **Your team's rules**, as the
+file explains, then start Claude again. kingo writes the part above the
+heading anew at every start, and a line of yours there it moves below the
+heading. This line opens the file in Notepad:
 
 ```bash
 cd ~/kingo-pod/claude && notepad.exe AGENTS.md
