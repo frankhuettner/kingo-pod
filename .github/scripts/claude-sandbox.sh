@@ -320,11 +320,73 @@ way_out() {
   show "$out" 3
 }
 
+# The course's part of the course folder (Frank, 18 Nov 2026): every start writes the part of AGENTS.md above
+# "# Your team's rules" and the facts in info-for-ai/ anew. The team's part stays, and a file that had changed is
+# kept as it was, in backups/course-files/. A file without the heading stays as it is.
+course_files() {
+  local dir="$KINGO_DIR/claude" tpl="$KINGO_DIR/setup/claude" saved="$KINGO_DIR/backups/course-files" t dry f rule
+  rule="TEAM-RULE-$$: answer in Korean when the customer writes Korean."
+  cf_start() { dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude 2>&1) || { show "$dry" 6; fail "kingo claude stopped: $1"; }; }
+  cf_part() { head -n "$((t - 1))" "$1"; }
+
+  say "the course folder: kingo writes the course's part of AGENTS.md and info-for-ai/, the team's rules stay"
+  t=$(grep -n -m 1 "^# Your team's rules\$" "$tpl/AGENTS.md" | cut -d: -f1)
+  [ -n "$t" ] || fail "setup/claude/AGENTS.md has no heading \"# Your team's rules\""
+  cmp -s "$tpl/AGENTS.md" "$dir/AGENTS.md" || fail "the first start did not write AGENTS.md as the template is"
+  for f in kingo-pod.md langflow.md n8n.md; do
+    cmp -s "$tpl/info-for-ai/$f" "$dir/info-for-ai/$f" || fail "the first start did not write info-for-ai/$f"
+    grep -q "^- .*: @info-for-ai/$f\$" "$dir/AGENTS.md" || fail "AGENTS.md does not load info-for-ai/$f"
+  done
+  [ ! -d "$saved" ] || fail "a new course folder made copies in backups/course-files/"
+  ok "a new course folder: AGENTS.md as the template, which loads the three files in info-for-ai/"
+
+  cp "$dir/AGENTS.md" "$dir/AGENTS.ci-before"
+  { cf_part "$dir/AGENTS.md"; echo "A line that someone added above the heading."; echo "# Your team's rules"; echo
+    echo "$rule"; } > "$dir/AGENTS.ci-new"
+  mv "$dir/AGENTS.ci-new" "$dir/AGENTS.md"
+  echo "A fact that Claude Code added." >> "$dir/info-for-ai/n8n.md"
+  cf_start "after AGENTS.md and info-for-ai/n8n.md were changed"
+  has "$dry" "kingo wrote the course's part of your course folder anew: AGENTS.md above \"# Your team's rules\", info-for-ai/n8n.md." \
+    || { show "$dry" 6; fail "kingo did not say which files it wrote anew"; }
+  [ "$(cf_part "$dir/AGENTS.md")" = "$(cf_part "$tpl/AGENTS.md")" ] || fail "the course's part of AGENTS.md is not the template's"
+  grep -qxF "$rule" "$dir/AGENTS.md" || fail "the team's rules are gone from AGENTS.md"
+  cmp -s "$tpl/info-for-ai/n8n.md" "$dir/info-for-ai/n8n.md" || fail "info-for-ai/n8n.md was not written anew"
+  [ "$(ls -1 "$saved" | wc -l)" = 1 ] || fail "kingo kept $(ls -1 "$saved" | wc -l) copies, not one"
+  grep -q "A line that someone added above the heading." "$saved"/*/AGENTS.md || fail "the copy of AGENTS.md is not the file as it was"
+  grep -q "A fact that Claude Code added." "$saved"/*/info-for-ai/n8n.md || fail "the copy of info-for-ai/n8n.md is not the file as it was"
+  ok "a line above the heading and a line in a fact file go, the team's rules stay, the files as they were are in backups/course-files/"
+
+  cf_start "a second time"
+  if has "$dry" "kingo wrote the course's part"; then show "$dry" 6; fail "kingo wrote the course's part anew, though nothing had changed"; fi
+  [ "$(ls -1 "$saved" | wc -l)" = 1 ] || fail "kingo kept a copy, though nothing had changed"
+  ok "nothing changed: nothing written, nothing said, no copy"
+
+  # Notepad on Windows: a CR at the end of every line, and the heading typed again with ’
+  sleep 1
+  sed -i -e 's/$/\r/' -e "s/^# Your team's rules\\r\$/# Your team’s rules\\r/" "$dir/AGENTS.md"
+  grep -q "^# Your team’s rules"$'\r'"\$" "$dir/AGENTS.md" || fail "the test file has no heading with ’ and a CR"
+  cf_start "with a file from Notepad"
+  [ "$(cf_part "$dir/AGENTS.md")" = "$(cf_part "$tpl/AGENTS.md")" ] || fail "with CRs, the course's part is not the template's"
+  grep -qxF "$rule"$'\r' "$dir/AGENTS.md" || fail "with CRs, the team's rules are gone"
+  ok "a file from Notepad (a CR at every line, ’ in the heading): the course's part is written, the team's part stays"
+
+  grep -v "team.s rules" "$dir/AGENTS.md" > "$dir/AGENTS.ci-new" && mv "$dir/AGENTS.ci-new" "$dir/AGENTS.md"
+  cp "$dir/AGENTS.md" "$dir/AGENTS.ci-none"
+  cf_start "with an AGENTS.md without the heading"
+  has "$dry" "has no heading \"# Your team's rules\", so kingo left the file as it is" || { show "$dry" 6; fail "kingo did not say why it left AGENTS.md"; }
+  cmp -s "$dir/AGENTS.md" "$dir/AGENTS.ci-none" || fail "kingo changed an AGENTS.md without the heading"
+  ok "without the heading, AGENTS.md stays as it is, and kingo says why"
+
+  mv "$dir/AGENTS.ci-before" "$dir/AGENTS.md"; rm -f "$dir/AGENTS.ci-none"; rm -rf "$saved"
+  cf_start "with the template's AGENTS.md again"
+}
+
 part_sandbox() {
   local out leak="$KINGO_DIR/claude/leak.txt" psock pid i
 
   say "what kingo claude would start"
   prepare
+  course_files
 
   say "the sandbox runs a program, lets it read kingo-pod and keeps other files away"
   out=$(in_sandbox sh -c 'echo inside-$((6*7))')
