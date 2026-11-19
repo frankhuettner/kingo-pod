@@ -533,6 +533,17 @@ for f in "$KD"/key-spark.* "$(dirname "$KP")"/kingo-claude-key-*-spark.json "$HO
   [ ! -e "$f" ] || fail "kingo claude key remove left something of the name: $f"   # each on its own: ls with three patterns fails when one matches nothing
 done
 ok "kingo claude key on a Mac: add keeps the address without /v1, the context and the certificate; nono takes the profile; list shows the name; remove takes it all away"
+# kingo key add with its questions on a Mac, under the Mac's own /bin/bash 3.2 (not a newer bash from the PATH): the
+# same answers as on Ubuntu, for a provider by its address, with a key pasted too early at the question for the model
+out=$(cd "$KINGO_DIR" && /usr/bin/python3 "$HERE/pty_answer.py" --all 60 "Bad Name" wiz 4 "https://llm.example.com/v1" sk-or-v1-early big-model "64,000" wiz-key -- /bin/bash ./kingo key add 2>&1) \
+  || { show "$out" 12; fail "kingo key add did not take a provider by its address from its questions on a Mac"; }
+[ "$(cat "$KD/key-wiz.conf")" = "$(printf 'provider=https://llm.example.com\nmodel=big-model\ncontext=64000')" ] && [ "$(cat "$KD/key-wiz.key")" = wiz-key ] \
+  || { show "$out" 12; fail "kingo key add on a Mac did not keep the answers to its questions and the key"; }
+if has "$out" wiz-key; then show "$out" 12; fail "kingo key add on a Mac showed the key that was typed"; fi
+has "$out" "That looks like a key, not the name of a model." || { show "$out" 12; fail "kingo key add on a Mac took a key as the model"; }
+out=$(cd "$KINGO_DIR" && /usr/bin/python3 "$HERE/pty_answer.py" --all 60 wiz -- /bin/bash ./kingo key remove 2>&1) || { show "$out" 8; fail "kingo key remove with its question failed on a Mac"; }
+for f in "$KD"/key-wiz.*; do [ ! -e "$f" ] || fail "kingo key remove on a Mac left something of the name: $f"; done
+ok "kingo key add on a Mac: its questions, a wrong name asked again, the answers and the key kept; kingo key remove asks which name"
 
 out=$(in_sandbox sh -c 'if ( : >> "$1" ) 2>/dev/null; then echo WROTE; else echo refused; fi' sh "$KINGO_DIR/shared/own-probe.txt")
 has "$out" refused || { show "$out" 12; fail "with the course profile alone, the sandbox can already write in shared"; }

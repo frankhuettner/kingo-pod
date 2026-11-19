@@ -1392,6 +1392,19 @@ env = json.load(open(sys.argv[1], encoding="utf-8"))["env"]
 print("         | %s" % env)
 sys.exit(0 if env.pop("ANTHROPIC_MODEL") == "claude-sonnet-5-5" and len(env) == 5 and set(env.values()) == {""} else 1)
 PYTHON
+  # The effort: medium for a provider by its address, in the course and with --in, so that a model that takes no
+  # high gets a level it takes; none for Anthropic's API, whose models Claude Code knows (Frank, 20 Nov 2026).
+  ( cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo key add eff --provider https://llm.example.com --model qwen3.8 > /dev/null ) || fail "kingo key add eff failed"
+  ( umask 077; printf 'eff-key' > "$kd/key-eff.key" )
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --key eff) || { show "$dry" 4; fail "kingo claude --key eff did not get as far as the start of Claude Code"; }
+  dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$dir" --key eff) || { show "$dry" 4; fail "kingo claude --in --key eff did not get as far as the start of Claude Code"; }
+  /usr/bin/python3 - "$CFG/settings-key-eff.json" "$CFG"/settings-in-key-eff-*.json "$CFG/settings-key-api.json" <<'PYTHON' || fail "the settings of a key do not set the effort medium for a provider by its address, or set one for Anthropic's API"
+import json, sys
+course, own, api = (json.load(open(p, encoding="utf-8")) for p in sys.argv[1:4])
+print("         | effort: course %r, own folder %r, Anthropic's API %r" % (course.get("effortLevel"), own.get("effortLevel"), api.get("effortLevel")))
+sys.exit(0 if course.get("effortLevel") == own.get("effortLevel") == "medium" and "effortLevel" not in api else 1)
+PYTHON
+  ( cd "$KINGO_DIR" && ./kingo key remove eff > /dev/null ) || fail "kingo key remove eff failed"
   # a name stays with its provider once it has a key, and an OpenRouter key of before stays one
   ( umask 077; printf 'api-key-of-the-name' > "$kd/key-api.key" )
   refuses "The key \"api\" is for Anthropic's API, not for Ollama on this laptop" --key api --provider ollama --model m
@@ -1500,7 +1513,8 @@ PYTHON
   printf 'no certificate\n' > "$tls/text.txt"
 
   refuses "takes add, list or remove" key bogus
-  refuses "needs a name for the key" key add
+  refuses "asks its questions in a terminal only" key add
+  refuses "needs a name for the key" key add --provider anthropic
   refuses "takes a name of small letters" key add Thesis
   refuses "takes one name, not two" key add a b
   refuses "does not take --in" key add a --in "$dir"
@@ -1537,7 +1551,7 @@ PYTHON
   [ -s "$kd/key-spark.crt" ] && [ "$(cat "$kd/key-spark.key")" = spark-key ] || fail "a new context took the certificate or the key of the name away"
   out=$(kk add spark --context 131072) || fail "kingo claude key add did not set the context again"
   if out=$(kk add spark --provider anthropic); then show "$out" 3; fail "kingo claude key add gave a name that has a key another provider"; fi
-  has "$out" "Or delete this name first:  ./kingo claude key remove spark" || { show "$out" 3; fail "for a name of another provider, kingo does not name key remove"; }
+  has "$out" "Or delete this name first:  ./kingo key remove spark" || { show "$out" 3; fail "for a name of another provider, kingo does not name key remove"; }
   ok "key add keeps the address without /v1, the model, the context and the certificate, for the owner only; a new context changes nothing else"
 
   # list: every name with what kingo keeps for it, and no key
@@ -1634,6 +1648,72 @@ SH
   if out=$(typed 400 api-key-2 add api); then show "$out" 4; fail "key add put a key that Anthropic answered with 400 in the place of a name's key"; fi
   has "$out" "probably not made for one workspace" && [ "$(cat "$kd/key-api.key")" = api-key-1 ] || { show "$out" 4; fail "a new key for Anthropic that got 400 changed the key of the name"; }
   ok "key add for a name: a new name is asked for its key; for a name that is there, Enter keeps the key, and another key takes its place only when the provider accepts it"
+
+  # kingo key add with nothing after it asks its questions, one by one, and asks again after an answer that the line
+  # would refuse (Frank, 20 Nov 2026); kingo key is kingo claude key. pty_answer.py --all types one answer per
+  # question, and fails when an answer is left over.
+  asked() { # asked <code> <answer> ... -- <command>: in a terminal, the answers typed one by one
+    printf '%s' "$1" > "$fake2/code"; shift
+    ( cd "$KINGO_DIR" && PATH="$fake2:$PATH" /usr/bin/python3 "$HERE/pty_answer.py" --all 60 "$@" 2>&1 )
+  }
+  out=$(asked 200 "Bad Name" wiz 7 4 ftp://x "https://llm.example.com/v1" "" big-model 1000 "64,000" wiz-key -- ./kingo key add) \
+    || { show "$out" 12; fail "kingo key add did not take a provider by its address from its questions"; }
+  for t in "A name of small letters, digits and -" "Type one number, from 1 to 4." "An address that starts with https://" "kingo left out /v1 at the end of the address" \
+           "This provider needs the name of a model." "A number from 32000 to 10000000" "Start Claude Code with it:  kc <folder> --key wiz"; do
+    has "$out" "$t" || { show "$out" 24; fail "kingo key add with its questions does not say: $t"; }
+  done
+  [ "$(cat "$kd/key-wiz.conf")" = "$(printf 'provider=https://llm.example.com\nmodel=big-model\ncontext=64000')" ] \
+    || { show "$(cat "$kd/key-wiz.conf")" 4; fail "kingo key add did not keep the answers to its questions"; }
+  [ "$(cat "$kd/key-wiz.key")" = wiz-key ] && [ "$(stat -c %a "$kd/key-wiz.key")" = 600 ] || fail "kingo key add did not keep the typed key, for the owner only"
+  if has "$out" wiz-key; then show "$out" 24; fail "kingo key add showed the key that was typed"; fi
+  out=$(asked 200 wiz2 2 sk-ant-pasted-too-early sonnet api-key-w -- ./kingo key add) || { show "$out" 12; fail "kingo key add did not take Anthropic's API from its questions"; }
+  grep -qx provider=anthropic "$kd/key-wiz2.conf" && grep -qx model=sonnet "$kd/key-wiz2.conf" && [ "$(cat "$kd/key-wiz2.key")" = api-key-w ] \
+    || fail "kingo key add did not keep Anthropic's API, the model and the key from its questions"
+  has "$out" "That looks like a key, not the name of a model." && ! grep -q sk-ant-pasted "$kd/key-wiz2.conf" || { show "$out" 12; fail "kingo key add took a key, pasted at the question for the model, as the model"; }
+  if out=$(asked 401 wiz3 1 "" bad-key -- ./kingo key add); then show "$out" 12; fail "kingo key add kept a key that OpenRouter refused"; fi
+  none_left "$kd"/openrouter-wiz3.key "$kd"/key-wiz3.* || fail "kingo key add left a file for a key that OpenRouter refused"
+  out=$(asked 200 wiz other/model "" -- ./kingo key add) || { show "$out" 12; fail "kingo key add failed for a name that is there"; }
+  has "$out" "kingo keeps this name already:" && grep -qx model=other/model "$kd/key-wiz.conf" && [ "$(cat "$kd/key-wiz.key")" = wiz-key ] \
+    || { show "$out" 12; fail "kingo key add with its questions did not change the model of a name that is there, or lost its key"; }
+  if out=$(cd "$KINGO_DIR" && ./kingo key add < /dev/null 2>&1); then show "$out" 3; fail "kingo key add went on without a terminal and without a name"; fi
+  has "$out" "asks its questions in a terminal only" || { show "$out" 3; fail "without a terminal, kingo key add does not say how to give it all in the line"; }
+  out=$(asked 200 "" -- ./kingo key remove) || { show "$out" 12; fail "kingo key remove with Enter alone failed"; }
+  has "$out" "kingo deleted nothing." && [ -s "$kd/key-wiz.key" ] || { show "$out" 12; fail "kingo key remove with Enter alone deleted something"; }
+  out=$(asked 200 wiz -- ./kingo key remove) || { show "$out" 12; fail "kingo key remove did not take a name from its question"; }
+  none_left "$kd"/key-wiz.* || fail "kingo key remove with its question left something of the name"
+  ( cd "$KINGO_DIR" && ./kingo key remove wiz2 > /dev/null ) || fail "kingo key remove wiz2 failed"
+  out=$(cd "$KINGO_DIR" && ./kingo key list 2>&1) || { show "$out" 6; fail "kingo key list failed"; }
+  has "$out" "(first)    OpenRouter, the course's model." || { show "$out" 6; fail "kingo key list does not show the first key"; }
+  # What the review of 20 Nov 2026 found in the questions, one case each.
+  # The address at the question for the provider, and a key at the question for the model; then an http:// address.
+  out=$(asked 200 direct "https://llm.example.com" "0123456789abcdef0123456789abcdef.AbCdEfGhIjKlMnOp" m "" dkey -- ./kingo key add) \
+    || { show "$out" 16; fail "kingo key add failed with an address at the question for the provider"; }
+  has "$out" "That looks like a key, not the name of a model." || { show "$out" 16; fail "kingo key add took a key of hex, a dot and letters as the model"; }
+  grep -qx provider=https://llm.example.com "$kd/key-direct.conf" && grep -qx model=m "$kd/key-direct.conf" \
+    || { show "$out" 16; fail "kingo key add did not take an address typed at the question for the provider"; }
+  if has "$out" "dkey"; then show "$out" 16; fail "kingo key add showed the key that was typed"; fi
+  ( cd "$KINGO_DIR" && ./kingo key remove direct > /dev/null ) || fail "kingo key remove direct failed"
+  out=$(asked 200 wrong 4 "http://llm.example.com" "https://llm.example.com" m "" wkey -- ./kingo key add) || { show "$out" 16; fail "kingo key add did not go on after an address that it cannot use"; }
+  has "$out" "  kingo cannot use this address. kingo takes http:// only for a server on this laptop" && ! has "$out" "ERROR:" || { show "$out" 16; fail "kingo key add says ERROR and names --provider for an address in its questions"; }
+  ( cd "$KINGO_DIR" && ./kingo key remove wrong > /dev/null ) || fail "kingo key remove wrong failed"
+  # A provider that refused the key leaves the name without a key: the next round asks for the provider again.
+  if out=$(asked 401 oops 2 sonnet bad-key -- ./kingo key add); then show "$out" 12; fail "kingo key add kept a key that Anthropic refused"; fi
+  out=$(asked 200 oops 1 "" good-key -- ./kingo key add) || { show "$out" 12; fail "kingo key add did not let a name without a key change its provider"; }
+  has "$out" "no key for it yet. It asks everything again." && [ "$(cat "$kd/openrouter-oops.key")" = good-key ] && none_left "$kd"/key-oops.* \
+    || { show "$out" 12; fail "a name whose key Anthropic refused could not become an OpenRouter key"; }
+  ( cd "$KINGO_DIR" && ./kingo key remove oops > /dev/null ) || fail "kingo key remove oops failed"
+  # A laptop that never started kingo claude has no folder for the keys yet.
+  local fresh; fresh=$(mktemp -d "$CFG/tmp/fresh-home.XXXXXX")
+  out=$(printf 200 > "$fake2/code"; cd "$KINGO_DIR" && HOME="$fresh" PATH="$fake2:$PATH" /usr/bin/python3 "$HERE/pty_answer.py" --all 60 thesis 1 "" fresh-key -- ./kingo key add 2>&1) \
+    || { show "$out" 12; fail "kingo key add failed on a laptop without ~/.config/kingo"; }
+  [ "$(cat "$fresh/.config/kingo/openrouter-thesis.key")" = fresh-key ] && [ "$(stat -c %a "$fresh/.config/kingo")" = 700 ] \
+    || { show "$out" 12; fail "kingo key add lost an accepted key on a laptop without ~/.config/kingo"; }
+  rm -rf "$fresh"
+  # kingo key remove asks again after a name that is not there.
+  ( cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo key add again --provider https://llm.example.com --model m > /dev/null ) || fail "kingo key add again failed"
+  out=$(asked 200 Again nosuch again -- ./kingo key remove) || { show "$out" 12; fail "kingo key remove did not ask again after a name that is not there"; }
+  has "$out" "There is no key with the name nosuch. Type one of the names above." && none_left "$kd"/key-again.* || { show "$out" 12; fail "kingo key remove did not delete the name after a wrong one"; }
+  ok "kingo key add asks its questions in a terminal, asks again after a wrong answer, keeps the answers and the key unseen, and refuses a key that the provider refused; kingo key remove asks which name"
 
   # What the review of 19 Nov 2026 found in 1.4.27, one case each.
   # A name without a key that turns into plain OpenRouter leaves no file of the provider before.
