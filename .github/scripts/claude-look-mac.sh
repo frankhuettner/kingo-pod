@@ -262,6 +262,11 @@ has "$out" "WROTE $DIR/look-write-probe" || { show "$out" 20; fail "the probe pr
 rm -f "$DIR/look-write-probe"
 ok "inside the sandbox, the browser, nono, Node.js, playwright-core and their folders cannot be written"
 
+# The auto-compact window that kingo sets for the context of a key (./kingo claude key add <name> --context).
+out=$(export CLAUDE_CODE_AUTO_COMPACT_WINDOW=131072 KINGO_CI_NOT_NAMED=1; in_sandbox sh -c 'echo "window=${CLAUDE_CODE_AUTO_COMPACT_WINDOW-unset} other=${KINGO_CI_NOT_NAMED-unset}"')
+has "$out" "window=131072 other=unset" || { show "$out" 8; fail "the profile does not let the auto-compact window through, or it lets a variable through that it does not name"; }
+ok "the profile lets the auto-compact window of a key through, and no variable that it does not name"
+
 # On a Mac, nono lists after the end what the sandbox refused, with "Fix flags" and a way to open the keychain (Frank's
 # terminal, 18 Nov 2026). kingo claude starts nono with --silent: neither that report nor the banner shows.
 say "nono is silent as kingo claude starts it: no banner, and no report with Fix flags at the end"
@@ -518,6 +523,7 @@ out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude key add spark --p
 [ "$(stat -f %Lp "$KD/key-spark.crt")" = 600 ] && cmp -s "$CFG/tmp/root.crt" "$KD/key-spark.crt" || fail "kingo claude key add did not keep the certificate as it was given, for the owner only"
 dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo claude --in "$OWN" --key spark) || fail "kingo claude --in --key spark did not get as far as the start of Claude Code"
 has "$dry" "context: CLAUDE_CODE_MAX_CONTEXT_TOKENS=131072" || { show "$dry" 6; fail "the context of the key does not go to Claude Code"; }
+has "$dry" "context: CLAUDE_CODE_AUTO_COMPACT_WINDOW=131072" || { show "$dry" 6; fail "the context of the key does not go to Claude Code as its auto-compact window too"; }
 grep -q "\"tls_ca\": \"$KD/key-spark.crt\"" "$(dirname "$KP")/kingo-claude-key-base-spark.json" || fail "the profile of the key does not give nono the certificate"
 "$NONO_BIN" profile validate "$(dirname "$KP")/kingo-claude-key-base-spark.json" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of a key with a certificate"; }
 out=$(cd "$KINGO_DIR" && ./kingo claude key list 2>&1) || { show "$out" 6; fail "kingo claude key list failed"; }
@@ -586,7 +592,10 @@ step() { # <what the stand-in leaves at a login> <arguments of kingo>
   ( cd "$KINGO_DIR" && HOME="$FH" XDG_CONFIG_HOME="" KINGO_CLAUDE_NO_BROWSER=1 STUB_LOGIN="$login" \
       python3 -c 'import pty, sys; pty.spawn(sys.argv[1:])' ./kingo "$@" < /dev/null 2>&1 | tr -d '\r' ) || true
 }
-out=$(step phantom claude --login --in "$FH/projects/thesis")
+# With an auto-compact window in the person's own terminal: the profile lets the variable through for the context of
+# a key, so kingo takes it away before every start (the variables of the session, below).
+out=$(export CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000; step phantom claude --login --in "$FH/projects/thesis")
+if has "$out" "CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000"; then show "$out" 30; fail "an auto-compact window from the person's own terminal reaches nono"; fi
 show "$(printf '%s\n' "$out" | grep -v '^STUB  ')" 6
 has "$out" "STUB nono run --profile kingo-claude-login-open --allow-cwd --allow-launch-services -- claude auth login --claudeai" \
   || { show "$out" 30; fail "on a Mac, kingo does not run the login with the profile that may open the browser"; }
@@ -596,7 +605,8 @@ has "$sess" "STUB nono run --silent --profile kingo-claude-login --allow-cwd --r
   || { show "$out" 30; fail "after the login, kingo does not start the session with the profile of the login"; }
 if has "$sess" "allow-launch-services"; then fail "the session after the login may open pages in the browser"; fi
 for p in "CLAUDE_CODE_DISABLE_ARTIFACT=1" "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1" "DISABLE_TELEMETRY=1" "DISABLE_ERROR_REPORTING=1" \
-         "CLAUDE_CODE_MAX_CONTEXT_TOKENS=unset" "CLAUDE_CONFIG_DIR=$FH/.kingo-claude-login" "GIT_CONFIG_NOSYSTEM=1" "NONO_NO_SAVE_PROMPT=1" "PATH starts with $TPL/bin"; do
+         "CLAUDE_CODE_MAX_CONTEXT_TOKENS=unset" "CLAUDE_CODE_AUTO_COMPACT_WINDOW=unset" \
+         "CLAUDE_CONFIG_DIR=$FH/.kingo-claude-login" "GIT_CONFIG_NOSYSTEM=1" "NONO_NO_SAVE_PROMPT=1" "PATH starts with $TPL/bin"; do
   has "$sess" "STUB   $p" || { show "$sess" 16; fail "the start of the session does not get: $p"; }
 done
 out=$(step real claude --login --in "$FH/projects/thesis")
