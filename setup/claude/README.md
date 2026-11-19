@@ -95,7 +95,7 @@ it. kingo-pod or a folder in it starts Claude Code for the course, as `./kingo c
 with another OpenRouter key of yours, for this start, in the course and with `--in`. The first start with a name asks
 for the key and keeps it with the other keys, in `~/.config/kingo/openrouter-<name>.key`, outside the sandbox; a key
 that OpenRouter refuses is deleted, and the next start asks again. For another key under a name,
-`./kingo claude key add <name>` asks for it.
+`./kingo key add <name>` asks for it.
 
 On openrouter.ai, each key has its own credit limit and its own costs: a project can have a budget of its own. kingo
 starts nono with one more profile, `kingo-claude-key-<course|base|mine>-<name>`, which extends the profile of this
@@ -119,7 +119,10 @@ The provider must speak Anthropic's Messages API (`/v1/messages`): it is what Cl
 
 `--model <ID>` names the model. Ollama and an address need it. With `anthropic`, Claude Code picks one of Anthropic's
 models without it, and `/model` in Claude Code switches; with `--model`, that model is the first one. For every other
-provider, the one model does every job, as in the course. Without `--key`, `--model` is Claude Code's own option, as
+provider, the one model does every job, as in the course. For a provider by its address and for Ollama, kingo sets
+Claude Code's effort to `medium` in the settings of the start: Claude Code sends `high` to a model that it does not
+know, and some models (Qwen3.8 behind vLLM) take only `xhigh`, `medium` and `low`, so every request failed with `400`.
+`--effort` and `/effort` still choose; they rank above the settings. Without `--key`, `--model` is Claude Code's own option, as
 before.
 
 ```
@@ -133,7 +136,7 @@ kingo keeps the provider and the model with the name, in `~/.config/kingo/key-<n
 `~/.config/kingo/key-<name>.key`, outside the sandbox. So the next start needs only `--key <name>`, and kingo says at
 every start where the model comes from and which model it is. `--model` again changes the model. A name stays with
 its provider once it has a key: for another provider, take another name, or delete the name first
-(`./kingo claude key remove <name>`).
+(`./kingo key remove <name>`).
 
 An address that ends in `/v1` or `/v1/messages` loses that ending, and kingo says so: Claude Code adds
 `/v1/messages` to the address itself. `https://host/v1` is the base URL of the other format, OpenAI's, whose
@@ -157,18 +160,26 @@ Not tested with a real key in the CI: there, a stand-in takes the provider's pla
 header and which model was asked for. Under Windows, Ollama must run in Ubuntu, where kingo runs: an Ollama that runs
 in Windows does not answer on `127.0.0.1` there.
 
-## Your keys without a start: `./kingo claude key`
+## Your keys without a start: `./kingo key`
 
-`./kingo claude key` adds, lists and removes the keys for Claude Code's model. It starts no Claude Code and needs no
-pod, so the keys and the start of a project are two things:
+`./kingo key` adds, lists and removes the keys for Claude Code's model (`./kingo claude key` is the same: its name
+until 1.4.30). It starts no Claude Code and needs no pod, so the keys and the start of a project are two things:
 
 ```
-./kingo claude key add thesis --provider anthropic --model sonnet
-./kingo claude key list
+./kingo key add
 kc ~/projects/thesis --key thesis
-./kingo claude key remove thesis
+./kingo key list
+./kingo key remove thesis
 ```
 
+- **`key add`, with nothing after it,** asks its questions in a terminal, one by one: the name, the provider
+  (OpenRouter, Anthropic's API, Ollama on this laptop, or another provider by its address), the address, the model,
+  and, for Ollama and an address, how many tokens the model holds (Enter: 200,000 or more). An answer that the line
+  would refuse is asked again. Then it goes on as `key add <name>` with these flags does, and asks for the key, unseen.
+  For a name that is there, it asks only for the model and whether another key shall take the place of its key. It
+  asks nothing about a certificate: `--ca` goes in the line. Without a terminal, it stops and says how to give it all
+  in the line (Frank, 20 Nov 2026: "den ganzen kram in eine zeile zu packen bringt doch nichts, wenn der key ohnehin
+  abgefragt wird").
 - **`key add <name>`** does what the first start with `--key <name>` does: it asks for the key, checks it where the
   provider can (OpenRouter, Anthropic), and keeps it with its provider and its model. It takes `--provider` and
   `--model` as a start does, and two things that only it takes, below. For a name that is there, it changes what the
@@ -195,6 +206,7 @@ kc ~/projects/thesis --key thesis
   shows a key.
 - **`key remove <name>`** deletes the key of that name from this laptop, with its provider, its model, its
   certificate, and the settings and profiles that kingo wrote for it. At the provider, the key is as it was.
+  Without a name, in a terminal, it shows your names and asks which one; Enter deletes nothing.
 
 A start with `--key <name>` does not take `--context` or `--ca`: they belong to the key, and kingo says so.
 

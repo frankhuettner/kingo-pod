@@ -454,9 +454,16 @@ difference students choose between.
   `--key`; without it, it goes on to Claude Code (`kcl --model opus`). The
   provider's address and the model's ID go into JSON and into `sed`: both are
   checked letter by letter first (`claude_key_provider`, `claude_key_model_ok`).
-- **`./kingo claude key add|list|remove` manages those keys without a start
-  (Frank, 19 Nov 2026: "dann kann man key verwaltung und project laden
-  trennen").** It needs no pod and starts no Claude Code. `add` keeps what the
+- **`./kingo key add|list|remove` (and the old name, `./kingo claude key`)
+  manages those keys without a start (Frank, 19 Nov 2026: "dann kann man key
+  verwaltung und project laden trennen").** It needs no pod and starts no
+  Claude Code. `key add` with nothing after it asks its questions in a terminal
+  (Frank, 20 Nov 2026): `claude_key_ask` only collects the answers and then
+  calls `claude_key_add` with the flags, so the questions never get rules of
+  their own; a name with a key keeps its provider, a name without one is asked
+  everything again, and an answer that looks like a key is never taken as the
+  model (`claude_key_looks_like_key`). Without a terminal it stops and names
+  the line with flags. `key remove` without a name asks too. `add` keeps what the
   first start with `--key` keeps, and two things that a start does not take:
   `--context <tokens>` (a line `context=` in `key-<name>.conf`; it goes to
   Claude Code as `CLAUDE_CODE_MAX_CONTEXT_TOKENS` in place of the 200000, and
@@ -475,7 +482,9 @@ difference students choose between.
   name `a` never takes those of `a-b`. And an address loses `/v1` or
   `/v1/messages` at its end (`claude_key_provider`): Claude Code adds
   `/v1/messages` itself. The CI types the keys through a terminal of its own
-  (`.github/scripts/with_terminal.py`), since kingo asks in a terminal only.
+  (`.github/scripts/with_terminal.py`, and `pty_answer.py --all` for the
+  questions of `key add`, which fails when an answer is left over), since
+  kingo asks in a terminal only.
 - **A start with `--key` and `key add` share their rules: `claude_key_resolve`
   says what a name stands for, and `claude_key_keep` writes it (the code
   review of 19 Nov 2026 found two copies that had come apart within a day).**
