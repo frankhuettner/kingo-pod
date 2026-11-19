@@ -1169,7 +1169,12 @@ claude_key_provider() { # what came after --provider -> openrouter | anthropic |
   [ -z "$cut" ] || echo "kingo left out $cut at the end of the address: Claude Code adds /v1/messages itself." >&2
   case "$p" in http://?*|https://?*) ;; *) die "kingo claude --provider: $1 names no server." ;; esac
   rest=${p#*://}; host=${rest%%/*}
-  case "$host" in *:*) port=${host#*:}; host=${host%%:*} ;; esac
+  # The scheme twice (https://https://llm.example.com): what comes when a variable that holds the whole address
+  # already starts with https:// and the line puts another one before it. Without this check the server is "https"
+  # with an empty port, and nono's proxy answers every request with 502 (Frank's test with the sparkAPI, 19 Nov 2026).
+  case "$rest" in *://*) die "kingo claude --provider: $1 names the scheme twice (://). Give it once, for example  --provider https://llm.example.com" ;; esac
+  case "$host" in *:*) port=${host#*:}; host=${host%%:*}
+                       [ -n "$port" ] || die "kingo claude --provider: the port in $p is empty (a : with no number after it)." ;; esac
   case "$port" in *[!0123456789]*) die "kingo claude --provider: the port in $p is not a number." ;; esac
   case "$host" in ""|.*|*.|-*|*..*) die "kingo claude --provider: $p names no server." ;; esac
   case "$p" in
