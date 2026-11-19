@@ -444,6 +444,10 @@ part_sandbox() {
   out=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 KINGO_CLAUDE_LOUD=1 ./kingo claude 2>&1) || { show "$out" 6; fail "kingo claude with KINGO_CLAUDE_LOUD=1 did not get as far as the start"; }
   has "$out" "  nono run --profile kingo-claude --allow-cwd --read $KINGO_DIR -- " || { show "$out" 6; fail "KINGO_CLAUDE_LOUD=1 does not take --silent away"; }
   ok "nono is silent as kingo claude starts it (no banner, no report), says so when a profile is missing, and KINGO_CLAUDE_LOUD=1 brings its output back"
+  # The auto-compact window that kingo sets for the context of a key (./kingo claude key add <name> --context).
+  out=$(export CLAUDE_CODE_AUTO_COMPACT_WINDOW=131072 KINGO_CI_NOT_NAMED=1; in_sandbox sh -c 'echo "window=${CLAUDE_CODE_AUTO_COMPACT_WINDOW-unset} other=${KINGO_CI_NOT_NAMED-unset}"')
+  has "$out" "window=131072 other=unset" || { show "$out" 8; fail "the profile does not let the auto-compact window through, or it lets a variable through that it does not name"; }
+  ok "the profile lets the auto-compact window of a key through, and no variable that it does not name"
   out=$(in_sandbox cat "$KINGO_DIR/VERSION")
   has "$out" "$(cat "$KINGO_DIR/VERSION")" || { show "$out" 12; fail "kingo-pod cannot be read in the sandbox"; }
   out=$(in_sandbox cat "$OUTSIDE/secret.txt")
@@ -1549,18 +1553,20 @@ PYTHON
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key spark) || fail "kc <folder> --key spark did not get as far as the start of Claude Code"
   has "$dry" "The model holds 131072 tokens, as you said" || { show "$dry" 6; fail "a start does not say the context of the key"; }
   has "$dry" "context: CLAUDE_CODE_MAX_CONTEXT_TOKENS=131072" || { show "$dry" 6; fail "the context of the key does not go to Claude Code"; }
+  has "$dry" "context: CLAUDE_CODE_AUTO_COMPACT_WINDOW=131072" || { show "$dry" 6; fail "the context of the key does not go to Claude Code as its auto-compact window too"; }
   has "$dry" "kingo trusts the certificate that you gave: $kd/key-spark.crt" || { show "$dry" 6; fail "a start does not say that kingo trusts the certificate of the key"; }
   grep -q "\"tls_ca\": \"$kd/key-spark.crt\"" "$pd/kingo-claude-key-base-spark.json" || { show "$(cat "$pd/kingo-claude-key-base-spark.json")" 20; fail "the profile of the key does not give nono the certificate"; }
   nono profile validate "$pd/kingo-claude-key-base-spark.json" > "$CFG/tmp/validate-key.log" 2>&1 || { show "$(cat "$CFG/tmp/validate-key.log")" 8; fail "nono does not take the profile of a key with a certificate"; }
   set5=$(printf '%s\n' "$dry" | sed -n 's/.* claude --settings \([^ ]*\) .*/\1/p' | head -n 1)
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key plain) || fail "kc <folder> --key plain did not get as far as the start of Claude Code"
   has "$dry" "context: CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000" || { show "$dry" 6; fail "without a context of its own, a key no longer gets the 200000"; }
+  if has "$dry" CLAUDE_CODE_AUTO_COMPACT_WINDOW; then show "$dry" 6; fail "a key without a context of its own gets an auto-compact window"; fi
   if grep -q tls_ca "$pd/kingo-claude-key-base-plain.json"; then fail "a key without a certificate got one in its profile"; fi
   ok "a start with the name: its context in place of the 200000, and its certificate in the route that nono reads"
 
   # The real Claude Code to a provider that signs with a certificate of its own: the stand-in, over https, with the
   # certificate that the root above signed. This machine does not trust it by itself; nono does, from the profile.
-  PROBE='echo "token-in-sandbox=$ANTHROPIC_AUTH_TOKEN"; echo the-command-ended'
+  PROBE='echo "token-in-sandbox=$ANTHROPIC_AUTH_TOKEN window-in-sandbox=${CLAUDE_CODE_AUTO_COMPACT_WINDOW-unset}"; echo the-command-ended'
   : > "$log5"
   /usr/bin/python3 "$HERE/fake_model.py" "$MODEL_PORT" "$log5" "$PROBE" "$tls/server.crt" "$tls/server.key" &
   MODEL_PID=$!
@@ -1569,7 +1575,8 @@ PYTHON
   if curl -s -m 2 -o /dev/null "https://localhost:$MODEL_PORT/ready"; then fail "this machine trusts the certificate of the stand-in without being given the root: the turn would prove nothing"; fi
   base_before=("${base[@]}")
   base=(nono run --silent --profile kingo-claude-key-base-spark --allow-cwd --read "$KINGO_DIR/setup/claude" --)
-  out=$(in_folder "${LOCK[@]}" claude --settings "$set5" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
+  # with the auto-compact window of the key, as a start with --key spark sets it (in_folder sets the rest)
+  out=$(export CLAUDE_CODE_AUTO_COMPACT_WINDOW=131072; in_folder "${LOCK[@]}" claude --settings "$set5" --dangerously-skip-permissions -p "Run the probe." < /dev/null)
   model_stop "$log5"
   base=("${base_before[@]}")
   has "$out" KINGO-PROBE-DONE || { show "$out" 40; fail "Claude Code did not finish the turn with a provider that signs with a certificate of its own"; }
@@ -1582,6 +1589,8 @@ for model, auth, xkey in seen:
 sys.exit(0 if seen == [("spark/model", "Bearer spark-key", "")] else 1)
 PYTHON
   if has "$(results "$log5")" "spark-key"; then fail "the key for the provider with its own certificate is readable inside the sandbox"; fi
+  has "$(results "$log5")" "window-in-sandbox=131072" || { show "$(results "$log5")" 6; fail "the auto-compact window of a key does not reach Claude Code through the profile of the key"; }
+  if has "$out" "100k minimum" || has "$out" "1M maximum" || has "$out" "isn't a usable size"; then show "$out" 12; fail "Claude Code warns about the auto-compact window that kingo sets"; fi
   ok "a provider with a certificate of its own: nono trusts it from the profile, and the model gets the key and the model of the name"
 
   # The keys that are typed: kingo asks in a terminal only, so the CI gives it one (with_terminal.py). A curl that
@@ -1650,9 +1659,23 @@ SH
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key old) || fail "kc <folder> --key old did not get as far as the start of Claude Code"
   has "$dry" "kingo keeps the address of \"old\" without /v1 at its end from now on" || { show "$dry" 5; fail "kingo changed an address that it kept, and did not say so"; }
   grep -qx 'provider=https://old.example.com' "$kd/key-old.conf" || fail "kingo did not keep the address without /v1"
-  # a context for one of Anthropic's models behind an address: Claude Code may keep its own number, and kingo says so
+  # A context for one of Anthropic's models behind an address. Claude Code keeps its own size for such a model, so
+  # the number goes to it as the auto-compact window too, which is 100000 to 1000000 tokens. Outside that range
+  # kingo sets no window (Claude Code would warn at every start), and says that the number may change nothing.
   out=$(kk add gwc --provider https://gateway.example.com --model claude-sonnet-5 --context 200000) || { show "$out" 4; fail "kingo claude key add did not take a context for a model of Anthropic behind an address"; }
-  has "$out" "--context may change nothing" || { show "$out" 4; fail "kingo does not say that Claude Code keeps its own number for a model of Anthropic"; }
+  if has "$out" "may change nothing"; then show "$out" 4; fail "kingo says that a context of 200000 may change nothing for a model of Anthropic, while the auto-compact window carries it"; fi
+  for n in 200000 100000 1000000; do
+    [ "$n" = 200000 ] || out=$(kk add gwc --context "$n") || { show "$out" 4; fail "kingo claude key add did not take the context $n"; }
+    dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key gwc) || fail "kc <folder> --key gwc did not get as far as the start of Claude Code"
+    has "$dry" "context: CLAUDE_CODE_MAX_CONTEXT_TOKENS=$n" && has "$dry" "context: CLAUDE_CODE_AUTO_COMPACT_WINDOW=$n" || { show "$dry" 6; fail "the context $n of a key does not go to Claude Code in both variables"; }
+  done
+  for n in 64000 99999 1000001; do
+    out=$(kk add gwc --context "$n") || { show "$out" 4; fail "kingo claude key add did not take the context $n"; }
+    has "$out" "--context $n may change nothing" || { show "$out" 4; fail "kingo does not say that the context $n may change nothing for a model of Anthropic"; }
+    dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key gwc) || fail "kc <folder> --key gwc did not get as far as the start of Claude Code"
+    has "$dry" "context: CLAUDE_CODE_MAX_CONTEXT_TOKENS=$n" || { show "$dry" 6; fail "the context $n of a key does not go to Claude Code"; }
+    if has "$dry" CLAUDE_CODE_AUTO_COMPACT_WINDOW; then show "$dry" 6; fail "kingo sets an auto-compact window of $n, which Claude Code does not take"; fi
+  done
   # a name with a key, no terminal, and a provider that answers 401: the key stays (a start would delete it)
   printf 401 > "$fake2/code"
   ( umask 077; printf 'kept-key' > "$kd/openrouter-keep.key" )
@@ -1785,7 +1808,10 @@ EOF
   }
   session_of() { printf '%s\n' "$1" | awk '/^STUB nono run .*--read /{f=1} f'; }
 
-  out=$(step phantom claude --login --in "$fh/projects/thesis")
+  # With an auto-compact window in the person's own terminal: the profile lets the variable through for the context
+  # of a key, so kingo takes it away before every start (the variables of the session, below).
+  out=$(export CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000; step phantom claude --login --in "$fh/projects/thesis")
+  if has "$out" "CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000"; then show "$out" 30; fail "an auto-compact window from the person's own terminal reaches nono"; fi
   show "$(printf '%s\n' "$out" | grep -v '^STUB  ')" 6
   has "$out" "STUB nono run --profile kingo-claude-login --allow-cwd --read-file $tpl/no_unix_sockets.py -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude auth login --claudeai" \
     || { show "$out" 30; fail "without a login, kingo does not run the login inside the sandbox, under the lock"; }
@@ -1794,7 +1820,8 @@ EOF
   has "$sess" "STUB nono run --silent --profile kingo-claude-login --allow-cwd --read $tpl -- /usr/bin/python3 -I $tpl/no_unix_sockets.py claude --settings $fh/.kingo-claude-login/settings-in.json" \
     || { show "$out" 30; fail "after the login, kingo does not start the session"; }
   for p in "CLAUDE_CODE_DISABLE_ARTIFACT=1" "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1" "DISABLE_TELEMETRY=1" "DISABLE_ERROR_REPORTING=1" \
-           "CLAUDE_CODE_MAX_CONTEXT_TOKENS=unset" "CLAUDE_CONFIG_DIR=$fh/.kingo-claude-login" "TMPDIR=$fh/.kingo-claude-login/tmp" \
+           "CLAUDE_CODE_MAX_CONTEXT_TOKENS=unset" "CLAUDE_CODE_AUTO_COMPACT_WINDOW=unset" \
+           "CLAUDE_CONFIG_DIR=$fh/.kingo-claude-login" "TMPDIR=$fh/.kingo-claude-login/tmp" \
            "GIT_CONFIG_NOSYSTEM=1" "NONO_NO_SAVE_PROMPT=1" "PATH starts with $tpl/bin"; do
     has "$sess" "STUB   $p" || { show "$sess" 16; fail "the start of the session does not get: $p"; }
   done

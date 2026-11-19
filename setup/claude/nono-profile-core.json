@@ -58,13 +58,16 @@
     // SHLVL counts how many shells deep a program runs. Without it, the bash that runs Claude Code's commands
     // takes itself for the first shell of a remote login and reads /etc/bash.bashrc and ~/.bashrc first. The
     // sandbox refuses both, and every result of a command then starts with two lines "Permission denied".
+    // CLAUDE_CODE_AUTO_COMPACT_WINDOW: kingo sets it for a key whose model holds a number of tokens that the person
+    // named (./kingo claude key add <name> --context), next to CLAUDE_CODE_MAX_CONTEXT_TOKENS, which Claude Code
+    // takes only for a model that it does not know. kingo unsets it before every start: only its own number comes.
     "allow_vars": [
       "PATH", "HOME", "USER", "LOGNAME", "SHELL", "SHLVL",
       "TERM", "TERM_PROGRAM", "COLORTERM", "LANG", "LC_*", "TZ",
       "XDG_RUNTIME_DIR",
       "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_TMPDIR", "TMPDIR",
       "CLAUDE_CODE_DISABLE_ARTIFACT", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING",
-      "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+      "CLAUDE_CODE_MAX_CONTEXT_TOKENS", "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
       "KINGO_BROWSER", "KINGO_BROWSER_MODE", "KINGO_NODE", "KINGO_PLAYWRIGHT", "KINGO_DEV_PORT", "KINGO_POD_PORTS",
       "GIT_CONFIG_NOSYSTEM"
     ]

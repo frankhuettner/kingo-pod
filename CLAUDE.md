@@ -474,7 +474,12 @@ difference students choose between.
   trennen").** It needs no pod and starts no Claude Code. `add` keeps what the
   first start with `--key` keeps, and two things that a start does not take:
   `--context <tokens>` (a line `context=` in `key-<name>.conf`; it goes to
-  Claude Code as `CLAUDE_CODE_MAX_CONTEXT_TOKENS` in place of the 200000) and
+  Claude Code as `CLAUDE_CODE_MAX_CONTEXT_TOKENS` in place of the 200000, and
+  from 100000 to 1000000 as `CLAUDE_CODE_AUTO_COMPACT_WINDOW` too, which is
+  what counts for a model that Claude Code knows, such as one of Anthropic's
+  behind a gateway: `claude_key_window`. The core profile lets this second
+  variable through, and kingo unsets it before every start, so only its own
+  number comes) and
   `--ca <file>` (copied to `key-<name>.crt`; `tls_ca` in the route of the
   key's profile, because nono's proxy makes the connection, not Claude Code).
   Keep four things. A key that is there is never lost before its successor is

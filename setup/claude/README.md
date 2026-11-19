@@ -179,8 +179,11 @@ kc ~/projects/thesis --key thesis
   but Anthropic's API, and Claude Code compacts a long session there. A model that holds less would get more than it
   takes first: say its number, for example `--context 131072`. The number is 32000 or more: Claude Code's own
   instructions take about half of that before your first question. Not for `anthropic`: Claude Code knows its
-  models. For the same reason the number may change nothing for one of Anthropic's models behind another address:
-  Claude Code takes it for a model that it does not know, and kingo says so when the model's ID has `claude` in it.
+  models. It knows one of Anthropic's models behind another address too, and keeps its own size for it. So a number
+  from 100000 to 1000000 goes to Claude Code a second time, as the auto-compact window
+  (`CLAUDE_CODE_AUTO_COMPACT_WINDOW`), which counts for every model: Claude Code compacts the session there. A
+  number outside that range may change nothing for such a model, because Claude Code takes no window below 100000;
+  kingo says so when the model's ID has `claude` in it.
 - **`--ca <file>`** gives the certificate of a provider that signs with its own, for an address with `https://`: a
   server at work or in a lab, whose certificate your laptop does not know. kingo copies the file (PEM, the
   certificate alone) to `~/.config/kingo/key-<name>.crt`, and nono trusts it for this one route, in addition to the

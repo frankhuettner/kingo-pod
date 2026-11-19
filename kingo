@@ -1230,6 +1230,19 @@ claude_key_context_ok() {
   [ "${#1}" -le 8 ] && [ "$1" -ge 32000 ] && [ "$1" -le 10000000 ]
 }
 
+# The auto-compact window that goes to Claude Code next to a context: the same number, where Claude Code takes it.
+# CLAUDE_CODE_MAX_CONTEXT_TOKENS counts only for a model that Claude Code does not know. For one that it knows, such
+# as one of Anthropic's behind the address of a gateway, its page on model configuration names a second variable
+# ("Context window behind an LLM gateway": "set CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000 in the environment that starts
+# Claude Code, so sessions on every model compact at that boundary"; read on 19 Nov 2026). That one is 100000 to
+# 1000000: Claude Code reads a smaller number as 100000 and a larger one as 1000000, with a warning at every start.
+# So outside that range kingo sets no window. A model that holds less than 100000 tokens keeps
+# CLAUDE_CODE_MAX_CONTEXT_TOKENS alone, as before; so does one that holds more than 1000000, which a window of
+# 1000000 would compact too early. Claude Code never takes a window above what it holds for the model.
+claude_key_window() { # context -> the window, or nothing
+  if [ -n "$1" ] && [ "$1" -ge 100000 ] && [ "$1" -le 1000000 ]; then printf '%s' "$1"; fi
+}
+
 claude_key_conf_write() { # name provider model context -> key-<name>.conf, written whole; no context, no line for it
   local f="$CLAUDE_KEYS/key-$1.conf"
   mkdir -p "$CLAUDE_KEYS" && chmod 700 "$CLAUDE_KEYS"
@@ -1448,7 +1461,7 @@ claude_key_help() {
   echo "  what the first start with --key <name> does, without starting Claude Code: kingo asks for the key and keeps"
   echo "  it with its provider and its model. Then:  kc <folder> --key <name>"
   echo "  --context <tokens>: how many tokens the model holds, when it holds less than 200000 (32000 or more; not for"
-  echo "  anthropic). Claude Code takes the number for a model that it does not know, not for one of Anthropic's."
+  echo "  anthropic). For one of Anthropic's models behind an address, the number counts from 100000 to 1000000."
   echo "  --ca <file>: the certificate of a provider that signs with its own, for an address (https://...)."
   echo "  ./kingo claude key add work --provider https://llm.example.com --model big-model --context 131072"
   echo "  For a name that is there, add changes the model, the context or the certificate, and asks whether"
@@ -1664,11 +1677,13 @@ claude_key_add() {
     ( umask 077; cat "$ca_arg" > "$crt.$$" )
     mv -f "$crt.$$" "$crt"
   fi
-  # Claude Code takes the number only for a model that it does not know (its page on model configuration, "Which IDs
-  # CLAUDE_CODE_MAX_CONTEXT_TOKENS applies to"): for one of Anthropic's models behind another address, it keeps its own.
-  if [ -n "$ctx" ]; then
+  # Claude Code takes the size of the context only for a model that it does not know (its page on model
+  # configuration, "Which IDs CLAUDE_CODE_MAX_CONTEXT_TOKENS applies to"). For one of Anthropic's models behind
+  # another address, the number reaches it as the auto-compact window (claude_key_window), from 100000 to 1000000.
+  # Outside that range it may change nothing for such a model: say so.
+  if [ -n "$ctx" ] && [ -z "$(claude_key_window "$ctx")" ]; then
     case "$model" in
-      *claude*|*Claude*|*CLAUDE*) echo "Note: Claude Code knows the models of Anthropic by their ID, and keeps its own number of tokens for them. For the model $model, --context may change nothing." ;;
+      *claude*|*Claude*|*CLAUDE*) echo "Note: Claude Code knows the models of Anthropic by their ID, and keeps its own number of tokens for them. For them, it takes a number from 100000 to 1000000: for the model $model, --context $ctx may change nothing." ;;
     esac
   fi
   # The key. A key that is there is never lost here: with a terminal, another one takes its place only when the
@@ -3012,6 +3027,14 @@ EOF
   # A key whose model holds another number of tokens says so (./kingo claude key add <name> --context <tokens>): a
   # model that holds less than 200k would get more than it takes before Claude Code compacts (Frank, 19 Nov 2026).
   [ "$login" = 1 ] || [ "$key_prov" = anthropic ] || envs+=("CLAUDE_CODE_MAX_CONTEXT_TOKENS=${key_ctx:-200000}")
+  # The same number as the auto-compact window, for a model that Claude Code knows: there the variable above changes
+  # nothing (claude_key_window). Only for a number that the person gave with the key: without one, Claude Code keeps
+  # what it knows about such a model. The profile lets CLAUDE_CODE_AUTO_COMPACT_WINDOW through for this, so a value
+  # from the person's own terminal is taken away first: only kingo's number comes. Inside Claude Code, /autocompact
+  # sets the window of a session.
+  unset CLAUDE_CODE_AUTO_COMPACT_WINDOW
+  local window; window=$(claude_key_window "$key_ctx")
+  [ "$login" = 1 ] || [ "$key_prov" = anthropic ] || [ -z "$window" ] || envs+=("CLAUDE_CODE_AUTO_COMPACT_WINDOW=$window")
   # PostgreSQL for psql, for the course only (the base profile would not let these variables through either).
   [ -n "$in_dir" ] || envs+=(PGHOST=127.0.0.1 "PGPORT=$P_POSTGRES" "PGUSER=$KINGO_USER" "PGPASSWORD=$KINGO_PASSWORD" PGDATABASE=classroom)
 
@@ -3024,7 +3047,7 @@ EOF
     echo "dry run — would start in $dir:"
     echo "  nono run${quiet[@]+ ${quiet[*]}} --profile $profile --allow-cwd --read $reads${more_nono[@]+ ${more_nono[*]}} -- $*"
     echo "  variables: $(printf '%s ' "${envs[@]%%=*}")"
-    for a in "${envs[@]}"; do case "$a" in CLAUDE_CODE_MAX_CONTEXT_TOKENS=*) echo "  context: $a" ;; esac; done
+    for a in "${envs[@]}"; do case "$a" in CLAUDE_CODE_MAX_CONTEXT_TOKENS=*|CLAUDE_CODE_AUTO_COMPACT_WINDOW=*) echo "  context: $a" ;; esac; done
     echo "  ports: KINGO_DEV_PORT=$dev_port KINGO_POD_PORTS=$(claude_pod_ports)"
     return
   fi
