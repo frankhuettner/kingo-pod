@@ -1327,7 +1327,7 @@ PYTHON
   local kd="$HOME/.config/kingo" set4 log4="$CFG/tmp/model-provider.jsonl"
   refuses "goes with --key <name>" --provider anthropic
   refuses "needs a provider" --key api --provider
-  for n in "ftp://x" "http://example.com" "http://127.0.0.2:8000" "https://" "https://a b" "https://x:9z" "anthropic2" 'https://x/$(id)' "https://user@x.y" "HTTPS://x.y"; do
+  for n in "ftp://x" "http://example.com" "http://127.0.0.2:8000" "https://" "https://a b" "https://x:9z" "anthropic2" 'https://x/$(id)' "https://user@x.y" "HTTPS://x.y" "https://https://x.y" "https://x.y:"; do
     refuses "kingo claude --provider" --key bad --provider "$n" --model m
   done
   refuses "needs a model too" --key bad --provider ollama
@@ -1336,7 +1336,7 @@ PYTHON
   refuses "takes the ID of a model" --key bad --provider ollama --model 'a|b'
   refuses "needs the ID of a model" --key bad --provider ollama --model
   [ ! -e "$kd/key-bad.conf" ] || { show "$(cat "$kd/key-bad.conf")" 3; fail "a start that kingo refused left a file for the key"; }
-  ok "--provider refuses: no --key, no provider, an address that is not https (or http on this laptop), a letter that is not of an address; no model, or one with a letter that is not of an ID"
+  ok "--provider refuses: no --key, no provider, an address that is not https (or http on this laptop), a letter that is not of an address, the scheme twice, a : without a port; no model, or one with a letter that is not of an ID"
 
   # Anthropic's API, in a folder of one's own
   dry=$(cd "$KINGO_DIR" && KINGO_CLAUDE_DRY_RUN=1 ./kingo kc "$dir" --key api --provider anthropic) || fail "kc <folder> --key api --provider anthropic did not get as far as the start of Claude Code"
