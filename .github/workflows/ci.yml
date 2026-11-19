@@ -301,7 +301,9 @@ jobs:
   # with a stand-in for the model. Both processor types, because the lock names system calls by number.
   claude-sandbox:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    # A run takes 7 to 8 minutes. 35, not 20: on 19 Nov 2026 the runner's apt-get for fonts-noto-cjk alone took 12 to
+    # 14 minutes in five runs (a slow Ubuntu mirror), and the limit cancelled jobs in which no check had failed.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
