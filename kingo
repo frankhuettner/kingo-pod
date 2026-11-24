@@ -5126,6 +5126,9 @@ kingo — classroom stack helper (Podman or Docker, no VM)
   kingo claude        start Claude Code for your project in a sandbox: it
                       writes only in claude/ and works on n8n, Langflow and
                       PostgreSQL (asks for your keys the first time)
+  kingo claude --login
+                      the same, but your Claude subscription pays in place of
+                      OpenRouter ('kingo claude help' shows all its options)
   kingo key add       keep a key for Claude Code's model under a name: it asks
                       for the name, the provider, the model and the key; then
                       kc <folder> --key <name>. kingo key list, kingo key remove
